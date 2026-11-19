@@ -9,6 +9,7 @@ import app.seb3thehacker.gearslip.car.CarServices
 import app.seb3thehacker.gearslip.media.CarMedia
 import app.seb3thehacker.gearslip.media.MediaEntry
 import app.seb3thehacker.gearslip.media.NowPlaying
+import app.seb3thehacker.gearslip.media.QueueTrack
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -48,13 +49,14 @@ object MusicPlayer {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var tickJob: Job? = null
+    private var initJob: Job? = null
     private var initialized = false
 
     fun init(context: Context) {
         if (initialized) return
         initialized = true
         val media = CarServices.media
-        scope.launch {
+        initJob = scope.launch {
             launch {
                 media.now.collect { now ->
                     val track = if (now.title.isBlank()) null else MusicCatalog.Track(
@@ -87,6 +89,7 @@ object MusicPlayer {
                             album = null,
                             thumbnailUrl = item.iconUri?.toString(),
                             durationSeconds = 0L,
+                            queueId = item.queueId,
                         )
                     }
                 }
@@ -110,7 +113,7 @@ object MusicPlayer {
 
     private fun activeIndexFor(now: NowPlaying): Int {
         if (now.title.isBlank()) return -1
-        val byId = _queue.value.indexOfFirst { it.id == now.activeQueueItemId.toString() }
+        val byId = _queue.value.indexOfFirst { it.queueId?.toString() == now.activeQueueItemId.toString() }
         if (byId >= 0) return byId
         return _queue.value.indexOfFirst { it.title.equals(now.title, true) }
     }
@@ -137,6 +140,20 @@ object MusicPlayer {
     fun play(tracks: List<MusicCatalog.Track>, startIndex: Int = 0) {
         val track = tracks.getOrNull(startIndex) ?: return
         val media = CarServices.mediaOrNull() ?: return
+        if (track.queueId != null) {
+            // Queue rows carry a MediaSession queue ID, not a browse-tree media ID. Sending it to
+            // playFromMediaId makes Vivi/Echo reject it; jump within their current queue instead.
+            media.playQueueItem(
+                QueueTrack(
+                    queueId = track.queueId!!,
+                    title = track.title,
+                    subtitle = track.artists,
+                    iconUri = track.thumbnailUrl?.let(Uri::parse),
+                    iconBitmap = null,
+                )
+            )
+            return
+        }
         media.select(
             MediaEntry(
                 id = track.id,
@@ -167,6 +184,8 @@ object MusicPlayer {
 
     fun release() {
         stopTicking()
+        initJob?.cancel()
+        initJob = null
         initialized = false
     }
 }

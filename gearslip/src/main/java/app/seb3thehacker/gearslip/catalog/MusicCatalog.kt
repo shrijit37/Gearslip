@@ -29,6 +29,9 @@ object MusicCatalog {
         val thumbnailUrl: String?,
         val durationSeconds: Long,
         val playable: Boolean = true,
+        /** Set for rows from the app's play queue. A queue ID is not a browse-tree media ID and
+         * must be jumped to with skipToQueueItem, never playFromMediaId. */
+        val queueId: Long? = null,
     )
 
     data class Shelf(val title: String, val tracks: List<Track>)
