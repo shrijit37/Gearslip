@@ -78,6 +78,10 @@ The Nothing skin's monochrome app-icon pipeline in `gearslip/src/main/java/app/s
 
 `gearslip/.../car/theme/DotMatrixArt.kt` adapts the image-to-dots "Value Aliasing" approach and palette from [udaign/matrices](https://github.com/udaign/matrices) (Matrices for Nothing Community), and the per-dot `f(row, col, t) → {opacity, scale}` loading pulse from [lportals/dot_matrix_loader](https://github.com/lportals/dot_matrix_loader) (MIT). Both are reimplemented for Compose Canvas; no source files were copied. The concept mock is `docs/player-mock.html`.
 
+### Vela-style keyless route traffic (GPL-3.0)
+
+`gearslip/.../traffic/VelaTrafficSource.kt` follows the approach documented by [Vela Maps](https://github.com/PimpinPumpkin/Vela) (GPL-3.0, © PimpinPumpkin): a per-install logged-out browser session, a keyless `GET /maps/preview/directions`, E7 delta-encoded geometry, and congestion spans of the form `[level, startMeters, lengthMeters]` (1 = moderate, 2 = heavy; free-flow gaps are omitted). The captured `pb` request template is reproduced from Vela's `DirectionsPb.kt`; the client and parser are otherwise reimplemented for Gearslip. Gearslip is AGPL-3.0, which is GPL-3.0-compatible, so the adapted code remains under AGPL-3.0. No API key or shared credential is used.
+
 ### Echo Music (GPL-3.0) — ported, then removed
 
 [Echo Music](https://github.com/EchoMusicApp/Echo-Music) — GPL-3.0. Its InnerTube catalog/search client, metadata text cleaner and bounded-range `ChunkedDataSource` were ported into Gearslip (into the `catalog` module and `gearslip/.../music/playback`, with the original source headers retained in the copied files); upstream also credits Metrolist, ViMusic, ArchiveTune, SimpMusic and BravePipe. That code has since been removed: Gearslip is now a Nothing-styled front-end that drives Echo Music and Vivi Music as external apps via MediaBrowser/MediaController, and no Echo-derived source remains in the tree. Gearslip is AGPL-3.0, which is GPL-3.0-compatible, so the ported code was under AGPL-3.0 while it existed.

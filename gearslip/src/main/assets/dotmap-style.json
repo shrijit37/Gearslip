@@ -1,0 +1,17 @@
+{
+  "version": 8,
+  "name": "Gearslip dot",
+  "sources": {
+    "openmaptiles": {
+      "type": "vector",
+      "url": "https://tiles.openfreemap.org/planet"
+    }
+  },
+  "layers": [
+    {
+      "id": "background",
+      "type": "background",
+      "paint": { "background-color": "#050505" }
+    }
+  ]
+}

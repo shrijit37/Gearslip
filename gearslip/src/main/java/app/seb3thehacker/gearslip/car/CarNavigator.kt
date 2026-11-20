@@ -36,6 +36,9 @@ sealed interface CarScreen {
     /** Place search over the offline demo index and saved places. */
     data object PlaceSearch : CarScreen
 
+    /** First-party dot-matrix map driven by real location, OSRM routes and live traffic. */
+    data object DotMap : CarScreen
+
     /**
      * A templated app that isn't a navigation app - Spotify's own Car App Library service, among
      * others - opened on its own screen rather than the Home map slot, which only a genuine
@@ -147,6 +150,8 @@ class CarNavigator(startId: String) {
     fun firstPartyPlayer() { push(CarScreen.FirstPartyPlayer, "Player", R.string.media_now_playing) }
 
     fun placeSearch() { push(CarScreen.PlaceSearch, "Places", R.string.app_places) }
+
+    fun dotMap() { push(CarScreen.DotMap, "Dot map") }
 
     fun browse(label: String) { push(CarScreen.Browse, label) }
 

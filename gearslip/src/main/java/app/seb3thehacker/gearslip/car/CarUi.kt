@@ -334,8 +334,12 @@ fun CarUi() {
                                     // player runs on under the see-through bar and keeps clear itself.
                                     // The first-party player is full bleed: it hides the mini player.
                                     .padding(bottom = if (!keyboardVisible && !fullscreen && shown != CarScreen.Media && shown != CarScreen.FirstPartyPlayer) bottomInset else 0.dp)
-                                    // Keeps touches that miss this screen's controls off the map.
-                                    .pointerInput(Unit) { detectTapGestures { } },
+                                    // Keeps touches that miss this screen's controls off the map,
+                                    // except on the dot map, where a tap sets the destination.
+                                    .then(
+                                        if (shown == CarScreen.DotMap) Modifier
+                                        else Modifier.pointerInput(Unit) { detectTapGestures { } },
+                                    ),
                             ) {
                                 Box(
                                     Modifier.fillMaxSize().graphicsLayer {
@@ -352,6 +356,7 @@ fun CarUi() {
                                         CarScreen.FirstPartyMusic -> FirstPartyMusicScreen(onOpenPlayer = navigator::firstPartyPlayer)
                                         CarScreen.FirstPartyPlayer -> FirstPartyPlayerScreen(onBack = navigator::back)
                                         CarScreen.PlaceSearch -> PlaceSearchScreen()
+                                        CarScreen.DotMap -> DotMapScreen()
                                         CarScreen.Browse -> BrowseAppScreen(navigator)
                                         CarScreen.Settings -> CarSettingsScreen()
                                         CarScreen.Dashboard -> CarDashboardScreen()

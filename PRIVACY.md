@@ -58,6 +58,7 @@ Each of these gets only what it needs, and each has its own privacy policy.
 | GitHub | In setup, if you choose to download the certificate | A request for the certificate file |
 | [Hugging Face](https://huggingface.co/privacy) | When you download a speech model | A request for the model file |
 | [OpenFreeMap](https://openfreemap.org) | When an app in the car shows a list of places on a map | Requests for the map tiles of the area shown |
+| Google (public web endpoints) | When a route with live traffic is requested in the car | The route's start and destination and the area around it, sent from a per-install logged-out browser session. There is no account, API key or shared credential, and no request goes through a Gearslip server |
 | [EasyList](https://easylist.to) | About once a week on Wi-Fi, while the browser's ad blocker is on | A request for the filter lists |
 | Any address you give | When you download a certificate from a link, or add your own filter list | A request for that file |
 
