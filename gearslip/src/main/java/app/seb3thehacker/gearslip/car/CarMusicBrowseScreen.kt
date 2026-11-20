@@ -82,14 +82,18 @@ fun FirstPartyMusicScreen(onOpenPlayer: () -> Unit) {
     LaunchedEffect(trimmed, tab) {
         if (tab != TAB_SEARCH || trimmed.length < 2) {
             results = emptyList()
+            busy = false
             return@LaunchedEffect
         }
         delay(SEARCH_PAUSE_MS)
         busy = true
-        val found = runCatching { MusicCatalog.search(trimmed) }
-        results = found.getOrDefault(emptyList())
-        loadError = found.exceptionOrNull()?.message
-        busy = false
+        try {
+            val found = runCatching { MusicCatalog.search(trimmed) }
+            results = found.getOrDefault(emptyList())
+            loadError = found.exceptionOrNull()?.message
+        } finally {
+            busy = false
+        }
     }
 
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {

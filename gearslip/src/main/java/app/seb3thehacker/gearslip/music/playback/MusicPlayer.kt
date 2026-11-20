@@ -174,8 +174,9 @@ object MusicPlayer {
 
     fun togglePlay() {
         val media = CarServices.mediaOrNull() ?: return
+        val wasPlaying = media.now.value.playing
         media.togglePlay()
-        if (media.now.value.playing) startTicking() else stopTicking()
+        if (!wasPlaying) startTicking() else stopTicking()
     }
 
     fun seek(ms: Long) = CarServices.mediaOrNull()?.seek(ms)
