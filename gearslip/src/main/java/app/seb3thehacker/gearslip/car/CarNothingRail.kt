@@ -44,7 +44,7 @@ import app.seb3thehacker.gearslip.music.playback.MusicPlayer
 // black canvas, hairline dividers, blocky monochrome glyphs, tracked uppercase labels and one
 // red accent. No cards, no depth, no decoration beyond a 2dp active marker.
 
-/** The seven destinations of the rail; [onClick] is the screen (or action) a tap performs. */
+/** The eight destinations of the rail; [onClick] is the screen (or action) a tap performs. */
 private data class RailEntry(val label: String, val icon: ImageVector, val onClick: () -> Unit)
 
 /**
@@ -60,6 +60,7 @@ fun CarNothingRail(navigator: CarNavigator, modifier: Modifier = Modifier) {
     val active = railActive(navigator.current)
     val entries = listOf(
         RailEntry("MAPS", RailIcons.Maps) { navigator.home() },
+        RailEntry("NAV", RailIcons.Nav) { navigator.dotMap() },
         RailEntry("PLACES", RailIcons.Places) { navigator.placeSearch() },
         RailEntry("MUSIC", RailIcons.Music) { navigator.firstPartyMusic() },
         RailEntry("APPS", RailIcons.Apps) { navigator.apps() },
@@ -83,11 +84,12 @@ fun CarNothingRail(navigator: CarNavigator, modifier: Modifier = Modifier) {
 /** Which rail slot the current car screen belongs to; null when it belongs to none (SAVE included). */
 private fun railActive(screen: CarScreen): Int? = when (screen) {
     CarScreen.Home -> 0
-    CarScreen.PlaceSearch -> 1
-    CarScreen.FirstPartyMusic, CarScreen.FirstPartyPlayer -> 2
-    CarScreen.Apps, CarScreen.Browse, CarScreen.Settings, is CarScreen.App -> 3
-    CarScreen.Weather, CarScreen.Dashboard -> 4
-    CarScreen.VehicleData -> 5
+    CarScreen.DotMap -> 1
+    CarScreen.PlaceSearch -> 2
+    CarScreen.FirstPartyMusic, CarScreen.FirstPartyPlayer -> 3
+    CarScreen.Apps, CarScreen.Browse, CarScreen.Settings, is CarScreen.App -> 4
+    CarScreen.Weather, CarScreen.Dashboard -> 5
+    CarScreen.VehicleData -> 6
     else -> null
 }
 
@@ -100,7 +102,7 @@ private fun RailButton(entry: RailEntry, active: Boolean) {
     Box(
         Modifier
             .fillMaxWidth()
-            .height(64.dp)
+            .height(56.dp)
             .background(if (active) accent.copy(alpha = 0.10f) else Color.Transparent)
             .clickable(onClick = entry.onClick),
     ) {
@@ -140,6 +142,7 @@ private fun RailButton(entry: RailEntry, active: Boolean) {
 /** Small monochrome glyphs drawn from square paths, so the rail needs no icon dependency. */
 private object RailIcons {
     val Maps = vector("Maps", "M3,3h18v18H3zM6,6v12h12V6zM10,10h4v4h-4z", PathFillType.EvenOdd)
+    val Nav = vector("Nav", "M12,2L20,22L12,18L4,22Z")
     val Places = vector("Places", "M4,4h7v7H4zM13,4h7v7h-7zM4,13h7v7H4zM13,13h7v7h-7z")
     val Music = vector("Music", "M6,16h5v5H6zM11,6h3v11h-3zM14,6h5v3h-5z")
     val Apps = vector(

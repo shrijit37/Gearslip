@@ -33,6 +33,21 @@ the attribution history is kept in `NOTICE.md`.
 - **Nothing style is mandatory on every new screen**: pure black canvas, 1px borders, no shadows
   or rounded cards, Doto display type, dot-grid glyphs, one red accent (`#FF3030`).
 
+## Traffic source (Vela-style, keyless)
+
+Route traffic follows the Vela Maps approach: a per-install logged-out browser session calls
+Google's public `/maps/preview/directions` with no API key or account. The reply carries the
+route's E7 delta geometry and congestion spans `[level, startMeters, lengthMeters]` where
+1 = moderate and 2 = heavy; free-flow gaps are absent and are drawn as clear, never invented.
+`traffic/VelaTrafficSource.kt` implements the client and exposes a `TrafficSource` interface;
+`traffic/DotRoute.kt` paints the route dots with the Nothing RYG ramp (green / amber / red).
+
+This colours **the route only**. Google's keyless reply has no vector traffic for every road, so
+browse-mode roads stay neutral grey unless a separate vector feed (for example TomTom flow tiles)
+is added behind the same interface. The client keeps field indices in a replaceable map — Vela
+ships those through a signed calibration channel, which Gearslip does not have; a Google response
+reshape will need an update here. Attribution is in `NOTICE.md` and the disclosure in `PRIVACY.md`.
+
 ## Screens to add / restyle
 
 | Screen | Source in mockup | Compose target |

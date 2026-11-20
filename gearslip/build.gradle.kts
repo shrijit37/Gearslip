@@ -179,7 +179,12 @@ dependencies {
     implementation(libs.androidx.media)
     // The map behind a place list (PlaceListMapTemplate), which the host draws, not the app.
     implementation(libs.maplibre.android)
+    // Keyless Google Directions traffic client (see traffic/VelaTrafficSource.kt).
+    implementation(libs.okhttp)
     testImplementation(libs.junit)
+    androidTestImplementation(libs.androidx.junit)
+    androidTestImplementation(libs.androidx.espresso.core)
+    androidTestImplementation("androidx.test:runner:1.6.2")
 }
 
 tasks.withType<KotlinJvmCompile>().configureEach {

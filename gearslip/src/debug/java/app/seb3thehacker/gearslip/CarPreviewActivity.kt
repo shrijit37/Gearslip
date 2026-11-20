@@ -13,12 +13,19 @@ import android.widget.FrameLayout
 import android.widget.ImageView
 import androidx.activity.ComponentActivity
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.lifecycle.lifecycleScope
 import app.seb3thehacker.gearslip.audio.AudioCaptureService
 import app.seb3thehacker.gearslip.audio.CarAudio
 import app.seb3thehacker.gearslip.car.CarEnvironment
 import app.seb3thehacker.gearslip.car.CarSettings
 import app.seb3thehacker.gearslip.car.CarUi
+import app.seb3thehacker.gearslip.traffic.MapPoint
+import app.seb3thehacker.gearslip.traffic.RealRoutePlanner
+import app.seb3thehacker.gearslip.traffic.VelaTrafficSource
+import kotlinx.coroutines.launch
+import okhttp3.Dns
 import java.io.File
+import java.net.InetAddress
 import java.io.FileOutputStream
 
 /**
@@ -63,6 +70,9 @@ class CarPreviewActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         GearslipLog.init(this)
         CarSettings.init(this)
+        // The harness is an accepted-risk bench, so skip the one-time safety wizard and show the
+        // rail (and therefore the dot map) immediately.
+        CarSettings.markSafetyWarningSeen()
         CarEnvironment.start(this)
 
         val w = intent.getIntExtra("w", 800)
@@ -116,6 +126,24 @@ class CarPreviewActivity : ComponentActivity() {
 
         GearslipLog.i("preview: displayId=${p.displayId}")
         if (intent.getBooleanExtra("hide", false)) p.setOverlayVisible(false)
+
+        // Debug-only traffic probe: --ez traffic true runs the keyless client on-device.
+        if (intent.getBooleanExtra("traffic", false)) {
+            lifecycleScope.launch {
+                // Optional DNS pin for benches whose resolver is broken:
+                //   --es dns 142.251.157.119
+                val dnsIp = intent.getStringExtra("dns")
+                val fixedDns = dnsIp?.let { ip -> Dns { listOf(InetAddress.getByName(ip)) } }
+                val result = VelaTrafficSource(dns = fixedDns).routeTraffic(
+                    MapPoint(52.5200, 13.4050),
+                    MapPoint(53.5500, 9.9900),
+                )
+                GearslipLog.i(
+                    "traffic-test: points=${result?.points?.size} spans=${result?.spans} " +
+                        "typical=${result?.typicalSeconds} live=${result?.trafficSeconds}",
+                )
+            }
+        }
 
         intent.getStringExtra("launch")?.let { pkg ->
             main.postDelayed({
