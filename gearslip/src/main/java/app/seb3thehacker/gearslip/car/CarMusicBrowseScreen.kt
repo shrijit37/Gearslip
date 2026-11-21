@@ -37,6 +37,7 @@ import app.seb3thehacker.gearslip.catalog.MusicCatalog.HomeSnapshot
 import app.seb3thehacker.gearslip.media.MediaArt
 import app.seb3thehacker.gearslip.media.MediaEntry
 import app.seb3thehacker.gearslip.music.playback.MusicPlayer
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -60,17 +61,17 @@ fun FirstPartyMusicScreen(onOpenPlayer: () -> Unit) {
     var query by remember { mutableStateOf("") }
     var typing by remember { mutableStateOf(true) }
     var results by remember { mutableStateOf<List<MusicCatalog.Track>>(emptyList()) }
-    var busy by remember { mutableStateOf(true) }
-    var initError by remember { mutableStateOf<String?>(null) }
+    var searchBusy by remember { mutableStateOf(false) }
     var loadError by remember { mutableStateOf<String?>(null) }
     val trimmed = query.trim()
     val queue by MusicPlayer.queue.collectAsStateWithLifecycle()
     val source by CarSettings.musicSource.collectAsStateWithLifecycle()
+    var initializing by remember(context, source) { mutableStateOf(true) }
+    var initError by remember(context, source) { mutableStateOf<String?>(null) }
     val homeFlow = remember { MusicCatalog.homeFlow() }
     val snapshot by homeFlow.collectAsStateWithLifecycle(HomeSnapshot(emptyList(), null))
     val media = CarServices.media
     val browseState by media.browse.collectAsStateWithLifecycle()
-    val currentTab by rememberUpdatedState(tab)
     // Folders descend into the connected app's browse tree; tracks play from its session.
     val onBrowse: (MediaEntry) -> Unit = { entry ->
         scope.launch { MusicCatalog.browse(entry.id) }
@@ -78,19 +79,22 @@ fun FirstPartyMusicScreen(onOpenPlayer: () -> Unit) {
 
     // A source change from the phone reconnects while this screen is open, not just on entry.
     LaunchedEffect(context, source) {
-        MusicPlayer.init(context.applicationContext)
-        busy = true
-        initError = null
-        val loaded = runCatching { MusicCatalog.initialize(context.applicationContext) }
-        initError = loaded.exceptionOrNull()?.message
-        busy = false
+        try {
+            MusicPlayer.init(context.applicationContext)
+            MusicCatalog.initialize(context.applicationContext)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            initError = e.message ?: "Could not connect to the music app"
+        } finally {
+            initializing = false
+        }
     }
 
-    // BACK steps out of a folder before it leaves the music screen. The tab is read through
-    // rememberUpdatedState so this interceptor never holds the first tab this screen had.
-    DisposableEffect(navigator) {
+    // BACK and the up button both step out of the current folder before leaving the screen.
+    DisposableEffect(navigator, media) {
         navigator.backInterceptor = {
-            if (currentTab == TAB_BROWSE && media.canGoUp) {
+            if (media.browse.value.trail.isNotEmpty()) {
                 media.up()
                 true
             } else {
@@ -104,17 +108,17 @@ fun FirstPartyMusicScreen(onOpenPlayer: () -> Unit) {
     LaunchedEffect(trimmed, tab) {
         if (tab != TAB_SEARCH || trimmed.length < 2) {
             results = emptyList()
-            busy = false
+            searchBusy = false
             return@LaunchedEffect
         }
         delay(SEARCH_PAUSE_MS)
-        busy = true
+        searchBusy = true
         try {
             val found = runCatching { MusicCatalog.search(trimmed) }
             results = found.getOrDefault(emptyList())
             loadError = found.exceptionOrNull()?.message
         } finally {
-            busy = false
+            searchBusy = false
         }
     }
 
@@ -133,16 +137,14 @@ fun FirstPartyMusicScreen(onOpenPlayer: () -> Unit) {
                     Modifier.fillMaxWidth().border(1.dp, MaterialTheme.colorScheme.outline).padding(12.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    if (media.canGoUp || browseState.trail.isNotEmpty()) {
-                        if (media.canGoUp) {
-                            GsIconButton(
-                                Icons.Filled.ArrowBack, stringResource(R.string.media_up), media::up,
-                                size = 44.dp, shape = CircleShape,
-                            )
-                            Spacer(Modifier.width(10.dp))
-                        }
+                    if (browseState.trail.isNotEmpty()) {
+                        GsIconButton(
+                            Icons.Filled.ArrowBack, stringResource(R.string.media_up), media::up,
+                            size = 44.dp, shape = CircleShape,
+                        )
+                        Spacer(Modifier.width(10.dp))
                         Text(
-                            browseState.trail.lastOrNull() ?: "MUSIC",
+                            browseState.trail.last(),
                             style = MaterialTheme.typography.titleLarge.copy(letterSpacing = 0.08.em),
                             fontWeight = FontWeight.Bold,
                             maxLines = 1,
@@ -164,12 +166,13 @@ fun FirstPartyMusicScreen(onOpenPlayer: () -> Unit) {
                 Spacer(Modifier.height(12.dp))
                 when (tab) {
                     TAB_BROWSE -> BrowseContent(
-                        busy, initError ?: snapshot.error, snapshot.shelves,
+                        initializing || (initError == null && browseState.loading),
+                        initError ?: snapshot.error, snapshot.shelves,
                         Modifier.weight(1f).fillMaxWidth(), onBrowse,
                     ) { tracks, index -> play(tracks, index, onOpenPlayer) }
                     TAB_SEARCH -> SearchContent(
                         query, { query = it }, typing, { typing = it },
-                        busy, loadError, results, Modifier.weight(1f).fillMaxWidth(),
+                        searchBusy, loadError, results, Modifier.weight(1f).fillMaxWidth(),
                     ) { tracks, index -> play(tracks, index, onOpenPlayer) }
                     else -> LibraryContent(queue, Modifier.weight(1f).fillMaxWidth()) { tracks, index ->
                         play(tracks, index, onOpenPlayer)
@@ -212,7 +215,7 @@ private fun BrowseContent(
 ) {
     when {
         busy -> EmptyState("LOADING CATALOG", "Asking the music service for its home shelves", modifier)
-        error != null && shelves.isEmpty() -> EmptyState("OFFLINE", error, modifier)
+        error != null -> EmptyState("OFFLINE", error, modifier)
         shelves.isEmpty() -> EmptyState("NOTHING HERE", "Try SEARCH to find a song by name", modifier)
         else -> {
             val tracks = shelves.flatMap { it.tracks }

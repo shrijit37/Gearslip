@@ -14,47 +14,44 @@ object TrafficProjector {
     fun merge(routed: RoutePath, google: RouteTraffic): RouteTraffic {
         val routeCum = routed.cumulative
         val googleCum = google.distanceMeters
+        val identicalGeometry = routed.points == google.points
         val spans = google.spans.flatMap { span ->
-            val from = span.startMeters
-            val to = min(from + span.lengthMeters, googleCum.lastOrNull() ?: from)
-            if (to <= from) return@flatMap emptyList()
+            val from = max(0.0, span.startMeters)
+            val to = min(span.startMeters + span.lengthMeters, googleCum.lastOrNull() ?: from)
+            if (!from.isFinite() || !to.isFinite() || to <= from) return@flatMap emptyList()
+            if (identicalGeometry) {
+                return@flatMap listOf(
+                    if (from == span.startMeters && to == from + span.lengthMeters) span
+                    else TrafficSpan(span.level, from, to - from),
+                )
+            }
 
-            // Each successful sample is a projected metre position on the drawn route plus the
-            // source metre position it came from. Consecutive samples form a run; a failed
-            // projection or a gap larger than one sample step ends the run so congestion is not
-            // stretched across a portion of the line we could not verify.
-            val runs = mutableListOf<List<Pair<Double, Double>>>()
-            var run = mutableListOf<Pair<Double, Double>>()
-            var lastSource = Double.NaN
+            // A rejected sample ends the current run. Only colour the span covered by
+            // accepted positions, including the exact end sample even for a short source span.
+            val projectedSpans = mutableListOf<TrafficSpan>()
+            var start = Double.POSITIVE_INFINITY
+            var end = Double.NEGATIVE_INFINITY
+            fun finishRun() {
+                if (end > start) projectedSpans += TrafficSpan(span.level, start, end - start)
+                start = Double.POSITIVE_INFINITY
+                end = Double.NEGATIVE_INFINITY
+            }
+
             var metres = from
-            while (metres <= to) {
+            while (true) {
                 val point = pointAt(google.points, googleCum, metres)
                 val projected = nearestDistance(point, routed.points, routeCum)
                 if (projected == null) {
-                    if (run.isNotEmpty()) {
-                        runs += run
-                        run = mutableListOf()
-                    }
-                    lastSource = Double.NaN
+                    finishRun()
                 } else {
-                    if (run.isNotEmpty() && metres - lastSource > SAMPLE_STEP + GAP_TOLERANCE) {
-                        runs += run
-                        run = mutableListOf()
-                    }
-                    run += projected to metres
-                    lastSource = metres
+                    start = min(start, projected)
+                    end = max(end, projected)
                 }
-                metres += SAMPLE_STEP
+                if (metres == to) break
+                metres = min(metres + SAMPLE_STEP, to)
             }
-            if (run.isNotEmpty()) runs += run
-
-            runs.mapNotNull { samples ->
-                if (samples.isEmpty()) return@mapNotNull null
-                val start = samples.minOf { it.first }
-                val end = samples.maxOf { it.first }
-                val length = max(25.0, min(end - start, routeCum.last() - start))
-                TrafficSpan(span.level, start, length)
-            }
+            finishRun()
+            projectedSpans
         }
         return RouteTraffic(
             points = routed.points,
@@ -118,5 +115,4 @@ object TrafficProjector {
     private fun cosLat(lat: Double): Double = kotlin.math.cos(Math.toRadians(lat))
 
     private const val SAMPLE_STEP = 25.0
-    private const val GAP_TOLERANCE = 5.0 // allow float drift beyond one sample step before splitting
 }

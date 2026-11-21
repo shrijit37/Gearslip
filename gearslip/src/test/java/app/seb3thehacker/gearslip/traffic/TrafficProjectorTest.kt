@@ -2,7 +2,6 @@ package app.seb3thehacker.gearslip.traffic
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
-import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class TrafficProjectorTest {
@@ -13,18 +12,38 @@ class TrafficProjectorTest {
     @Test fun `identical geometry keeps the original congestion boundaries`() {
         val points = straightLine()
         val routed = RoutePath(points, 1_000.0)
-        val google = RouteTraffic(
-            points = points,
-            spans = listOf(TrafficSpan(TrafficLevel.JAM, 0.0, 1_000.0)),
-        )
+        val span = TrafficSpan(TrafficLevel.JAM, 12.0, 431.5)
+        val google = RouteTraffic(points, listOf(span))
 
-        val merged = TrafficProjector.merge(routed, google)
-        val span = merged.spans.single()
+        assertEquals(listOf(span), TrafficProjector.merge(routed, google).spans)
+    }
 
-        // The old averaging code started this span at ~500 m and ran past its real end.
-        assertEquals(TrafficLevel.JAM, span.level)
-        assertTrue("span start ${span.startMeters} should be near 0", span.startMeters < 50.0)
-        assertTrue("span length ${span.lengthMeters} should be near 1000", span.lengthMeters > 950.0)
+    @Test fun `short span on nearby geometry keeps both boundaries`() {
+        val points = straightLine()
+        val routed = RoutePath(points, 1_000.0)
+        val nearby = points.map { it.copy(lng = it.lng + 0.0001) }
+        val span = TrafficSpan(TrafficLevel.SLOW, 61.0, 8.0)
+
+        val projected = TrafficProjector.merge(routed, RouteTraffic(nearby, listOf(span))).spans.single()
+
+        assertEquals(span.startMeters, projected.startMeters, 0.001)
+        assertEquals(span.lengthMeters, projected.lengthMeters, 0.001)
+    }
+
+    @Test fun `samples too far from the route leave a clear gap`() {
+        val points = straightLine()
+        val routed = RoutePath(points, 1_000.0)
+        val detour = points.toMutableList().apply {
+            this[20] = this[20].copy(lng = this[20].lng + 0.008)
+        }
+        val span = TrafficSpan(TrafficLevel.JAM, 0.0, 3_000.0)
+
+        val merged = TrafficProjector.merge(routed, RouteTraffic(detour, listOf(span)))
+
+        assertEquals(2, merged.spans.size)
+        assertEquals(TrafficLevel.JAM, merged.levelAt(routed.cumulative[10]))
+        assertEquals(TrafficLevel.CLEAR, merged.levelAt(routed.cumulative[20]))
+        assertEquals(TrafficLevel.JAM, merged.levelAt(routed.cumulative[30]))
     }
 
     @Test fun `projection and rejection use the same latitude scaled metric`() {

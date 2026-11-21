@@ -28,6 +28,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import app.seb3thehacker.gearslip.GearslipLog
 import app.seb3thehacker.gearslip.PermissionActivity
 import app.seb3thehacker.gearslip.traffic.MapPoint
@@ -87,20 +89,25 @@ fun DotMapScreen(modifier: Modifier = Modifier) {
     var status by remember { mutableStateOf("WAITING FOR LOCATION") }
     var map by remember { mutableStateOf<MapLibreMap?>(null) }
     var style by remember { mutableStateOf<Style?>(null) }
-    var permissionGranted by remember { mutableStateOf(hasLocation(context)) }
+    var permissionGranted by remember(context) { mutableStateOf(hasLocation(context)) }
     var permissionRequested by remember { mutableStateOf(false) }
     var routeRequest by remember { mutableIntStateOf(0) }
 
     // A permission answer is delivered on the phone's activity; re-check the grant whenever one lands.
-    LaunchedEffect(Unit) {
+    LaunchedEffect(context) {
         PermissionActivity.permissionResults.collect {
             permissionGranted = hasLocation(context)
         }
     }
 
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+        permissionGranted = hasLocation(context)
+    }
+
     // 1. Instant: read the last cached fix synchronously. No 6-second latch on the UI path.
     LaunchedEffect(context, permissionGranted) {
         if (!permissionGranted) {
+            origin = null
             status = "LOCATION PERMISSION NEEDED"
             if (!permissionRequested) {
                 permissionRequested = true
