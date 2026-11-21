@@ -8,14 +8,24 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.view.MotionEvent
+import android.view.ViewGroup
+import android.widget.FrameLayout
+import android.widget.ImageView
 import androidx.activity.ComponentActivity
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.lifecycle.lifecycleScope
 import app.seb3thehacker.gearslip.audio.AudioCaptureService
 import app.seb3thehacker.gearslip.audio.CarAudio
 import app.seb3thehacker.gearslip.car.CarEnvironment
 import app.seb3thehacker.gearslip.car.CarSettings
 import app.seb3thehacker.gearslip.car.CarUi
+import app.seb3thehacker.gearslip.traffic.MapPoint
+import app.seb3thehacker.gearslip.traffic.RealRoutePlanner
+import app.seb3thehacker.gearslip.traffic.VelaTrafficSource
+import kotlinx.coroutines.launch
+import okhttp3.Dns
 import java.io.File
+import java.net.InetAddress
 import java.io.FileOutputStream
 
 /**
@@ -60,6 +70,9 @@ class CarPreviewActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         GearslipLog.init(this)
         CarSettings.init(this)
+        // The harness is an accepted-risk bench, so skip the one-time safety wizard and show the
+        // rail (and therefore the dot map) immediately.
+        CarSettings.markSafetyWarningSeen()
         CarEnvironment.start(this)
 
         val w = intent.getIntExtra("w", 800)
@@ -67,6 +80,17 @@ class CarPreviewActivity : ComponentActivity() {
         val dpi = intent.getIntExtra("dpi", 160)
         val taps = intent.getStringExtra("taps").orEmpty().split(";").filter { it.isNotBlank() }
             .map { it.split(",").let { p -> p[0].toFloat() to p[1].toFloat() } }
+
+        // Mirror the projected display onto the phone window. Without a content view the harness
+        // shows a blank screen while the car UI runs only on the virtual display.
+        val mirror = ImageView(this).apply {
+            scaleType = ImageView.ScaleType.FIT_CENTER
+            setBackgroundColor(android.graphics.Color.BLACK)
+            layoutParams = FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT,
+            )
+        }
+        setContentView(FrameLayout(this).apply { addView(mirror) })
 
         val imageReader = ImageReader.newInstance(w, h, PixelFormat.RGBA_8888, 3)
         reader = imageReader
@@ -77,6 +101,7 @@ class CarPreviewActivity : ComponentActivity() {
                 val bmp = Bitmap.createBitmap(padded, h, Bitmap.Config.ARGB_8888)
                 bmp.copyPixelsFromBuffer(plane.buffer)
                 latest = Bitmap.createBitmap(bmp, 0, 0, w, h)
+                main.post { mirror.setImageBitmap(latest) }
             }
         }, main)
 
@@ -101,6 +126,24 @@ class CarPreviewActivity : ComponentActivity() {
 
         GearslipLog.i("preview: displayId=${p.displayId}")
         if (intent.getBooleanExtra("hide", false)) p.setOverlayVisible(false)
+
+        // Debug-only traffic probe: --ez traffic true runs the keyless client on-device.
+        if (intent.getBooleanExtra("traffic", false)) {
+            lifecycleScope.launch {
+                // Optional DNS pin for benches whose resolver is broken:
+                //   --es dns 142.251.157.119
+                val dnsIp = intent.getStringExtra("dns")
+                val fixedDns = dnsIp?.let { ip -> Dns { listOf(InetAddress.getByName(ip)) } }
+                val result = VelaTrafficSource(dns = fixedDns).routeTraffic(
+                    MapPoint(52.5200, 13.4050),
+                    MapPoint(53.5500, 9.9900),
+                )
+                GearslipLog.i(
+                    "traffic-test: points=${result?.points?.size} spans=${result?.spans} " +
+                        "typical=${result?.typicalSeconds} live=${result?.trafficSeconds}",
+                )
+            }
+        }
 
         intent.getStringExtra("launch")?.let { pkg ->
             main.postDelayed({
