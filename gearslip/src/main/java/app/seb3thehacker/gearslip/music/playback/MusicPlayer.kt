@@ -77,6 +77,7 @@ object MusicPlayer {
                         error = now.error,
                         activeIndex = activeIndexFor(now),
                     )
+                    if (now.playing) startTicking() else stopTicking()
                 }
             }
             launch {
@@ -92,6 +93,7 @@ object MusicPlayer {
                             queueId = item.queueId,
                         )
                     }
+                    _state.value = _state.value.copy(activeIndex = activeIndexFor(CarServices.media.now.value))
                 }
             }
             launch {

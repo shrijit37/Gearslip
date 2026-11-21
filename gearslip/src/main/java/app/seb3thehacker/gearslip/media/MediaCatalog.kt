@@ -44,7 +44,7 @@ object MediaCatalog {
 
     fun installed(context: Context): List<MediaApp> {
         val manager = context.packageManager
-        val found = manager.queryIntentServices(Intent(MediaBrowserService.SERVICE_INTERFACE), PackageManager.GET_META_DATA)
+        val discovered = manager.queryIntentServices(Intent(MediaBrowserService.SERVICE_INTERFACE), PackageManager.GET_META_DATA)
             .asSequence()
             .filter { it.serviceInfo.packageName != context.packageName }
             .filterNot { AndroidAuto.matches(it.serviceInfo.packageName, it.loadLabel(manager).toString()) }
@@ -59,8 +59,11 @@ object MediaCatalog {
             }
             .distinctBy { it.component.packageName }
             .toList()
-            .let { it + added(context, it.map { app -> app.component.packageName }.toSet()) }
-        return (found + frontEnds(context, found.map { it.component.packageName }.toSet()))
+        // The front-ends are real browser services, so resolve them before the persisted
+        // session-only entries: an old custom Vivi/Echo record must not shadow the live one.
+        val withFrontEnds = discovered + frontEnds(context, discovered.map { it.component.packageName }.toSet())
+        val withFrontEndsPackages = withFrontEnds.map { it.component.packageName }.toSet()
+        return (withFrontEnds + added(context, withFrontEndsPackages))
             .sortedBy { it.label.lowercase() }
     }
 

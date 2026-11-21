@@ -3,7 +3,7 @@
 Gearslip belongs to Twink Software LLC ("we"). This policy says what Gearslip sends off your
 phone, to whom, and why. Most of what Gearslip does stays on the phone.
 
-Last updated: November 11, 2026
+Last updated: November 21, 2026
 
 ## What stays on your phone
 
@@ -16,7 +16,9 @@ Last updated: November 11, 2026
   when you share it yourself, for example by attaching it to a GitHub issue.
 - **Your location.** Gearslip uses it only while a car is connected, so the car's map and
   weather work, and with Allow all the time, so the map keeps working with the phone locked.
-  It sends the location nowhere except to the weather service listed below.
+  When you ask the car for a route, the route's start and destination go to the routing and
+  traffic services listed below; otherwise your location is not sent to anyone except the
+  weather service.
 - **What your car reports.** Speed, fuel, location, and the like go only to the apps on
   your phone that ask for them.
 
@@ -58,7 +60,8 @@ Each of these gets only what it needs, and each has its own privacy policy.
 | GitHub | In setup, if you choose to download the certificate | A request for the certificate file |
 | [Hugging Face](https://huggingface.co/privacy) | When you download a speech model | A request for the model file |
 | [OpenFreeMap](https://openfreemap.org) | When an app in the car shows a list of places on a map | Requests for the map tiles of the area shown |
-| Google (public web endpoints) | When a route with live traffic is requested in the car | The route's start and destination and the area around it, sent from a per-install logged-out browser session. There is no account, API key or shared credential, and no request goes through a Gearslip server |
+| [OpenStreetMap OSRM](https://routing.openstreetmap.de) | When a route is requested in the car, unless the result is still cached | The route's start and destination, used to fetch the road geometry drawn as dots. There is no account, API key or shared credential, and no request goes through a Gearslip server |
+| Google (public web endpoints) | When a route with live traffic is requested in the car | The route's start and destination and the area around the route, sent from a per-install logged-out browser session. There is no account, API key or shared credential, and no request goes through a Gearslip server |
 | [EasyList](https://easylist.to) | About once a week on Wi-Fi, while the browser's ad blocker is on | A request for the filter lists |
 | Any address you give | When you download a certificate from a link, or add your own filter list | A request for that file |
 

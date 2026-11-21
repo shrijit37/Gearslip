@@ -9,7 +9,9 @@ import app.seb3thehacker.gearslip.media.MediaCatalog
 import app.seb3thehacker.gearslip.media.MediaEntry
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 
@@ -61,19 +63,51 @@ object MusicCatalog {
         } ?: throw IllegalStateException("No music app found — install Vivi Music or Echo Music")
 
         CarServices.openMedia(app)
-        withTimeoutOrNull(10_000) {
+        val phase = withTimeoutOrNull(10_000) {
             CarServices.media.phase.first { it == CarMedia.Phase.READY || it == CarMedia.Phase.REJECTED }
         }
+        // The screen shows OFFLINE rather than NOTHING HERE when we can't connect, so a rejected
+        // or unanswered connection must fail here instead of leaving an empty browse tree behind.
+        check(phase == CarMedia.Phase.READY) {
+            if (phase == null) {
+                "${app.label} did not respond"
+            } else {
+                val reason = when (CarServices.media.rejection.value) {
+                    CarMedia.Rejection.NEEDS_NOTIFICATION_ACCESS -> "needs notification access"
+                    CarMedia.Rejection.NEEDS_APP_RUNNING -> "is not running"
+                    else -> "refused the connection"
+                }
+                "${app.label} $reason"
+            }
+        }
     }
+
+    /** One live reading of the connected app's browse tree: shelves, or why there are none. */
+    data class HomeSnapshot(val shelves: List<Shelf>, val error: String?)
+
+    /**
+     * Shelves follow the app's browse state instead of a one-shot snapshot, so entering a folder
+     * or the app updating its library shows up without a wait or a second connection.
+     */
+    fun homeFlow(): Flow<HomeSnapshot> = CarServices.media.browse.map { browse ->
+        when {
+            browse.failed -> HomeSnapshot(emptyList(), "Could not load the music library")
+            browse.unavailable -> HomeSnapshot(emptyList(), "This app keeps its library to itself")
+            browse.loading && browse.entries.isEmpty() -> HomeSnapshot(emptyList(), null)
+            else -> HomeSnapshot(shelvesOf(browse.entries), null)
+        }
+    }
+
+    /** Groups the app's entries under their section headings, as its own library files them. */
+    internal fun shelvesOf(entries: List<MediaEntry>): List<Shelf> =
+        entries.groupBy { it.group ?: it.subtitle.takeIf(String::isNotBlank) ?: "MUSIC" }
+            .map { (title, items) -> Shelf(title, items.map(::toTrack)) }
 
     /** Shelves from the connected app's browse tree. Folders are non-playable and open on tap. */
     suspend fun home(): List<Shelf> {
         val media = CarServices.mediaOrNull() ?: return emptyList()
         withTimeoutOrNull(6_000) { media.browse.first { !it.loading || it.failed || it.unavailable } }
-        val entries = media.browse.value.entries
-        if (entries.isEmpty()) return emptyList()
-        return entries.groupBy { it.group ?: it.subtitle.takeIf(String::isNotBlank) ?: "MUSIC" }
-            .map { (title, items) -> Shelf(title, items.map(::toTrack)) }
+        return shelvesOf(media.browse.value.entries)
     }
 
     /** Ask the connected app's own library for matches, then let the driver pick one. */
@@ -89,10 +123,10 @@ object MusicCatalog {
 
     suspend fun suggestions(query: String): List<String> = emptyList()
 
-    /** Descend into a browsable folder from the home shelves. */
-    suspend fun browse(title: String) {
+    /** Descend into a browsable folder from the home shelves, identified by its media ID. */
+    suspend fun browse(entryId: String) {
         val media = CarServices.mediaOrNull() ?: return
-        val entry = media.browse.value.entries.firstOrNull { it.title.equals(title, true) } ?: return
+        val entry = media.browse.value.entries.firstOrNull { it.id == entryId } ?: return
         media.select(entry)
         delay(300)
     }

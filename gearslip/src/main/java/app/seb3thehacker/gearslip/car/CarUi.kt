@@ -382,7 +382,7 @@ fun CarUi() {
                             // whatever the screen drew there.
                             DebugBuildBadge(Modifier.align(Alignment.BottomEnd).padding(bottom = bottomInset))
                         }
-                        if (nothingShell && !fullscreen && shown != CarScreen.FirstPartyPlayer) {
+                        if (nothingShell && !fullscreen && screen != CarScreen.FirstPartyPlayer) {
                             NothingBottomPlayer(Modifier.align(Alignment.BottomCenter))
                         }
                         // Last of the resting layer so it covers the player too; a call or alert

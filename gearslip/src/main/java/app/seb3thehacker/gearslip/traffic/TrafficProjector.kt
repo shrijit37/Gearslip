@@ -14,26 +14,47 @@ object TrafficProjector {
     fun merge(routed: RoutePath, google: RouteTraffic): RouteTraffic {
         val routeCum = routed.cumulative
         val googleCum = google.distanceMeters
-        val spans = google.spans.mapNotNull { span ->
+        val spans = google.spans.flatMap { span ->
             val from = span.startMeters
             val to = min(from + span.lengthMeters, googleCum.lastOrNull() ?: from)
-            if (to <= from) return@mapNotNull null
+            if (to <= from) return@flatMap emptyList()
+
+            // Each successful sample is a projected metre position on the drawn route plus the
+            // source metre position it came from. Consecutive samples form a run; a failed
+            // projection or a gap larger than one sample step ends the run so congestion is not
+            // stretched across a portion of the line we could not verify.
+            val runs = mutableListOf<List<Pair<Double, Double>>>()
+            var run = mutableListOf<Pair<Double, Double>>()
+            var lastSource = Double.NaN
             var metres = from
-            var totalProjected = 0.0
-            var samples = 0
             while (metres <= to) {
                 val point = pointAt(google.points, googleCum, metres)
                 val projected = nearestDistance(point, routed.points, routeCum)
-                if (projected != null) {
-                    totalProjected += projected
-                    samples++
+                if (projected == null) {
+                    if (run.isNotEmpty()) {
+                        runs += run
+                        run = mutableListOf()
+                    }
+                    lastSource = Double.NaN
+                } else {
+                    if (run.isNotEmpty() && metres - lastSource > SAMPLE_STEP + GAP_TOLERANCE) {
+                        runs += run
+                        run = mutableListOf()
+                    }
+                    run += projected to metres
+                    lastSource = metres
                 }
-                metres += 25.0
+                metres += SAMPLE_STEP
             }
-            if (samples == 0) return@mapNotNull null
-            val start = totalProjected / samples
-            val length = max(25.0, min(span.lengthMeters, routeCum.last() - start))
-            TrafficSpan(span.level, start, length)
+            if (run.isNotEmpty()) runs += run
+
+            runs.mapNotNull { samples ->
+                if (samples.isEmpty()) return@mapNotNull null
+                val start = samples.minOf { it.first }
+                val end = samples.maxOf { it.first }
+                val length = max(25.0, min(end - start, routeCum.last() - start))
+                TrafficSpan(span.level, start, length)
+            }
         }
         return RouteTraffic(
             points = routed.points,
@@ -62,26 +83,28 @@ object TrafficProjector {
     }
 
     /** Cumulative distance along [points] of the point nearest to [target]. */
-    private fun nearestDistance(
+    internal fun nearestDistance(
         target: MapPoint,
         points: List<MapPoint>,
         cumulative: List<Double>,
     ): Double? {
+        val cosLat = cosLat(target.lat)
         var best = Double.MAX_VALUE
         var bestMetres = 0.0
         for (i in 1 until points.size) {
             val a = points[i - 1]
             val b = points[i]
-            val dx = b.lng - a.lng
+            val rawDx = b.lng - a.lng
+            val dx = rawDx * cosLat // one latitude-scaled metric for projection and rejection
             val dy = b.lat - a.lat
             val len2 = dx * dx + dy * dy
             val t = if (len2 == 0.0) 0.0 else
-                ((target.lng - a.lng) * dx + (target.lat - a.lat) * dy) / len2
+                ((target.lng - a.lng) * cosLat * dx + (target.lat - a.lat) * dy) / len2
             val clamped = t.coerceIn(0.0, 1.0)
-            val px = a.lng + dx * clamped
+            val px = a.lng + rawDx * clamped // degrees, so dLng can use the same scale
             val py = a.lat + dy * clamped
             val dLat = target.lat - py
-            val dLng = (target.lng - px) * cosLat(target.lat)
+            val dLng = (target.lng - px) * cosLat
             val d2 = dLat * dLat + dLng * dLng
             if (d2 < best) {
                 best = d2
@@ -93,4 +116,7 @@ object TrafficProjector {
     }
 
     private fun cosLat(lat: Double): Double = kotlin.math.cos(Math.toRadians(lat))
+
+    private const val SAMPLE_STEP = 25.0
+    private const val GAP_TOLERANCE = 5.0 // allow float drift beyond one sample step before splitting
 }

@@ -175,10 +175,10 @@ class VelaTrafficSource(
         private val cookies = LinkedHashMap<String, Cookie>()
         override fun saveFromResponse(url: HttpUrl, cookies: List<Cookie>) {
             cookies.filter { it.expiresAt > System.currentTimeMillis() }
-                .forEach { this@MemoryCookieJar.cookies[it.name] = it }
+                .forEach { this@MemoryCookieJar.cookies["${it.name}|${it.domain}|${it.path}"] = it }
         }
         override fun loadForRequest(url: HttpUrl): List<Cookie> = cookies.values
-            .filter { it.expiresAt > System.currentTimeMillis() && (it.secure || url.isHttps) }
+            .filter { it.expiresAt > System.currentTimeMillis() && it.matches(url) }
 
         fun clear() = cookies.clear()
     }

@@ -7,6 +7,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -25,17 +26,18 @@ fun DotSeekBar(
 ) {
     var dragging by remember { mutableStateOf<Float?>(null) }
     val shown = (dragging ?: fraction).coerceIn(0f, 1f)
+    val latestOnSeek by rememberUpdatedState(onSeek)
     Canvas(
         modifier
             .then(
                 if (!enabled) Modifier else Modifier
                     .pointerInput(Unit) {
-                        detectTapGestures { onSeek((it.x / size.width).coerceIn(0f, 1f)) }
+                        detectTapGestures { latestOnSeek((it.x / size.width).coerceIn(0f, 1f)) }
                     }
                     .pointerInput(Unit) {
                         detectHorizontalDragGestures(
                             onDragStart = { dragging = (it.x / size.width).coerceIn(0f, 1f) },
-                            onDragEnd = { dragging?.let(onSeek); dragging = null },
+                            onDragEnd = { dragging?.let(latestOnSeek); dragging = null },
                             onDragCancel = { dragging = null },
                         ) { change, _ -> dragging = (change.position.x / size.width).coerceIn(0f, 1f) }
                     }

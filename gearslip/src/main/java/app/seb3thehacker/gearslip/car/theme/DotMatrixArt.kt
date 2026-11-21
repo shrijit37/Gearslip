@@ -52,7 +52,7 @@ fun DotMatrixArt(
         val small = Bitmap.createScaledBitmap(source, grid, grid, true)
         val pixels = IntArray(grid * grid)
         small.getPixels(pixels, 0, grid, 0, 0, grid, grid)
-        small.recycle()
+        if (small !== source) small.recycle()
         pixels
     }
     // The pulse is only composed while art is missing, so its transition is disposed afterwards.

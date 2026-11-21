@@ -16,6 +16,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -86,15 +87,28 @@ fun DotMapScreen(modifier: Modifier = Modifier) {
     var status by remember { mutableStateOf("WAITING FOR LOCATION") }
     var map by remember { mutableStateOf<MapLibreMap?>(null) }
     var style by remember { mutableStateOf<Style?>(null) }
+    var permissionGranted by remember { mutableStateOf(hasLocation(context)) }
+    var permissionRequested by remember { mutableStateOf(false) }
+    var routeRequest by remember { mutableIntStateOf(0) }
+
+    // A permission answer is delivered on the phone's activity; re-check the grant whenever one lands.
+    LaunchedEffect(Unit) {
+        PermissionActivity.permissionResults.collect {
+            permissionGranted = hasLocation(context)
+        }
+    }
 
     // 1. Instant: read the last cached fix synchronously. No 6-second latch on the UI path.
-    LaunchedEffect(context) {
-        if (!hasLocation(context)) {
+    LaunchedEffect(context, permissionGranted) {
+        if (!permissionGranted) {
             status = "LOCATION PERMISSION NEEDED"
-            PermissionActivity.ask(
-                context,
-                arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION),
-            )
+            if (!permissionRequested) {
+                permissionRequested = true
+                PermissionActivity.ask(
+                    context,
+                    arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION),
+                )
+            }
             return@LaunchedEffect
         }
         val known = lastKnownFix(context)
@@ -110,7 +124,8 @@ fun DotMapScreen(modifier: Modifier = Modifier) {
     }
 
     // 2b. Refine to a fresh fix off the UI path; short timeout, callback-driven, cancellable.
-    LaunchedEffect(context) {
+    LaunchedEffect(context, permissionGranted) {
+        if (!permissionGranted) return@LaunchedEffect
         val fresh = freshFix(context)
         if (fresh != null) {
             origin = fresh
@@ -122,9 +137,9 @@ fun DotMapScreen(modifier: Modifier = Modifier) {
     }
 
     // Continuous updates keep the car dot live while navigating.
-    DisposableEffect(context) {
+    DisposableEffect(context, permissionGranted) {
+        if (!permissionGranted) return@DisposableEffect onDispose { }
         val manager = context.getSystemService(LocationManager::class.java) ?: return@DisposableEffect onDispose { }
-        if (!hasLocation(context)) return@DisposableEffect onDispose { }
         val listener = object : LocationListener {
             override fun onLocationChanged(location: Location) {
                 origin = MapPoint(location.latitude, location.longitude)
@@ -190,6 +205,7 @@ fun DotMapScreen(modifier: Modifier = Modifier) {
     DisposableEffect(map) {
         val m = map ?: return@DisposableEffect onDispose { }
         val listener = MapLibreMap.OnMapClickListener { point ->
+            routeRequest++
             val here = origin
             if (here != null) {
                 trip = here to MapPoint(point.latitude, point.longitude)
@@ -206,7 +222,7 @@ fun DotMapScreen(modifier: Modifier = Modifier) {
     }
 
     // Real routing + real traffic. Geometry is published by onGeometry as soon as OSRM answers.
-    LaunchedEffect(trip) {
+    LaunchedEffect(trip, routeRequest) {
         val (from, to) = trip ?: return@LaunchedEffect
         status = "ROUTING..."
         val started = System.currentTimeMillis()
@@ -232,7 +248,11 @@ fun DotMapScreen(modifier: Modifier = Modifier) {
     // Build the GeoJSON off the main thread and cap the dot count.
     LaunchedEffect(traffic, style) {
         val s = style ?: return@LaunchedEffect
-        val route = traffic ?: return@LaunchedEffect
+        val route = traffic
+        if (route == null) {
+            updateRoute(s, FeatureCollection.fromFeatures(emptyList()))
+            return@LaunchedEffect
+        }
         val features = withContext(Dispatchers.Default) { routeFeatures(route) }
         updateRoute(s, features)
     }

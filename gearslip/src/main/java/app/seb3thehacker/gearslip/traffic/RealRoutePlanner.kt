@@ -29,7 +29,7 @@ class RealRoutePlanner(
         destination: MapPoint,
         onGeometry: ((RouteTraffic) -> Unit)? = null,
     ): RouteTraffic? {
-        val key = RouteKey(origin.grid(), destination.grid())
+        val key = RouteKey(origin.grid(), destination)
         val now = System.currentTimeMillis()
         if (key == cachedKey && now - cachedAt < CACHE_MS) {
             cachedResult?.let { result ->
@@ -58,7 +58,7 @@ class RealRoutePlanner(
         }
     }
 
-    private data class RouteKey(val origin: Pair<Double, Double>, val destination: Pair<Double, Double>)
+    private data class RouteKey(val origin: Pair<Double, Double>, val destination: MapPoint)
 }
 
 /** Snap to ~220 m so a stationary car moving a few metres still reuses the last result. */
