@@ -17,6 +17,17 @@ import androidx.compose.ui.graphics.Color
 import kotlin.math.hypot
 import kotlin.math.sin
 
+@Composable
+private fun loadingPhase(): Float {
+    val infinite = rememberInfiniteTransition()
+    val phase by infinite.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(1200, easing = LinearEasing), RepeatMode.Restart),
+    )
+    return phase
+}
+
 /**
  * Album art as a coloured dot-matrix halftone, plus a radial dot pulse while the bitmap loads.
  *
@@ -44,12 +55,8 @@ fun DotMatrixArt(
         small.recycle()
         pixels
     }
-    val infinite = rememberInfiniteTransition()
-    val phase by infinite.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(tween(1200, easing = LinearEasing), RepeatMode.Restart),
-    )
+    // The pulse is only composed while art is missing, so its transition is disposed afterwards.
+    val phase = if (sampled == null) loadingPhase() else 0f
 
     Canvas(modifier) {
         val w = size.width

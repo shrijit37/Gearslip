@@ -174,7 +174,8 @@ fun NothingBottomPlayer(modifier: Modifier = Modifier) {
     val remoteArt = rememberArt(now)
     // The first-party player wins when it has a track; otherwise show the remote app's session.
     val useFirst = first.track != null
-    val art = if (useFirst) first.art else remoteArt
+    // URI-only artwork is loaded into remoteArt; use it when the first-party track has no bitmap.
+    val art = if (useFirst) first.art ?: remoteArt else remoteArt
     val title = if (useFirst) first.track?.title.orEmpty() else now.title
     val artist = if (useFirst) first.track?.artists.orEmpty() else now.artist
     val playing = if (useFirst) first.playing else now.playing
