@@ -46,7 +46,7 @@ fun FirstPartyPlayerScreen(onBack: () -> Unit) {
     val queue by MusicPlayer.queue.collectAsStateWithLifecycle()
     var panel by remember { mutableIntStateOf(PANEL_LYRICS) }
     val track = state.track
-    val art by produceState<Bitmap?>(state.art, state.art, track?.thumbnailUrl) {
+    val art by produceState<Bitmap?>(state.art, track?.thumbnailUrl) {
         value = state.art ?: track?.thumbnailUrl?.let { MediaArt.load(context, Uri.parse(it)) }
     }
     val scheme = MaterialTheme.colorScheme
