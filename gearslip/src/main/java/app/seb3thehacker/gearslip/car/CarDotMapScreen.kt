@@ -186,7 +186,12 @@ fun DotMapScreen(modifier: Modifier = Modifier) {
                 }
             }
         },
-        onRelease = { view -> runCatching { view.onPause(); view.onStop(); view.onDestroy() } },
+        onRelease = { view ->
+            // Each call gets its own guard: a failure in onPause must not skip the native teardown.
+            runCatching { view.onPause() }.onFailure { GearslipLog.w("dot map: onPause failed: ${it.message}") }
+            runCatching { view.onStop() }.onFailure { GearslipLog.w("dot map: onStop failed: ${it.message}") }
+            runCatching { view.onDestroy() }.onFailure { GearslipLog.w("dot map: onDestroy failed: ${it.message}") }
+        },
     )
 
     LaunchedEffect(map, context) {

@@ -15,6 +15,7 @@ object TrafficProjector {
         val routeCum = routed.cumulative
         val googleCum = google.distanceMeters
         val identicalGeometry = routed.points == google.points
+        val grid by lazy { SegmentGrid(routed.points) }
         val spans = google.spans.flatMap { span ->
             val from = max(0.0, span.startMeters)
             val to = min(span.startMeters + span.lengthMeters, googleCum.lastOrNull() ?: from)
@@ -40,7 +41,7 @@ object TrafficProjector {
             var metres = from
             while (true) {
                 val point = pointAt(google.points, googleCum, metres)
-                val projected = nearestDistance(point, routed.points, routeCum)
+                val projected = nearestDistance(point, routed.points, routeCum, grid.candidates(point))
                 if (projected == null) {
                     finishRun()
                 } else {
@@ -79,16 +80,24 @@ object TrafficProjector {
         )
     }
 
-    /** Cumulative distance along [points] of the point nearest to [target]. */
+    /** Cumulative distance along [points] of the point nearest to [target] (full scan). */
     internal fun nearestDistance(
         target: MapPoint,
         points: List<MapPoint>,
         cumulative: List<Double>,
+    ): Double? = nearestDistance(target, points, cumulative, 1 until points.size)
+
+    /** Same projection as the full scan, but only over the segment indices worth testing. */
+    internal fun nearestDistance(
+        target: MapPoint,
+        points: List<MapPoint>,
+        cumulative: List<Double>,
+        candidates: Iterable<Int>,
     ): Double? {
         val cosLat = cosLat(target.lat)
         var best = Double.MAX_VALUE
         var bestMetres = 0.0
-        for (i in 1 until points.size) {
+        for (i in candidates) {
             val a = points[i - 1]
             val b = points[i]
             val rawDx = b.lng - a.lng
@@ -110,6 +119,47 @@ object TrafficProjector {
         }
         // Reject a snap further than ~200 m; that road isn't part of this route.
         return bestMetres.takeIf { best * 1.21e10 < 200.0 * 200.0 }
+    }
+
+    /**
+     * Coarse lat/lng bins of route segments. Each segment is registered in every cell its bbox
+     * covers after padding by the snap radius, so any segment that could pass the 200 m cutoff
+     * is in the candidate list of the cell holding a sample. This turns the per-sample scan of
+     * the whole route into a lookup of a handful of nearby segments.
+     */
+    private class SegmentGrid(points: List<MapPoint>) {
+        private val cells = HashMap<Long, MutableList<Int>>()
+
+        init {
+            for (i in 1 until points.size) {
+                val a = points[i - 1]
+                val b = points[i]
+                val padLat = SNAP_RADIUS_M / 111_320.0
+                val cos = minOf(cosLat(a.lat), cosLat(b.lat)).coerceAtLeast(0.01)
+                val padLng = padLat / cos
+                val minY = cell(minOf(a.lat, b.lat) - padLat)
+                val maxY = cell(maxOf(a.lat, b.lat) + padLat)
+                val minX = cell(minOf(a.lng, b.lng) - padLng)
+                val maxX = cell(maxOf(a.lng, b.lng) + padLng)
+                for (y in minY..maxY) {
+                    for (x in minX..maxX) {
+                        cells.getOrPut(key(y, x)) { ArrayList() } += i
+                    }
+                }
+            }
+        }
+
+        fun candidates(target: MapPoint): List<Int> =
+            cells[key(cell(target.lat), cell(target.lng))].orEmpty()
+
+        private fun cell(value: Double): Int = Math.floor(value / CELL_DEGREES).toInt()
+
+        private fun key(y: Int, x: Int): Long = (y.toLong() shl 32) or (x.toLong() and 0xffffffffL)
+
+        private companion object {
+            const val CELL_DEGREES = 0.01
+            const val SNAP_RADIUS_M = 200.0
+        }
     }
 
     private fun cosLat(lat: Double): Double = kotlin.math.cos(Math.toRadians(lat))
