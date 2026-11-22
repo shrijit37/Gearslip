@@ -13,6 +13,7 @@ import app.seb3thehacker.gearslip.host.TemplateApp
 import app.seb3thehacker.gearslip.media.CarMedia
 import app.seb3thehacker.gearslip.media.MediaApp
 import app.seb3thehacker.gearslip.media.MediaCatalog
+import app.seb3thehacker.gearslip.music.playback.MusicPlayer
 import app.seb3thehacker.gearslip.notify.GearslipNotificationListener
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -87,6 +88,9 @@ object CarServices {
         BluetoothAudioCheck.init(appContext)
         LocationCheck.init(appContext)
         CarKeys.init(appContext)
+        // Own this here, not in a single screen: the rail mini-player and the built-in Player app
+        // can both open the player without ever visiting the music browse screen.
+        MusicPlayer.init(appContext)
     }
 
     // --- map -----------------------------------------------------------------------------

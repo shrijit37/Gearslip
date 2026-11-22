@@ -160,6 +160,9 @@ tasks.register("renameApk") {
 tasks.matching { it.name.startsWith("assemble") }.configureEach { finalizedBy("renameApk") }
 
 dependencies {
+    // Music is driven entirely by external media apps (see media/CarMedia.kt): no first-party
+    // streamer, so no ExoPlayer/catalog dependencies.
+
     // Only for the XML window theme (Theme.Material3.DynamicColors); every screen is Compose.
     implementation(libs.google.material)
     implementation(platform(libs.androidx.compose.bom))
@@ -176,7 +179,12 @@ dependencies {
     implementation(libs.androidx.media)
     // The map behind a place list (PlaceListMapTemplate), which the host draws, not the app.
     implementation(libs.maplibre.android)
+    // Keyless Google Directions traffic client (see traffic/VelaTrafficSource.kt).
+    implementation(libs.okhttp)
     testImplementation(libs.junit)
+    androidTestImplementation(libs.androidx.junit)
+    androidTestImplementation(libs.androidx.espresso.core)
+    androidTestImplementation("androidx.test:runner:1.6.2")
 }
 
 tasks.withType<KotlinJvmCompile>().configureEach {
