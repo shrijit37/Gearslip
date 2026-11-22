@@ -82,7 +82,8 @@ class CarDensityTest {
 
     @Test
     fun aSavedDensityGearslipDoesNotOfferFallsBackToTheCar() {
-        for (saved in listOf("201", "-1", "broken", "")) {
+        // 201 is a valid custom density (60..480); 999 is outside the accepted range.
+        for (saved in listOf("999", "-1", "broken", "")) {
             context.stored["car_density"] = saved
             CarSettings.init(context)
             assertEquals(CarSettings.DENSITY_FROM_CAR, CarSettings.carDensity.value)
