@@ -1,6 +1,8 @@
 package app.seb3thehacker.gearslip.traffic
 
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import okhttp3.Cookie
 import okhttp3.CookieJar
@@ -39,6 +41,7 @@ class VelaTrafficSource(
 
     @Volatile
     private var warmed = false
+    private val warmupMutex = Mutex()
 
     override suspend fun routeTraffic(origin: MapPoint, destination: MapPoint): RouteTraffic? =
         withContext(Dispatchers.IO) {
@@ -65,17 +68,22 @@ class VelaTrafficSource(
 
     private suspend fun ensureSession() = withContext(Dispatchers.IO) {
         if (warmed) return@withContext
-        runCatching {
-            val url = HttpUrl.Builder()
-                .scheme("https").host("www.google.com")
-                .addPathSegment("maps")
-                .addQueryParameter("hl", "en")
-                .addQueryParameter("gl", "us")
-                .build()
-            val request = Request.Builder().url(url).browserHeaders(document = true).build()
-            client.newCall(request).execute().use { it.body.close() }
+        warmupMutex.withLock {
+            if (warmed) return@withLock
+            warmed = runCatching {
+                val url = HttpUrl.Builder()
+                    .scheme("https").host("www.google.com")
+                    .addPathSegment("maps")
+                    .addQueryParameter("hl", "en")
+                    .addQueryParameter("gl", "us")
+                    .build()
+                val request = Request.Builder().url(url).browserHeaders(document = true).build()
+                client.newCall(request).execute().use { response ->
+                    check(response.isSuccessful) { "session warmup HTTP ${response.code}" }
+                    response.body.close()
+                }
+            }.isSuccess
         }
-        warmed = true
     }
 
     // ------------------------------------------------------------------ parsing
