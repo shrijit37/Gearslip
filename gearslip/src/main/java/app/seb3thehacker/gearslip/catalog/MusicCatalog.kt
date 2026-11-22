@@ -115,10 +115,12 @@ object MusicCatalog {
         val media = CarServices.mediaOrNull() ?: return emptyList()
         media.searchLibrary(query)
         val found = withTimeoutOrNull(10_000) {
-            media.results.first { it?.query == query.trim() && it.entries != null }
-        }
-        val entries = found?.entries ?: return emptyList()
-        return entries.filter { it.playable }.map(::toTrack)
+            media.results.first { result ->
+                result?.query == query.trim() && (result.entries != null || !result.supported)
+            }
+        } ?: throw IllegalStateException("The music app did not respond to the search")
+        if (!found.supported) throw IllegalStateException("This music app cannot search its library")
+        return found.entries.orEmpty().filter { it.playable }.map(::toTrack)
     }
 
     suspend fun suggestions(query: String): List<String> = emptyList()

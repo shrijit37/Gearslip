@@ -108,11 +108,16 @@ fun FirstPartyMusicScreen(onOpenPlayer: () -> Unit) {
     LaunchedEffect(trimmed, tab) {
         if (tab != TAB_SEARCH || trimmed.length < 2) {
             results = emptyList()
+            loadError = null
             searchBusy = false
             return@LaunchedEffect
         }
-        delay(SEARCH_PAUSE_MS)
+        // Clear the previous query's matches immediately: during the debounce the input already
+        // shows the new text, so leaving old results on screen makes them read as a miss.
+        results = emptyList()
+        loadError = null
         searchBusy = true
+        delay(SEARCH_PAUSE_MS)
         try {
             val found = runCatching { MusicCatalog.search(trimmed) }
             results = found.getOrDefault(emptyList())
