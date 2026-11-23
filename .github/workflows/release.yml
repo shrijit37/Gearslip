@@ -52,10 +52,17 @@ jobs:
               return (value.replace('\\', '\\\\').replace(':', '\\:')
                            .replace('=', '\\=').replace('\n', '\\n'))
 
+          # Gradle's Properties keys are case-sensitive: build.gradle.kts reads the same
+          # camelCase names that Android's signingConfig DSL uses.
+          props = {
+              'STORE_PASSWORD': 'storePassword',
+              'KEY_ALIAS': 'keyAlias',
+              'KEY_PASSWORD': 'keyPassword',
+          }
           with open('keystore.properties', 'w') as out:
               out.write('storeFile=gearslip-release.jks\n')
-              for key in ('STORE_PASSWORD', 'KEY_ALIAS', 'KEY_PASSWORD'):
-                  out.write('%s=%s\n' % (key.lower(), escape(os.environ['UPDATE_' + key])))
+              for env, prop in props.items():
+                  out.write('%s=%s\n' % (prop, escape(os.environ['UPDATE_' + env])))
           PY
 
       - name: Build debug APK
