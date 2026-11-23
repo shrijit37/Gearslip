@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import android.content.Context
+import android.net.Uri
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.ui.graphics.Color
 import app.seb3thehacker.gearslip.car.CarSettings
@@ -52,6 +53,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.collectAsState
@@ -175,6 +177,18 @@ private fun UpdateCard() {
                 }
                 else -> Unit
             }
+            // If Android refuses the APK (e.g. a different signing key), the release page is the
+            // way out - a manual install from there is the only fix for a signature mismatch.
+            TextButton(
+                onClick = {
+                    runCatching {
+                        context.startActivity(
+                            Intent(Intent.ACTION_VIEW, Uri.parse(release.pageUrl)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                        )
+                    }
+                },
+                modifier = Modifier.align(Alignment.End),
+            ) { Text(stringResource(R.string.app_page_github)) }
         }
     }
 }

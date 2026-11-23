@@ -9,6 +9,7 @@ import android.os.Build
 import android.provider.Settings
 import app.seb3thehacker.gearslip.BuildConfig
 import app.seb3thehacker.gearslip.GearslipLog
+import app.seb3thehacker.gearslip.R
 import app.seb3thehacker.gearslip.SessionStatus
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -65,6 +66,8 @@ object UpdateChecker {
 
     /** Set when the driver had to allow installs from Gearslip before the download could be installed. */
     @Volatile private var installWhenAllowed = false
+    /** Set when Install was tapped mid-drive, so [onCarDisconnected] can finish it. */
+    @Volatile private var installWhenCarGone = false
 
     /** Called from Settings. Ignores taps while a check or download is already running. */
     fun check(context: Context) {
@@ -149,6 +152,11 @@ object UpdateChecker {
         for (release in newestFirst) {
             val name = pickAsset(release.assets.map { it.name }, supportedAbis) ?: continue
             val apk = release.assets.first { it.name == name }
+            if (apk.sha256 == null) {
+                // The updater can replace the app, so don't install bytes we couldn't verify.
+                GearslipLog.w("update: ${release.tag} has no SHA-256 for $name - skipping it")
+                continue
+            }
             val version = release.tag.removePrefix("v")
             if (isNewer(version, installedVersion)) {
                 GearslipLog.i("update: $version is out (this is $installedVersion)")
@@ -237,8 +245,14 @@ object UpdateChecker {
      */
     fun install(context: Context) {
         val ready = flow.value as? State.Ready ?: return
-        // Installing closes Gearslip, which would drop the car screen mid-drive.
-        if (carConnected) return
+        // Installing closes Gearslip, which would drop the car screen mid-drive. Queue it and
+        // say so on the card rather than silently throwing the tap away.
+        if (carConnected) {
+            installWhenCarGone = true
+            flow.value = State.Ready(ready.release, ready.apk, context.getString(R.string.update_waiting_car))
+            return
+        }
+        installWhenCarGone = false
         val app = context.applicationContext
         if (!app.packageManager.canRequestPackageInstalls()) {
             installWhenAllowed = true
@@ -264,6 +278,13 @@ object UpdateChecker {
     fun onAppResumed(context: Context) {
         if (!installWhenAllowed || !context.packageManager.canRequestPackageInstalls()) return
         installWhenAllowed = false
+        install(context)
+    }
+
+    /** The car let go: finish an Install tap that had to wait until the drive ended. */
+    fun onCarDisconnected(context: Context) {
+        if (!installWhenCarGone) return
+        installWhenCarGone = false
         install(context)
     }
 
@@ -315,6 +336,8 @@ object UpdateChecker {
 
     /** The new build is running: drop the downloaded file and the card that offered it. */
     fun onReplaced(context: Context) {
+        installWhenAllowed = false
+        installWhenCarGone = false
         runCatching { updatesDir(context).deleteRecursively() }
         flow.value = State.Idle
     }

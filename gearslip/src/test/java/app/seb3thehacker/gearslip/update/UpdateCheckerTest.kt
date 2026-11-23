@@ -74,6 +74,15 @@ class UpdateCheckerTest {
     }
 
     @Test
+    fun skipsAnUpdateWhoseApkHasNoDigest() {
+        val unverified = UpdateChecker.Candidate(
+            "v0.5.0-alpha", false, "https://example/release",
+            listOf(UpdateChecker.Candidate.Asset("Gearslip-arm64-v8a-debug.apk", "https://example/new.apk", 1, null)),
+        )
+        check(UpdateChecker.newestFrom(listOf(unverified), "0.4.0-alpha", listOf("arm64-v8a")) is UpdateChecker.State.UpToDate)
+    }
+
+    @Test
     fun newestFromReportsUpToDateWhenNothingNewerHasAnApk() {
         val old = UpdateChecker.Candidate(
             "v0.3.0-alpha", false, "https://example/release",

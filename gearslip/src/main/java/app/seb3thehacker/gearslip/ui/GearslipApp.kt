@@ -27,6 +27,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -41,6 +42,8 @@ import androidx.compose.ui.unit.dp
 import app.seb3thehacker.gearslip.AppSettings
 import app.seb3thehacker.gearslip.BuildConfig
 import app.seb3thehacker.gearslip.CertProvider
+import app.seb3thehacker.gearslip.SessionStatus
+import app.seb3thehacker.gearslip.update.UpdateChecker
 
 private enum class Screen { HOME, SETTINGS, CAR_PREVIEW, CERT_SETUP, SETUP_GUIDE, RECOMMENDED_APPS, CAR_GROUP, SAVED_PLACES }
 
@@ -82,6 +85,15 @@ fun GearslipApp(onDisconnect: () -> Unit, onRequestCallScreening: () -> Unit) {
             Screen.HOME -> ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
             Screen.CAR_PREVIEW -> ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
             else -> ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+        }
+    }
+
+    // An Install tap during a drive waits in UpdateChecker. The session phase is the reliable
+    // signal here: this effect keeps running even when Gearslip stepped aside off the phone.
+    val session by SessionStatus.state.collectAsStateWithLifecycle()
+    LaunchedEffect(session.phase) {
+        if (session.phase != SessionStatus.Phase.CONNECTING && session.phase != SessionStatus.Phase.PROJECTING) {
+            UpdateChecker.onCarDisconnected(context)
         }
     }
 
