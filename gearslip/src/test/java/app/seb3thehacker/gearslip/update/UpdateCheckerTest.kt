@@ -74,12 +74,25 @@ class UpdateCheckerTest {
     }
 
     @Test
-    fun skipsAnUpdateWhoseApkHasNoDigest() {
-        val unverified = UpdateChecker.Candidate(
-            "v0.5.0-alpha", false, "https://example/release",
-            listOf(UpdateChecker.Candidate.Asset("Gearslip-arm64-v8a-debug.apk", "https://example/new.apk", 1, null)),
+    fun fallsBackToAVerifiedAssetWhenThePreferredAbiLacksADigest() {
+        val unverifiedSplit = UpdateChecker.Candidate.Asset(
+            "Gearslip-arm64-v8a-debug.apk", "https://example/new.apk", 1, null,
         )
-        check(UpdateChecker.newestFrom(listOf(unverified), "0.4.0-alpha", listOf("arm64-v8a")) is UpdateChecker.State.UpToDate)
+        val release = UpdateChecker.Candidate(
+            "v0.5.0-alpha", false, "https://example/release",
+            listOf(
+                unverifiedSplit,
+                UpdateChecker.Candidate.Asset("Gearslip-universal-debug.apk", "https://example/universal.apk", 2, "abc"),
+            ),
+        )
+        val state = UpdateChecker.newestFrom(listOf(release), "0.4.0-alpha", listOf("arm64-v8a"))
+        check(state is UpdateChecker.State.Available)
+        assertEquals("https://example/universal.apk", state.release.apkUrl)
+        assertEquals("abc", state.release.sha256)
+
+        // A release with no digest at all is still skipped: never install unverified bytes.
+        val noDigests = release.copy(assets = listOf(unverifiedSplit))
+        check(UpdateChecker.newestFrom(listOf(noDigests), "0.4.0-alpha", listOf("arm64-v8a")) is UpdateChecker.State.UpToDate)
     }
 
     @Test

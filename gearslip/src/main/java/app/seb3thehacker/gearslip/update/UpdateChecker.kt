@@ -150,18 +150,18 @@ object UpdateChecker {
                 }
             }
         for (release in newestFirst) {
-            val name = pickAsset(release.assets.map { it.name }, supportedAbis) ?: continue
-            val apk = release.assets.first { it.name == name }
-            if (apk.sha256 == null) {
-                // The updater can replace the app, so don't install bytes we couldn't verify.
-                GearslipLog.w("update: ${release.tag} has no SHA-256 for $name - skipping it")
-                continue
-            }
+            // Only install bytes we can check. If the phone's preferred ABI split has no digest,
+            // fall through to a verified asset in the same release (the universal APK) instead of
+            // reporting no update at all.
+            val verified = release.assets.filter { it.sha256 != null }
+            val name = pickAsset(verified.map { it.name }, supportedAbis) ?: continue
+            val apk = verified.first { it.name == name }
+            val hash = apk.sha256 ?: continue
             val version = release.tag.removePrefix("v")
             if (isNewer(version, installedVersion)) {
                 GearslipLog.i("update: $version is out (this is $installedVersion)")
                 return State.Available(
-                    Release(version, apk.url, apk.size, apk.sha256, release.pageUrl),
+                    Release(version, apk.url, apk.size, hash, release.pageUrl),
                 )
             }
         }
@@ -287,7 +287,9 @@ object UpdateChecker {
     /** The car let go: finish an Install tap that had to wait until the drive ended. */
     fun onCarDisconnected(context: Context) {
         if (!installWhenCarGone) return
-        installWhenCarGone = false
+        // Don't drop the flag first: if the state moved on while the car was connected (say the
+        // driver checked for updates again), install() returns without starting and the tap must
+        // stay queued. install() clears the flag itself once it actually proceeds.
         install(context)
     }
 
@@ -337,9 +339,9 @@ object UpdateChecker {
             else -> {
                 val detail = intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE) ?: "unknown error"
                 GearslipLog.w("update: install failed: $detail")
-                // Android rejected the APK itself (signature, version code, ...). Retrying the
-                // same bytes won't help, so drop them and let the next attempt re-download.
-                runCatching { updatesDir(context).deleteRecursively() }
+                // Leave the cached file alone: a status can arrive for an older session while a
+                // newer attempt is copying the same APK. The Failed card's Retry calls download(),
+                // which clears the cache before fetching fresh bytes.
                 flow.value = State.Failed("Android couldn't install the update. $detail")
             }
         }
