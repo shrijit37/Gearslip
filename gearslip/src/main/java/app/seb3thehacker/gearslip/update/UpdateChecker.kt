@@ -261,7 +261,10 @@ object UpdateChecker {
                     Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:${app.packageName}"))
                         .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
                 )
-            }.onFailure { flow.value = State.Failed("Android couldn't open the install settings.", ready.release) }
+            }.onFailure {
+                installWhenAllowed = false
+                flow.value = State.Failed("Android couldn't open the install settings.", ready.release)
+            }
             return
         }
         background("gearslip-install") {
@@ -296,19 +299,27 @@ object UpdateChecker {
             setRequireUserAction(PackageInstaller.SessionParams.USER_ACTION_NOT_REQUIRED)
         }
         val id = installer.createSession(params)
-        installer.openSession(id).use { session ->
-            session.openWrite("gearslip.apk", 0, ready.apk.length()).use { out ->
-                ready.apk.inputStream().use { it.copyTo(out) }
-                session.fsync(out)
+        var handedOff = false
+        try {
+            installer.openSession(id).use { session ->
+                session.openWrite("gearslip.apk", 0, ready.apk.length()).use { out ->
+                    ready.apk.inputStream().use { it.copyTo(out) }
+                    session.fsync(out)
+                }
+                val status = Intent(app, UpdateReceiver::class.java)
+                    .setAction(UpdateReceiver.ACTION_STATUS)
+                    .putExtra(EXTRA_VERSION, ready.release.version)
+                // Mutable: the installer adds the outcome to it.
+                val pending = PendingIntent.getBroadcast(
+                    app, id, status, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE,
+                )
+                session.commit(pending.intentSender)
             }
-            val status = Intent(app, UpdateReceiver::class.java)
-                .setAction(UpdateReceiver.ACTION_STATUS)
-                .putExtra(EXTRA_VERSION, ready.release.version)
-            // Mutable: the installer adds the outcome to it.
-            val pending = PendingIntent.getBroadcast(
-                app, id, status, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE,
-            )
-            session.commit(pending.intentSender)
+            handedOff = true
+        } finally {
+            // A failed write or commit leaves a session we still own. Abandon it so repeated
+            // Install taps don't pile up orphaned sessions until the system reclaims them.
+            if (!handedOff) runCatching { installer.abandonSession(id) }
         }
         GearslipLog.i("update: handed ${ready.release.version} to Android's installer")
     }
