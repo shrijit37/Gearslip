@@ -148,7 +148,7 @@ private fun UpdateCard() {
     val body = when (state) {
         is UpdateChecker.State.Available -> stringResource(R.string.update_available_body)
         is UpdateChecker.State.Downloading -> stringResource(R.string.update_downloading, (state.fraction * 100).toInt())
-        is UpdateChecker.State.Ready -> stringResource(R.string.update_ready_body)
+        is UpdateChecker.State.Ready -> state.error ?: stringResource(R.string.update_ready_body)
         is UpdateChecker.State.Failed -> stringResource(R.string.update_failed, state.message)
     }
     Spacer(Modifier.height(16.dp))

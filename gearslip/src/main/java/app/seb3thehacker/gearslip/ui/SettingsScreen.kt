@@ -213,7 +213,8 @@ private fun UpdatesSection() {
         UpdateChecker.State.UpToDate -> stringResource(R.string.settings_update_up_to_date)
         is UpdateChecker.State.Available -> stringResource(R.string.settings_update_available, state.release.version)
         is UpdateChecker.State.Downloading -> stringResource(R.string.update_downloading, (state.fraction * 100).toInt())
-        is UpdateChecker.State.Ready -> stringResource(R.string.settings_update_available, state.release.version)
+        is UpdateChecker.State.Ready -> state.error?.let { stringResource(R.string.settings_update_retry, it) }
+            ?: stringResource(R.string.settings_update_available, state.release.version)
         is UpdateChecker.State.Failed -> stringResource(R.string.settings_update_failed, state.message)
     }
     val busy = state is UpdateChecker.State.Checking || state is UpdateChecker.State.Downloading

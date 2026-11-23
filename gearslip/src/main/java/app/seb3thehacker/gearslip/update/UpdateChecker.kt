@@ -43,7 +43,8 @@ object UpdateChecker {
         data object UpToDate : State
         data class Available(val release: Release) : State
         data class Downloading(val release: Release, val fraction: Float) : State
-        data class Ready(val release: Release, val apk: File) : State
+        /** [error] is set when starting the install failed, so the card can offer a retry without re-downloading. */
+        data class Ready(val release: Release, val apk: File, val error: String? = null) : State
         data class Failed(val message: String, val release: Release? = null) : State
     }
 
@@ -252,7 +253,9 @@ object UpdateChecker {
         background("gearslip-install") {
             runCatching { commit(app, ready) }.onFailure {
                 GearslipLog.w("update: install failed to start: ${it.message}")
-                flow.value = State.Failed("Android couldn't start the install. Try again.", ready.release)
+                // The download already passed its checksum. Keep it and go back to Ready so the
+                // card's Install button can try again without pulling ~20 MB over again.
+                flow.value = State.Ready(ready.release, ready.apk, "Android couldn't start the install. Tap Install to try again.")
             }
         }
     }
@@ -302,6 +305,9 @@ object UpdateChecker {
             else -> {
                 val detail = intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE) ?: "unknown error"
                 GearslipLog.w("update: install failed: $detail")
+                // Android rejected the APK itself (signature, version code, ...). Retrying the
+                // same bytes won't help, so drop them and let the next attempt re-download.
+                runCatching { updatesDir(context).deleteRecursively() }
                 flow.value = State.Failed("Android couldn't install the update. $detail")
             }
         }

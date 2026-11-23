@@ -248,6 +248,7 @@
     <string name="settings_update_up_to_date">You\'re on the latest release</string>
     <string name="settings_update_available">v%1$s is available</string>
     <string name="settings_update_failed">Couldn\'t check: %1$s</string>
+    <string name="settings_update_retry">Tap Install on Home to retry: %1$s</string>
     <string name="update_title">Gearslip v%1$s</string>
     <string name="update_available_body">A new version is ready to download. About 20 MB over Wi-Fi or data.</string>
     <string name="update_ready_body">Downloaded and checked. Installing closes Gearslip for a moment.</string>
