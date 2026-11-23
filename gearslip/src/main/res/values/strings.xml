@@ -241,8 +241,22 @@
     <!--  -->
 
     <!-- Updates -->
-
-    <!--  -->
+    <string name="settings_updates">Updates</string>
+    <string name="settings_update_check">Check for updates</string>
+    <string name="settings_update_current">Installed: v%1$s</string>
+    <string name="settings_update_checking">Checking GitHub…</string>
+    <string name="settings_update_up_to_date">You\'re on the latest release</string>
+    <string name="settings_update_available">v%1$s is available</string>
+    <string name="settings_update_failed">Couldn\'t check: %1$s</string>
+    <string name="update_title">Gearslip v%1$s</string>
+    <string name="update_available_body">A new version is ready to download. About 20 MB over Wi-Fi or data.</string>
+    <string name="update_ready_body">Downloaded and checked. Installing closes Gearslip for a moment.</string>
+    <string name="update_download">Download</string>
+    <string name="update_install">Install</string>
+    <string name="update_downloading">Downloading %1$d%%</string>
+    <string name="update_retry">Try again</string>
+    <string name="update_failed">Update failed: %1$s</string>
+    <string name="update_waiting_car">The install waits until the car is disconnected.</string>
 
     <!-- About and support -->
     <string name="close">Close</string>

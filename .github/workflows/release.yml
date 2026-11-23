@@ -26,16 +26,49 @@ jobs:
       # from ANDROID_HOME; upstream's release job relies on this too.
       - uses: gradle/actions/setup-gradle@v4
 
+      # A stable signature is what lets an installed Gearslip accept the next one. Without it
+      # each runner's throwaway debug key makes Android refuse the update, and the in-app updater
+      # can only send the driver to the releases page. Set these four secrets in the repo to
+      # enable it; see README's "Stable signing for in-app updates" section.
+      - name: Write stable signing config
+        env:
+          UPDATE_KEYSTORE_B64: ${{ secrets.UPDATE_KEYSTORE_B64 }}
+          UPDATE_STORE_PASSWORD: ${{ secrets.UPDATE_STORE_PASSWORD }}
+          UPDATE_KEY_ALIAS: ${{ secrets.UPDATE_KEY_ALIAS }}
+          UPDATE_KEY_PASSWORD: ${{ secrets.UPDATE_KEY_PASSWORD }}
+        run: |
+          # Secrets can't be used in a step's if:, so decide here. Forks without the secrets
+          # keep building with the runner's debug key and the warning tells them why updates
+          # will need a manual reinstall.
+          if [ -z "$UPDATE_KEYSTORE_B64" ]; then
+            echo "::warning::UPDATE_KEYSTORE_B64 is not set. This APK has a throwaway signature and in-app updates will need a manual reinstall."
+            exit 0
+          fi
+          echo "$UPDATE_KEYSTORE_B64" | base64 --decode > gearslip-release.jks
+          python3 - <<'PY'
+          import os
+
+          def escape(value):
+              return (value.replace('\\', '\\\\').replace(':', '\\:')
+                           .replace('=', '\\=').replace('\n', '\\n'))
+
+          with open('keystore.properties', 'w') as out:
+              out.write('storeFile=gearslip-release.jks\n')
+              for key in ('STORE_PASSWORD', 'KEY_ALIAS', 'KEY_PASSWORD'):
+                  out.write('%s=%s\n' % (key.lower(), escape(os.environ['UPDATE_' + key])))
+          PY
+
       - name: Build debug APK
         # Debug needs no signing secrets, so this works in a fork out of the box.
         run: ./gradlew :gearslip:assembleDebug --no-daemon
 
-      - name: Locate APK
+      - name: Locate APKs
         id: apk
         run: |
-          apk=build/Gearslip-debug.apk
-          test -f "$apk" || { echo "no APK at $apk"; ls -R build | head -50; exit 1; }
-          echo "path=$apk" >> "$GITHUB_OUTPUT"
+          # ABI splits produce one APK per ABI plus a universal fallback, all copied into build/
+          # by Gradle's renameApk task. Fail early if the naming changes so no release ships empty.
+          compgen -G 'build/Gearslip-*-debug.apk' > /dev/null || { echo "no split APKs in build/"; ls -R build | head -50; exit 1; }
+          ls -lh build/Gearslip-*-debug.apk
 
       - name: Compute release tag
         id: version
@@ -52,6 +85,6 @@ jobs:
           name: ${{ steps.version.outputs.tag }}
           body_path: .github/release-notes.md
           generate_release_notes: true
-          files: ${{ steps.apk.outputs.path }}
+          files: build/Gearslip-*-debug.apk
           # Every build starts as a pre-release; promote it on GitHub after testing.
           prerelease: true

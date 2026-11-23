@@ -47,6 +47,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -65,6 +66,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.seb3thehacker.gearslip.BuildConfig
 import app.seb3thehacker.gearslip.SessionStatus
+import app.seb3thehacker.gearslip.update.UpdateChecker
 
 @Composable
 fun HomeScreen(
@@ -97,6 +99,7 @@ fun HomeScreen(
                 ) {
                     Spacer(Modifier.height(16.dp))
                     StatusCard(status)
+                    UpdateCard()
                     if (live) BluetoothMissingCard()
                     if (live) BackgroundLocationCard()
                     BluetoothAddressCard()
@@ -119,6 +122,58 @@ fun HomeScreen(
                     }
                 }
             }
+            }
+        }
+    }
+}
+
+/**
+ * A card on Home once an update has been found, so the driver doesn't have to dig through
+ * Settings to get it. Checking, being up to date and errors without a release stay in Settings.
+ */
+@Composable
+private fun UpdateCard() {
+    val context = LocalContext.current
+    val observed by UpdateChecker.state.collectAsStateWithLifecycle()
+    // A local val so Kotlin can smart-cast it below; a delegated property can't be cast.
+    val state = observed
+    val release = when (state) {
+        is UpdateChecker.State.Available -> state.release
+        is UpdateChecker.State.Downloading -> state.release
+        is UpdateChecker.State.Ready -> state.release
+        is UpdateChecker.State.Failed -> state.release ?: return
+        else -> return
+    }
+    val title = stringResource(R.string.update_title, release.version)
+    val body = when (state) {
+        is UpdateChecker.State.Available -> stringResource(R.string.update_available_body)
+        is UpdateChecker.State.Downloading -> stringResource(R.string.update_downloading, (state.fraction * 100).toInt())
+        is UpdateChecker.State.Ready -> stringResource(R.string.update_ready_body)
+        is UpdateChecker.State.Failed -> stringResource(R.string.update_failed, state.message)
+    }
+    Spacer(Modifier.height(16.dp))
+    Surface(
+        color = MaterialTheme.colorScheme.secondaryContainer,
+        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+        shape = MaterialTheme.shapes.extraLarge,
+    ) {
+        Column(Modifier.fillMaxWidth().padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+            Text(body, style = MaterialTheme.typography.bodyMedium)
+            if (state is UpdateChecker.State.Downloading) {
+                LinearProgressIndicator(progress = { state.fraction }, modifier = Modifier.fillMaxWidth())
+            }
+            when (state) {
+                is UpdateChecker.State.Available -> Button(onClick = { UpdateChecker.download(context, state.release) }) {
+                    Text(stringResource(R.string.update_download))
+                }
+                is UpdateChecker.State.Ready -> Button(onClick = { UpdateChecker.install(context) }) {
+                    Text(stringResource(R.string.update_install))
+                }
+                is UpdateChecker.State.Failed -> Button(onClick = { UpdateChecker.download(context, release) }) {
+                    Text(stringResource(R.string.update_retry))
+                }
+                else -> Unit
             }
         }
     }
