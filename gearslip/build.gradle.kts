@@ -123,6 +123,19 @@ android {
         buildConfig = true
     }
 
+    // One small APK per ABI instead of a single 35 MB universal build. Most of the difference is
+    // MapLibre's native libraries for ABIs a phone can't use. The updater picks the
+    // asset matching Build.SUPPORTED_ABIS; the universal build stays as a fallback for anything
+    // we didn't list. The DSL below is the public AGP API (verified against AGP 9.1.1).
+    splits {
+        abi {
+            isEnable = true
+            reset()
+            include("arm64-v8a", "armeabi-v7a", "x86", "x86_64")
+            isUniversalApk = true
+        }
+    }
+
     // Standalone Nothing car UI: English only, no per-app locale list to generate.
     androidResources { localeFilters += listOf("en") }
 
@@ -148,12 +161,24 @@ android {
 tasks.register("renameApk") {
     doLast {
         val rootBuildDir = rootProject.layout.buildDirectory.get().asFile
+        // Drop copies from an earlier build, so a local run can't leave a now-unused ABI (or a
+        // pre-split universal named Gearslip-debug.apk) in the set CI uploads.
+        rootBuildDir.listFiles { file -> file.name.startsWith("Gearslip-") && file.extension == "apk" }
+            ?.forEach { it.delete() }
         layout.buildDirectory.dir("outputs/apk").get().asFile.walkTopDown()
             .filter { it.extension == "apk" }
             .toList()
             .forEach { apk ->
-                val renamed = File(rootBuildDir, "Gearslip-${apk.parentFile.name}.apk")
-                apk.copyTo(renamed, overwrite = true)
+                // AGP 9 puts every split next to the variant in outputs/apk/<variant>/ and names
+                // them gearslip-<abi>-<variant>.apk, so the ABI comes from the file name. Without
+                // splits the stem is just gearslip-<variant>, which keeps the old, flat name.
+                val variant = apk.parentFile.name
+                val abi = apk.nameWithoutExtension
+                    .removePrefix("gearslip-")
+                    .removeSuffix("-$variant")
+                    .takeIf { it.isNotBlank() && it != variant }
+                val name = if (abi == null) "Gearslip-$variant.apk" else "Gearslip-$abi-$variant.apk"
+                apk.copyTo(File(rootBuildDir, name), overwrite = true)
             }
     }
 }

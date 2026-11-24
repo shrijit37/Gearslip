@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.toggleable
@@ -46,6 +47,7 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -79,10 +81,12 @@ import app.seb3thehacker.gearslip.BuildConfig
 import app.seb3thehacker.gearslip.CertProvider
 import app.seb3thehacker.gearslip.SessionStatus
 import app.seb3thehacker.gearslip.car.CarSettings
+import app.seb3thehacker.gearslip.update.UpdateChecker
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.snapshotFlow
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 
@@ -133,14 +137,15 @@ fun SettingsScreen(
             if (SHOW_RECOMMENDED_APPS && ready(6)) AppsSection(onOpenRecommendedApps)
             if (ready(9)) CertificateSection()
             if (ready(10)) AboutSection(onReplayTutorial)
-            if (BuildConfig.DEBUG && ready(11)) DebugSection()
+            if (ready(11)) UpdatesSection()
+            if (BuildConfig.DEBUG && ready(12)) DebugSection()
             Spacer(Modifier.height(16.dp))
         }
     }
 }
 
 /** How many sections Settings builds one frame at a time; see [ready]. */
-private const val SECTIONS = 12
+private const val SECTIONS = 13
 
 @Composable
 private fun Arrow() = Icon(
@@ -190,6 +195,39 @@ private fun AboutSection(onReplayTutorial: () -> Unit) {
             trailing = { Arrow() },
         )
         SettingsDivider()
+    }
+}
+
+/** The manual self-update check. Nothing here contacts GitHub until the driver taps the row. */
+@Composable
+private fun UpdatesSection() {
+    val context = LocalContext.current
+    val observed by UpdateChecker.state.collectAsStateWithLifecycle()
+    val state = observed
+    val installed = remember {
+        runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull() ?: "?"
+    }
+    val subtitle = when (state) {
+        UpdateChecker.State.Idle -> stringResource(R.string.settings_update_current, installed)
+        UpdateChecker.State.Checking -> stringResource(R.string.settings_update_checking)
+        UpdateChecker.State.UpToDate -> stringResource(R.string.settings_update_up_to_date)
+        is UpdateChecker.State.Available -> stringResource(R.string.settings_update_available, state.release.version)
+        is UpdateChecker.State.Downloading -> stringResource(R.string.update_downloading, (state.fraction * 100).toInt())
+        is UpdateChecker.State.Ready -> state.error?.let { stringResource(R.string.settings_update_retry, it) }
+            ?: stringResource(R.string.settings_update_available, state.release.version)
+        is UpdateChecker.State.Failed -> stringResource(R.string.settings_update_failed, state.message)
+    }
+    val busy = state is UpdateChecker.State.Checking || state is UpdateChecker.State.Downloading
+    SettingsSection(stringResource(R.string.settings_updates), footer = stringResource(R.string.update_waiting_car)) {
+        SettingsRow(
+            stringResource(R.string.settings_update_check),
+            Modifier.clickable(enabled = !busy) { UpdateChecker.check(context) },
+            subtitle = subtitle,
+            icon = Icons.Filled.Refresh,
+            trailing = if (busy) {
+                { CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp) }
+            } else null,
+        )
     }
 }
 

@@ -40,19 +40,43 @@ the tokens and the [mockup](carplay-nothing-final.html) for the intended layout.
    then read the safety note.
 3. Plug into the car's USB port. For wireless cars, pair over Bluetooth, tap **Connect
    wirelessly**, and pick the car.
+4. Later releases can be installed from the app: **Settings → Updates → Check for updates**. It
+   downloads the build for your phone's processor (~20 MB instead of the 35 MB universal APK),
+   checks it against the checksum GitHub publishes, and hands it to Android's installer. Nothing
+   happens in the background, and the install waits while a car is connected.
 
-Releases are **debug builds** signed by the CI runner's throwaway debug key, so a new release
-may need an uninstall before installing. There is no fixed fingerprint to compare; get APKs
-only from the releases page.
+Releases are **debug builds**. Unless the signing secrets below are configured, each one is
+signed by that runner's throwaway debug key, so a new release may need an uninstall first. There
+is no fixed fingerprint to compare; get APKs only from the releases page.
 
 > [!NOTE]
 > On GrapheneOS, don't set **USB-C port control** to **Charging-only** — it blocks USB data, so
 > the car never sees the phone.
 
+## Stable signing for in-app updates
+
+Android refuses to install an update signed by a different key. By default CI builds are signed
+with the runner's throwaway debug key, so each release would need a manual uninstall first. To
+enable in-app updates, set four repository secrets:
+
+| Secret | Value |
+|---|---|
+| `UPDATE_KEYSTORE_B64` | Base64 of a committed-nowhere JKS keystore (`base64 -w0 gearslip-release.jks`) |
+| `UPDATE_STORE_PASSWORD` | Keystore password |
+| `UPDATE_KEY_ALIAS` | Key alias |
+| `UPDATE_KEY_PASSWORD` | Key password |
+
+The workflow writes `keystore.properties` from these, and `build.gradle.kts` already signs the
+published debug build with that key when the file is present. Keep the keystore safe: it is the
+only thing that lets an installed Gearslip accept the next one. Switching to it is a one-time
+change, so existing installs need to be uninstalled once.
+
 ## Build
 
-`./gradlew :gearslip:assembleDebug` produces `build/Gearslip-debug.apk`. CI builds, checks and
-publishes each tagged commit. A local Android SDK with platform 37 is required.
+`./gradlew :gearslip:assembleDebug` produces one APK per ABI in `build/`
+(`Gearslip-arm64-v8a-debug.apk`, `Gearslip-armeabi-v7a-debug.apk`, `Gearslip-x86-debug.apk`,
+`Gearslip-x86_64-debug.apk`) plus `Gearslip-universal-debug.apk` as a fallback. CI builds, checks
+and publishes them all for each tagged commit. A local Android SDK with platform 37 is required.
 
 ## License
 

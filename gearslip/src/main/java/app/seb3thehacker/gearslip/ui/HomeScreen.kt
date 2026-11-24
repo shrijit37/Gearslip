@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import android.content.Context
+import android.net.Uri
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.ui.graphics.Color
 import app.seb3thehacker.gearslip.car.CarSettings
@@ -47,10 +48,12 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.collectAsState
@@ -65,6 +68,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.seb3thehacker.gearslip.BuildConfig
 import app.seb3thehacker.gearslip.SessionStatus
+import app.seb3thehacker.gearslip.update.UpdateChecker
 
 @Composable
 fun HomeScreen(
@@ -97,6 +101,7 @@ fun HomeScreen(
                 ) {
                     Spacer(Modifier.height(16.dp))
                     StatusCard(status)
+                    UpdateCard()
                     if (live) BluetoothMissingCard()
                     if (live) BackgroundLocationCard()
                     BluetoothAddressCard()
@@ -120,6 +125,70 @@ fun HomeScreen(
                 }
             }
             }
+        }
+    }
+}
+
+/**
+ * A card on Home once an update has been found, so the driver doesn't have to dig through
+ * Settings to get it. Checking, being up to date and errors without a release stay in Settings.
+ */
+@Composable
+private fun UpdateCard() {
+    val context = LocalContext.current
+    val observed by UpdateChecker.state.collectAsStateWithLifecycle()
+    // A local val so Kotlin can smart-cast it below; a delegated property can't be cast.
+    val state = observed
+    val release = when (state) {
+        is UpdateChecker.State.Available -> state.release
+        is UpdateChecker.State.Downloading -> state.release
+        is UpdateChecker.State.Ready -> state.release
+        is UpdateChecker.State.Failed -> state.release ?: return
+        else -> return
+    }
+    val title = stringResource(R.string.update_title, release.version)
+    val body = when (state) {
+        is UpdateChecker.State.Available -> stringResource(R.string.update_available_body)
+        is UpdateChecker.State.Downloading -> stringResource(R.string.update_downloading, (state.fraction * 100).toInt())
+        is UpdateChecker.State.Ready -> state.error ?: stringResource(R.string.update_ready_body)
+        is UpdateChecker.State.Failed -> stringResource(R.string.update_failed, state.message)
+    }
+    Spacer(Modifier.height(16.dp))
+    Surface(
+        color = MaterialTheme.colorScheme.secondaryContainer,
+        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+        shape = MaterialTheme.shapes.extraLarge,
+    ) {
+        Column(Modifier.fillMaxWidth().padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+            Text(body, style = MaterialTheme.typography.bodyMedium)
+            if (state is UpdateChecker.State.Downloading) {
+                LinearProgressIndicator(progress = { state.fraction }, modifier = Modifier.fillMaxWidth())
+            }
+            when (state) {
+                is UpdateChecker.State.Available -> Button(onClick = { UpdateChecker.download(context, state.release) }) {
+                    Text(stringResource(R.string.update_download))
+                }
+                is UpdateChecker.State.Ready -> Button(onClick = { UpdateChecker.install(context) }) {
+                    Text(stringResource(R.string.update_install))
+                }
+                is UpdateChecker.State.Failed -> Button(onClick = { UpdateChecker.download(context, release) }) {
+                    Text(stringResource(R.string.update_retry))
+                }
+                else -> Unit
+            }
+            // If Android refuses the APK (e.g. a different signing key), the release page is the
+            // way out - a manual install from there is the only fix for a signature mismatch.
+            TextButton(
+                onClick = {
+                    runCatching {
+                        context.startActivity(
+                            Intent(Intent.ACTION_VIEW, Uri.parse(release.pageUrl)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                        )
+                    }
+                },
+                modifier = Modifier.align(Alignment.End),
+            ) { Text(stringResource(R.string.app_page_github)) }
         }
     }
 }

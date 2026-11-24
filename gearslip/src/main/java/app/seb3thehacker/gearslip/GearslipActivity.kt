@@ -231,6 +231,9 @@ class GearslipActivity : ComponentActivity(), Projection {
     override fun onResume() {
         super.onResume()
         shownOnPhone = true
+        // Back from the system page where the driver allowed installs from Gearslip: finish the
+        // update that was waiting rather than leaving the downloaded APK on the card.
+        app.seb3thehacker.gearslip.update.UpdateChecker.onAppResumed(this)
     }
 
     override fun onStop() {

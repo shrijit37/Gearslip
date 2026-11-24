@@ -5,6 +5,9 @@
     <!-- The car link and its phone-side services talk over the network. -->
     <uses-permission android:name="android.permission.INTERNET" />
 
+    <!-- The in-app updater hands a downloaded APK to Android's own installer. -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+
     <!--
       Phone mirroring. Android refuses to hand over a MediaProjection unless a foreground
       service of this type is already running, so MirrorService exists purely to satisfy that
@@ -139,6 +142,18 @@
         android:label="${appLabel}"
         android:supportsRtl="true"
         android:theme="@style/Theme.Gearslip">
+
+        <!--
+          Gets the result of an in-app update install and the first start after one. Not exported:
+          the installer's PendingIntent and the system's replaced broadcast are the only callers.
+        -->
+        <receiver
+            android:name=".update.UpdateReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
 
         <provider
             android:name="androidx.core.content.FileProvider"
