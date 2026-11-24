@@ -45,6 +45,8 @@ object UpdateChecker {
         val target: String = "",
         /** The commit the APK was built from, pinned when the update was offered. */
         val buildSha: String = "",
+        /** The APK's version code, when the feed publishes it. -1 means unknown. */
+        val versionCode: Int = -1,
     )
 
     sealed interface State {
@@ -59,8 +61,11 @@ object UpdateChecker {
     }
 
     // /releases/latest only sees a full release, and stable ones sit behind many prereleases
-    // from main. Ask for a page of them and let [newestFrom] keep only published releases.
-    private const val RELEASES_URL = "https://api.github.com/repos/shrijit37/gearslip/releases?per_page=100"
+    // from main. Page through the list so a promotion older than the first page is still found.
+    private const val RELEASES_URL = "https://api.github.com/repos/shrijit37/gearslip/releases"
+    private const val RELEASES_PER_PAGE = 100
+    private const val STABLE_PAGES = 5
+    private val VERSION_CODE_MARKER = Regex("""<!--\s*gearslip-version-code:\s*(\d+)\s*-->""")
     private const val UNIVERSAL_ASSET = "Gearslip-universal-debug.apk"
     private val ABI_ASSETS = mapOf(
         "arm64-v8a" to "Gearslip-arm64-v8a-debug.apk",
@@ -100,12 +105,19 @@ object UpdateChecker {
     }
 
     /** Only refs that can appear in a URL path or a manifest key are accepted. */
-    fun setDevRef(context: Context, value: String) {
+    fun validDevRef(value: String): Boolean {
         val ref = value.trim()
-        if (ref.isEmpty() || ref.length > 100 || !ref.matches(Regex("""[A-Za-z0-9._/-]+"""))) return
-        if (ref == devRef(context)) return
+        return ref.isNotEmpty() && ref.length <= 100 && ref.matches(Regex("""[A-Za-z0-9._/-]+"""))
+    }
+
+    /** Returns false when the ref was rejected, so the caller can keep the old value in view. */
+    fun setDevRef(context: Context, value: String): Boolean {
+        val ref = value.trim()
+        if (!validDevRef(ref)) return false
+        if (ref == devRef(context)) return true
         prefs(context).edit().putString(KEY_DEV_REF, ref).apply()
         reset()
+        return true
     }
 
     private fun reset() {
@@ -141,20 +153,24 @@ object UpdateChecker {
     }
 
     private fun checkStable(abis: List<String>): State {
-        val connection = (URL(RELEASES_URL).openConnection() as HttpURLConnection).apply {
-            connectTimeout = 15_000
-            readTimeout = 15_000
-            setRequestProperty("Accept", "application/vnd.github+json")
-            setRequestProperty("User-Agent", "Gearslip/${BuildConfig.VERSION_NAME}")
-        }
-        return try {
-            if (connection.responseCode !in 200..299) error("GitHub answered ${connection.responseCode}")
-            connection.inputStream.bufferedReader().use {
-                newestFrom(parseCandidates(it.readText()), BuildConfig.VERSION_NAME, abis)
+        val candidates = mutableListOf<Candidate>()
+        for (page in 1..STABLE_PAGES) {
+            val connection = (URL("$RELEASES_URL?per_page=$RELEASES_PER_PAGE&page=$page").openConnection() as HttpURLConnection).apply {
+                connectTimeout = 15_000
+                readTimeout = 15_000
+                setRequestProperty("Accept", "application/vnd.github+json")
+                setRequestProperty("User-Agent", "Gearslip/${BuildConfig.VERSION_NAME}")
             }
-        } finally {
-            connection.disconnect()
+            val pageOfReleases = try {
+                if (connection.responseCode !in 200..299) error("GitHub answered ${connection.responseCode}")
+                connection.inputStream.bufferedReader().use { parseCandidates(it.readText()) }
+            } finally {
+                connection.disconnect()
+            }
+            candidates.addAll(pageOfReleases)
+            if (pageOfReleases.size < RELEASES_PER_PAGE) break
         }
+        return newestFrom(candidates, BuildConfig.VERSION_NAME, abis, BuildConfig.VERSION_CODE)
     }
 
     /** One manifest read, no GitHub API calls: an unauthenticated app has a small rate limit. */
@@ -171,7 +187,8 @@ object UpdateChecker {
         try {
             if (connection.responseCode !in 200..299) error("GitHub answered ${connection.responseCode}")
             val feed = connection.inputStream.bufferedReader().use { DevFeed.parse(it.readText()) }
-            val build = DevFeed.select(feed, ref, BuildConfig.BUILD_SHA, abis) ?: return State.UpToDate
+            val build = DevFeed.select(feed, ref, BuildConfig.BUILD_SHA, abis, BuildConfig.VERSION_CODE)
+                ?: return State.UpToDate
             val asset = build.assets.first()
             GearslipLog.i("update: dev ${build.sha} on $ref is out (this is ${BuildConfig.BUILD_SHA})")
             return State.Available(
@@ -184,6 +201,7 @@ object UpdateChecker {
                     channel = CHANNEL_DEV,
                     target = ref,
                     buildSha = build.sha,
+                    versionCode = build.versionCode,
                 ),
             )
         } finally {
@@ -199,6 +217,8 @@ object UpdateChecker {
         val pageUrl: String,
         val assets: List<Asset>,
         val prerelease: Boolean = false,
+        /** Published by promote.yml in the release body; -1 on older releases without a marker. */
+        val versionCode: Int = -1,
     ) {
         internal data class Asset(val name: String, val url: String, val size: Long, val sha256: String?)
     }
@@ -222,6 +242,7 @@ object UpdateChecker {
                     )
                 },
                 pageUrl = json.optString("html_url"),
+                versionCode = VERSION_CODE_MARKER.find(json.optString("body"))?.groupValues?.get(1)?.toIntOrNull() ?: -1,
             )
         }
     }
@@ -238,7 +259,12 @@ object UpdateChecker {
     }
 
     /** Picks the newest published release that has an APK for this phone, if it's newer than [installedVersion]. */
-    internal fun newestFrom(candidates: List<Candidate>, installedVersion: String, supportedAbis: List<String>): State {
+    internal fun newestFrom(
+        candidates: List<Candidate>,
+        installedVersion: String,
+        supportedAbis: List<String>,
+        installedVersionCode: Int = -1,
+    ): State {
         // Main builds and dev builds are both prereleases; only a promoted tag is stable.
         val newestFirst = candidates
             .filterNot { it.draft || it.prerelease }
@@ -250,6 +276,11 @@ object UpdateChecker {
                 }
             }
         for (release in newestFirst) {
+            // A promoted APK has a frozen version code. If a newer dev build is installed, this
+            // release would be a downgrade even though its version name is higher, and Android
+            // would reject the install. Releases without a published code rely on the check
+            // against the downloaded APK in download().
+            if (release.versionCode >= 0 && release.versionCode <= installedVersionCode) continue
             // Only install bytes we can check. If the phone's preferred ABI split has no digest,
             // fall through to a verified asset in the same release (the universal APK) instead of
             // reporting no update at all.
@@ -268,6 +299,7 @@ object UpdateChecker {
                         hash,
                         release.pageUrl,
                         target = release.tag.removePrefix("v"),
+                        versionCode = release.versionCode,
                     ),
                 )
             }
@@ -297,6 +329,17 @@ object UpdateChecker {
             val result = runCatching { fetchApk(release, apk, downloadGeneration) }
             if (downloadGeneration != generation) return@background
             if (result.isSuccess) {
+                // Authoritative check: read the version code from the APK itself. This also covers
+                // releases that predate the published version-code marker.
+                val apkCode = runCatching {
+                    app.packageManager.getPackageArchiveInfo(apk.absolutePath, 0)?.longVersionCode
+                }.getOrNull()
+                if (apkCode != null && apkCode < BuildConfig.VERSION_CODE.toLong()) {
+                    GearslipLog.w("update: $apkCode is older than installed ${BuildConfig.VERSION_CODE}; not installing")
+                    apk.delete()
+                    flow.value = State.Failed("This build is older than the one installed. Pick a newer dev ref or wait for a newer stable release.")
+                    return@background
+                }
                 GearslipLog.i("update: downloaded ${release.version}")
                 flow.value = State.Ready(release, apk)
                 install(app)
@@ -359,6 +402,12 @@ object UpdateChecker {
         // The driver may have switched channel while the APK was downloading or waiting for the
         // car. Never hand bytes from the other track to the installer.
         if (ready.release.channel != channel(context)) return
+        // A published code lower than the installed one would be rejected as a downgrade. The
+        // APK itself was checked in download(); this guards older feeds without a published code.
+        if (ready.release.versionCode in 0 until BuildConfig.VERSION_CODE) {
+            flow.value = State.Failed("This build is older than the one installed. Pick a newer dev ref or wait for a newer stable release.")
+            return
+        }
         // Installing closes Gearslip, which would drop the car screen mid-drive. Queue it and
         // say so on the card rather than silently throwing the tap away.
         if (carConnected) {

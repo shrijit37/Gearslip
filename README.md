@@ -49,7 +49,9 @@ the tokens and the [mockup](carplay-nothing-final.html) for the intended layout.
    main-branch test builds stay on the Releases page and are not offered. Dev installs the head of
    a branch or `pr-<number>` from this repository, pinned to that commit. Both replace the same
    app with the same signing key, so car apps keep working with either — but a dev build can break
-   the install, and fork PRs are not published. See [CI.md](CI.md).
+   the install, and fork PRs are not published. A build older than the one installed is never
+   offered; returning to a stable release promoted before your dev build needs a manual uninstall.
+   See [CI.md](CI.md).
 
 Releases are **debug builds**. Unless the signing secrets below are configured, each one is
 signed by that runner's throwaway debug key, so a new release may need an uninstall first. There

@@ -59,8 +59,20 @@ jobs:
                   out.write('%s=%s\n' % (prop, escape(os.environ['UPDATE_' + env])))
           PY
 
+      # The same sequence Gradle uses by default (minutes since the epoch), stated explicitly so
+      # it can be published with the release. A promoted APK has a frozen version code; the app
+      # needs to know it to refuse an install that would be a downgrade from a later dev build.
+      - name: Identify the build
+        run: |
+          seq=$(($(date +%s) / 60))
+          echo "BUILD_SEQ=$seq" >> "$GITHUB_ENV"
+          {
+            echo "<!-- gearslip-version-code: $seq -->"
+            cat .github/release-notes.md
+          } > release-body.md
+
       - name: Build stable APK
-        run: ./gradlew :gearslip:assembleDebug --no-daemon -PgearslipChannel=stable -PgearslipBuildSha="$(git rev-parse --short=7 HEAD)"
+        run: ./gradlew :gearslip:assembleDebug --no-daemon -PgearslipChannel=stable -PgearslipBuildSha="$(git rev-parse --short=7 HEAD)" -PgearslipBuildSeq="$BUILD_SEQ"
 
       - name: Locate APKs
         run: |
@@ -72,7 +84,7 @@ jobs:
         with:
           tag_name: ${{ github.ref_name }}
           name: ${{ github.ref_name }}
-          body_path: .github/release-notes.md
+          body_path: release-body.md
           generate_release_notes: true
           files: build/Gearslip-*-debug.apk
           prerelease: false

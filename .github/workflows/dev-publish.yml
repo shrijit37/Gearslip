@@ -75,13 +75,17 @@ jobs:
             echo "DEV_REF=${GITHUB_REF_NAME}" >> "$GITHUB_ENV"
           fi
           echo "DEV_SHA7=$(git rev-parse --short=7 HEAD)" >> "$GITHUB_ENV"
+          # Minutes since the epoch: the APK's version code and the feed's "seq" are the same
+          # number, so the app can tell whether an offered build would be a downgrade.
+          echo "DEV_SEQ=$(($(date +%s) / 60))" >> "$GITHUB_ENV"
           described=$(git describe --tags --match 'v*' --exclude '*-g*' --abbrev=7 2>/dev/null || echo 'v0.0.0-dev')
           echo "DEV_VERSION=${described#v}" >> "$GITHUB_ENV"
 
       - name: Build dev APKs
         run: |
           ./gradlew :gearslip:assembleDebug --no-daemon \
-            -PgearslipChannel=dev -PgearslipBuildSha="$DEV_SHA7" -PgearslipVersionName="$DEV_VERSION"
+            -PgearslipChannel=dev -PgearslipBuildSha="$DEV_SHA7" -PgearslipVersionName="$DEV_VERSION" \
+            -PgearslipBuildSeq="$DEV_SEQ"
 
       - name: Name assets by commit
         run: |
@@ -103,17 +107,8 @@ jobs:
             gh release create dev-builds --prerelease --target main \
               --title "Dev builds" --notes "Branch-head builds for the dev update channel. Pinned by commit."
           fi
-          # Keep the release from growing without bound; the manifest only keeps recent refs.
-          gh api "repos/$GITHUB_REPOSITORY/releases/tags/dev-builds" > release.json
-          python3 - <<'PY'
-          import json, os, subprocess
-          release = json.load(open('release.json'))
-          assets = sorted(release['assets'], key=lambda a: a['created_at'], reverse=True)
-          for asset in assets[40:]:
-              subprocess.run(['gh', 'api', '-X', 'DELETE',
-                              'repos/%s/releases/assets/%s' % (os.environ['GITHUB_REPOSITORY'], asset['id'])],
-                             check=False)
-          PY
+          # Pruning happens after the manifest is written: the feed's kept refs decide which
+          # assets survive, so a ref in the manifest always has a downloadable APK.
           gh release upload dev-builds feed/*.apk --clobber
 
       - name: Publish the dev manifest
@@ -127,10 +122,11 @@ jobs:
           fi
           git ls-remote --exit-code --heads origin dev-feed >/dev/null || { echo "dev-feed branch is missing"; exit 1; }
           python3 - <<'PY'
-          import base64, glob, hashlib, json, os, subprocess, time
+          import base64, glob, hashlib, json, os, subprocess
 
           repo = os.environ['GITHUB_REPOSITORY']
           ref, sha, version = os.environ['DEV_REF'], os.environ['DEV_SHA7'], os.environ['DEV_VERSION']
+          seq = int(os.environ['DEV_SEQ'])
           assets = []
           for path in sorted(glob.glob('feed/*.apk')):
               name = os.path.basename(path)
@@ -141,7 +137,8 @@ jobs:
                   'size': os.path.getsize(path),
                   'sha256': digest,
               })
-          entry = {'sha': sha, 'version': version, 'seq': int(time.time() // 60), 'assets': assets}
+          # "seq" is the APK's version code (same minutes-since-epoch value passed to Gradle).
+          entry = {'sha': sha, 'version': version, 'seq': seq, 'assets': assets}
 
           def read():
               result = subprocess.run(
@@ -178,4 +175,32 @@ jobs:
                   break
           else:
               raise SystemExit('could not publish the dev manifest')
+
+          # Delete release assets no longer named by the manifest. The release API pages its
+          # assets, so walk all pages; otherwise a ref that fell out of the feed would keep its
+          # APK forever while newer publishes kept accumulating.
+          # Re-read first: another ref may have published while we were writing. Never prune
+          # against an empty read, which would look like "keep nothing".
+          latest, _ = read()
+          if latest:
+              keep = {asset['name'] for build in latest.values() for asset in build.get('assets', [])}
+          else:
+              keep = None
+          page = 1
+          while keep is not None:
+              result = subprocess.run(
+                  ['gh', 'api', 'repos/%s/releases/tags/dev-builds?per_page=100&page=%d' % (repo, page)],
+                  capture_output=True, text=True)
+              if result.returncode != 0:
+                  break
+              batch = json.loads(result.stdout)
+              listed = batch.get('assets', [])
+              for asset in listed:
+                  if asset['name'] not in keep:
+                      subprocess.run(['gh', 'api', '-X', 'DELETE',
+                                      'repos/%s/releases/assets/%s' % (repo, asset['id'])],
+                                     check=False)
+              if len(listed) < 100:
+                  break
+              page += 1
           PY

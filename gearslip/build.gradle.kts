@@ -59,9 +59,9 @@ val gitVersion: GitVersion = run {
 // The update channel and the identity of this exact build. Stable and dev APKs share one
 // package and one signing key (third-party car apps allowlist both), so their version codes
 // must come from the same monotonic sequence or Android would refuse a channel switch. The
-// sequence is minutes since the epoch by default; CI can pass a higher one explicitly so a
-// published build always installs over whatever a driver has. Neither is a version number:
-// [gitVersion] still supplies the name people see.
+// sequence is minutes since the epoch by default; both publish workflows pass that exact value
+// explicitly and record it with the release, so the app can also tell when an offered APK would
+// be an out-of-order downgrade. Neither is a version number: [gitVersion] supplies the name.
 val updateChannel = project.findProperty("gearslipChannel")?.toString()?.takeIf { it == "dev" } ?: "stable"
 val buildSha = project.findProperty("gearslipBuildSha")?.toString()
     ?: runCatching {

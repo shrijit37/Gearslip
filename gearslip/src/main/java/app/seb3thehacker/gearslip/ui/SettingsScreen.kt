@@ -210,6 +210,7 @@ private fun UpdatesSection() {
         runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull() ?: "?"
     }
     val isDev = channel == UpdateChecker.CHANNEL_DEV
+    val refInvalid = isDev && !UpdateChecker.validDevRef(ref)
     val subtitle = when (state) {
         UpdateChecker.State.Idle -> if (isDev) {
             stringResource(R.string.settings_update_dev_current, BuildConfig.BUILD_SHA, ref)
@@ -256,16 +257,20 @@ private fun UpdatesSection() {
                 value = ref,
                 onValueChange = { ref = it },
                 singleLine = true,
+                isError = refInvalid,
                 label = { Text(stringResource(R.string.settings_update_dev_ref)) },
                 placeholder = { Text(stringResource(R.string.settings_update_dev_ref_hint)) },
+                supportingText = if (refInvalid) {
+                    { Text(stringResource(R.string.settings_update_dev_ref_invalid)) }
+                } else null,
                 modifier = Modifier.fillMaxWidth().padding(start = 56.dp, end = 16.dp, bottom = 12.dp),
             )
         }
         SettingsDivider()
         SettingsRow(
             stringResource(R.string.settings_update_check),
-            Modifier.clickable(enabled = !busy) {
-                if (isDev) UpdateChecker.setDevRef(context, ref)
+            Modifier.clickable(enabled = !busy && !refInvalid) {
+                if (isDev && !UpdateChecker.setDevRef(context, ref)) return@clickable
                 UpdateChecker.check(context)
             },
             subtitle = subtitle,

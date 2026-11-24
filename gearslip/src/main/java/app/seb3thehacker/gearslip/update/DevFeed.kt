@@ -17,7 +17,14 @@ internal object DevFeed {
     const val PAGE_URL = "https://github.com/shrijit37/Gearslip/releases/tag/dev-builds"
 
     internal data class Asset(val name: String, val url: String, val size: Long, val sha256: String?)
-    internal data class Build(val ref: String, val sha: String, val version: String, val assets: List<Asset>)
+    internal data class Build(
+        val ref: String,
+        val sha: String,
+        val version: String,
+        val assets: List<Asset>,
+        /** The APK's version code, published by CI as "seq" so installs can be checked for downgrades. */
+        val versionCode: Int = -1,
+    )
     internal data class Feed(val builds: List<Build>)
 
     internal fun parse(body: String): Feed {
@@ -36,15 +43,30 @@ internal object DevFeed {
                     sha256 = file.optString("sha256").takeIf { it.length == 64 },
                 )
             }
-            Build(ref, json.optString("sha"), json.optString("version"), assets)
+            Build(
+                ref,
+                json.optString("sha"),
+                json.optString("version"),
+                assets,
+                json.optInt("seq", -1),
+            )
         }.toList()
         return Feed(builds)
     }
 
     /** The chosen build with only the one verified APK the phone can use, or null for no update. */
-    internal fun select(feed: Feed, ref: String, installedSha: String, supportedAbis: List<String>): Build? {
+    internal fun select(
+        feed: Feed,
+        ref: String,
+        installedSha: String,
+        supportedAbis: List<String>,
+        installedVersionCode: Int = -1,
+    ): Build? {
         val build = feed.builds.firstOrNull { it.ref == ref } ?: return null
         if (build.sha.equals(installedSha, ignoreCase = true)) return null
+        // Channel switches install out of chronological order. A dev APK built before the
+        // installed one has a lower version code, which Android would refuse at install time.
+        if (installedVersionCode >= 0 && build.versionCode in 0..installedVersionCode) return null
         val verified = build.assets.filter { !it.sha256.isNullOrBlank() }
         val name = pickAsset(verified.map { it.name }, supportedAbis) ?: return null
         return build.copy(assets = listOf(verified.first { it.name == name }))

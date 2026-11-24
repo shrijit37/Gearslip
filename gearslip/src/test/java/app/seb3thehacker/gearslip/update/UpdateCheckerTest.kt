@@ -117,6 +117,27 @@ class UpdateCheckerTest {
     }
 
     @Test
+    fun newestFromSkipsAPromotedReleaseWithAnOlderVersionCode() {
+        val apk = UpdateChecker.Candidate.Asset("Gearslip-arm64-v8a-debug.apk", "https://example/arm.apk", 1, "abc")
+        val promoted = UpdateChecker.Candidate(
+            "v0.6.0", false, "https://example/release", listOf(apk), false, 100,
+        )
+
+        // The version name is newer, but a later dev build (code 101) is installed: installing
+        // this frozen stable APK would be a downgrade and Android would refuse it.
+        check(
+            UpdateChecker.newestFrom(
+                listOf(promoted), "0.5.0-alpha+30.abc1234", listOf("arm64-v8a"), 101,
+            ) is UpdateChecker.State.UpToDate,
+        )
+        val state = UpdateChecker.newestFrom(
+            listOf(promoted), "0.5.0-alpha+30.abc1234", listOf("arm64-v8a"), 99,
+        )
+        check(state is UpdateChecker.State.Available)
+        assertEquals(100, state.release.versionCode)
+    }
+
+    @Test
     fun newestFromReportsUpToDateWhenNothingNewerHasAnApk() {
         val old = UpdateChecker.Candidate(
             "v0.3.0-alpha", false, "https://example/release",

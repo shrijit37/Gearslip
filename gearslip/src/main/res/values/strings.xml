@@ -256,6 +256,7 @@
     <string name="settings_update_dev_sub">A branch head from this repository. Replaces this app, and can break it.</string>
     <string name="settings_update_dev_ref">Branch or PR</string>
     <string name="settings_update_dev_ref_hint">main or pr-12</string>
+    <string name="settings_update_dev_ref_invalid">Use letters, numbers, dot, dash, underscore or slash.</string>
     <string name="settings_update_dev_current">Build %1$s of %2$s</string>
     <string name="settings_update_dev_up_to_date">This branch is up to date</string>
     <string name="settings_update_no_stable">No stable release published yet</string>

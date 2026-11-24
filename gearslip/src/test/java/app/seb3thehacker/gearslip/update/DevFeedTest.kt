@@ -35,6 +35,17 @@ class DevFeedTest {
     }
 
     @Test
+    fun skipsABuildWhoseVersionCodeWouldBeADowngrade() {
+        val arm = DevFeed.Asset("Gearslip-arm64-v8a-dev-old1.apk", "https://example/arm.apk", 1, "abc")
+        val feed = DevFeed.Feed(listOf(DevFeed.Build("main", "old1", "0.5.0-alpha", listOf(arm), 100)))
+
+        // A later dev build is installed, so this ref's older APK must not be offered.
+        assertNull(DevFeed.select(feed, "main", "newer1", listOf("arm64-v8a"), 101))
+        // The same APK is fine over an older install.
+        check(DevFeed.select(feed, "main", "newer1", listOf("arm64-v8a"), 99) != null)
+    }
+
+    @Test
     fun picksTheAbiAssetThenFallsBackToUniversal() {
         val names = listOf(
             "Gearslip-x86-dev-aaa.apk",
