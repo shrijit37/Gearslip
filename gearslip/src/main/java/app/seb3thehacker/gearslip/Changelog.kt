@@ -15,6 +15,14 @@ object Changelog {
 
     val releases = listOf(
         Release(
+            5001, "0.5.0-alpha",
+            listOf(
+                "One dock runs along the bottom of every car screen, with volume and shortcuts to navigation, media, phone, vehicle data, and all apps.",
+                "MEDIA opens the full player. Weather, dashboard, and screensaver moved to the apps grid.",
+                "Check for updates in Settings installs a new build without a cable, using a small APK made for your phone.",
+            ),
+        ),
+        Release(
             4001, "0.4.0-alpha",
             listOf(
                 "The web browser opens on your bookmarks, with the search engine you choose and ads blocked.",
