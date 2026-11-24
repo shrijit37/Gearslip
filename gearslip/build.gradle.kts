@@ -56,6 +56,23 @@ val gitVersion: GitVersion = run {
     )
 }
 
+// The update channel and the identity of this exact build. Stable and dev APKs share one
+// package and one signing key (third-party car apps allowlist both), so their version codes
+// must come from the same monotonic sequence or Android would refuse a channel switch. The
+// sequence is minutes since the epoch by default; both publish workflows pass that exact value
+// explicitly and record it with the release, so the app can also tell when an offered APK would
+// be an out-of-order downgrade. Neither is a version number: [gitVersion] supplies the name.
+val updateChannel = project.findProperty("gearslipChannel")?.toString()?.takeIf { it == "dev" } ?: "stable"
+val buildSha = project.findProperty("gearslipBuildSha")?.toString()
+    ?: runCatching {
+        providers.exec {
+            commandLine("git", "rev-parse", "--short=7", "HEAD")
+            isIgnoreExitValue = true
+        }.standardOutput.asText.get().trim()
+    }.getOrNull().orEmpty()
+val buildSequence = project.findProperty("gearslipBuildSeq")?.toString()?.toIntOrNull()
+    ?: (System.currentTimeMillis() / 60_000).toInt()
+
 // Keeps build output out of the module folder: <root>/build/gearslip/... instead of
 // <root>/gearslip/build/..., so everything this project produces lands under one
 // root-level build/ directory. Set before android {}, which works out the path to R8's default
@@ -70,9 +87,11 @@ android {
         applicationId = "app.seb3thehacker.gearslip"
         minSdk = 31
         targetSdk = 37
-        versionCode = gitVersion.code
+        versionCode = buildSequence
         // -PgearslipVersionName=0.1.99-test makes a build that thinks it's older, to try the updater.
         versionName = project.findProperty("gearslipVersionName")?.toString() ?: gitVersion.name
+        buildConfigField("String", "UPDATE_CHANNEL", "\"$updateChannel\"")
+        buildConfigField("String", "BUILD_SHA", "\"$buildSha\"")
         manifestPlaceholders["appLabel"] = "Gearslip"
         // Where opted-in phones send their daily usage note: the stats-worker/ Worker's address,
         // set as gearslipStatsUrl in gradle.properties. Left empty, nothing is ever sent.

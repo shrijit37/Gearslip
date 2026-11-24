@@ -96,6 +96,71 @@ class UpdateCheckerTest {
     }
 
     @Test
+    fun newestFromIgnoresPrereleasesSoOnlyPromotedReleasesReachStable() {
+        fun asset(name: String) = UpdateChecker.Candidate.Asset(name, "https://example/$name", 1, "abc")
+        fun candidate(tag: String, prerelease: Boolean) = UpdateChecker.Candidate(
+            tag, false, "https://example/$tag", listOf(asset("Gearslip-arm64-v8a-debug.apk")), prerelease,
+        )
+
+        val state = UpdateChecker.newestFrom(
+            listOf(
+                candidate("v0.9.0-alpha", true),
+                candidate("dev-builds", true),
+                candidate("v0.6.0", false),
+            ),
+            "0.5.0-alpha",
+            listOf("arm64-v8a"),
+        )
+        check(state is UpdateChecker.State.Available)
+        assertEquals("0.6.0", state.release.version)
+        assertEquals(UpdateChecker.CHANNEL_STABLE, state.release.channel)
+    }
+
+    @Test
+    fun newestFromSkipsAPromotedReleaseWithAnOlderVersionCode() {
+        val apk = UpdateChecker.Candidate.Asset("Gearslip-arm64-v8a-debug.apk", "https://example/arm.apk", 1, "abc")
+        val promoted = UpdateChecker.Candidate(
+            "v0.6.0", false, "https://example/release", listOf(apk), false, 100,
+        )
+
+        // The version name is newer, but a later dev build (code 101) is installed: installing
+        // this frozen stable APK would be a downgrade and Android would refuse it.
+        check(
+            UpdateChecker.newestFrom(
+                listOf(promoted), "0.5.0-alpha+30.abc1234", listOf("arm64-v8a"), 101,
+            ) is UpdateChecker.State.UpToDate,
+        )
+        val state = UpdateChecker.newestFrom(
+            listOf(promoted), "0.5.0-alpha+30.abc1234", listOf("arm64-v8a"), 99,
+        )
+        check(state is UpdateChecker.State.Available)
+        assertEquals(100, state.release.versionCode)
+
+        // Two promotions in the same minute share a code; equal codes install fine.
+        check(
+            UpdateChecker.newestFrom(
+                listOf(promoted), "0.5.0-alpha+30.abc1234", listOf("arm64-v8a"), 100,
+            ) is UpdateChecker.State.Available,
+        )
+    }
+
+    @Test
+    fun newestFromReportsNoStableReleaseBeforeAnyPromotion() {
+        val apk = UpdateChecker.Candidate.Asset("Gearslip-arm64-v8a-debug.apk", "https://example/arm.apk", 1, "abc")
+        val prerelease = UpdateChecker.Candidate(
+            "v0.5.0-alpha", false, "https://example/release", listOf(apk), true,
+        )
+        check(
+            UpdateChecker.newestFrom(listOf(prerelease), "0.4.0-alpha", listOf("arm64-v8a")) is
+                UpdateChecker.State.NoStableRelease,
+        )
+        check(
+            UpdateChecker.newestFrom(emptyList(), "0.4.0-alpha", listOf("arm64-v8a")) is
+                UpdateChecker.State.NoStableRelease,
+        )
+    }
+
+    @Test
     fun newestFromReportsUpToDateWhenNothingNewerHasAnApk() {
         val old = UpdateChecker.Candidate(
             "v0.3.0-alpha", false, "https://example/release",

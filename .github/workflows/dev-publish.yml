@@ -1,0 +1,217 @@
+name: Publish dev build
+
+# Branch heads and same-repository PRs get an APK the dev channel can install in place. The
+# manifest is published separately so the app reads one small file instead of paging the GitHub
+# API. Fork PRs are skipped: they have no signing key, and a throwaway-signed APK could never
+# install over the app a driver already has.
+on:
+  push:
+    branches-ignore:
+      - 'dev-feed'
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: write
+
+# One group for every ref: asset upload, the manifest write and pruning must not interleave,
+# or a ref can prune an APK another publish just uploaded but hasn't added to the manifest yet.
+concurrency:
+  group: dev-publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Build the PR's head, not its merge with main, so the ref the driver picks is
+          # the commit that actually shipped. Tags give gitVersion a name for the build.
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Write stable signing config
+        env:
+          UPDATE_KEYSTORE_B64: ${{ secrets.UPDATE_KEYSTORE_B64 }}
+          UPDATE_STORE_PASSWORD: ${{ secrets.UPDATE_STORE_PASSWORD }}
+          UPDATE_KEY_ALIAS: ${{ secrets.UPDATE_KEY_ALIAS }}
+          UPDATE_KEY_PASSWORD: ${{ secrets.UPDATE_KEY_PASSWORD }}
+        run: |
+          if [ -z "$UPDATE_KEYSTORE_B64" ]; then
+            echo "::error::UPDATE_KEYSTORE_B64 is not set; dev APKs cannot replace an installed Gearslip."
+            exit 1
+          fi
+          echo "$UPDATE_KEYSTORE_B64" | base64 --decode > gearslip-release.jks
+          python3 - <<'PY'
+          import os
+
+          def escape(value):
+              return (value.replace('\\', '\\\\').replace(':', '\\:')
+                           .replace('=', '\\=').replace('\n', '\\n'))
+
+          props = {
+              'STORE_PASSWORD': 'storePassword',
+              'KEY_ALIAS': 'keyAlias',
+              'KEY_PASSWORD': 'keyPassword',
+          }
+          with open('keystore.properties', 'w') as out:
+              out.write('storeFile=gearslip-release.jks\n')
+              for env, prop in props.items():
+                  out.write('%s=%s\n' % (prop, escape(os.environ['UPDATE_' + env])))
+          PY
+
+      - name: Identify the build
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "DEV_REF=pr-${{ github.event.number }}" >> "$GITHUB_ENV"
+          else
+            echo "DEV_REF=${GITHUB_REF_NAME}" >> "$GITHUB_ENV"
+          fi
+          echo "DEV_SHA7=$(git rev-parse --short=7 HEAD)" >> "$GITHUB_ENV"
+          # Minutes since the epoch: the APK's version code and the feed's "seq" are the same
+          # number, so the app can tell whether an offered build would be a downgrade.
+          echo "DEV_SEQ=$(($(date +%s) / 60))" >> "$GITHUB_ENV"
+          described=$(git describe --tags --match 'v*' --exclude '*-g*' --abbrev=7 2>/dev/null || echo 'v0.0.0-dev')
+          echo "DEV_VERSION=${described#v}" >> "$GITHUB_ENV"
+
+      - name: Build dev APKs
+        run: |
+          ./gradlew :gearslip:assembleDebug --no-daemon \
+            -PgearslipChannel=dev -PgearslipBuildSha="$DEV_SHA7" -PgearslipVersionName="$DEV_VERSION" \
+            -PgearslipBuildSeq="$DEV_SEQ"
+
+      - name: Name assets by commit
+        run: |
+          mkdir -p feed
+          for apk in build/Gearslip-*-debug.apk; do
+            stem=$(basename "$apk" .apk)
+            abi=${stem#Gearslip-}
+            abi=${abi%-debug}
+            cp "$apk" "feed/Gearslip-$abi-dev-$DEV_SHA7.apk"
+          done
+          compgen -G 'feed/*.apk' > /dev/null || { echo "no dev APKs"; exit 1; }
+          ls -lh feed/*.apk
+
+      - name: Publish assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if ! gh release view dev-builds >/dev/null 2>&1; then
+            gh release create dev-builds --prerelease --target main \
+              --title "Dev builds" --notes "Branch-head builds for the dev update channel. Pinned by commit."
+          fi
+          # Pruning happens after the manifest is written: the feed's kept refs decide which
+          # assets survive, so a ref in the manifest always has a downloadable APK.
+          gh release upload dev-builds feed/*.apk --clobber
+
+      - name: Publish the dev manifest
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # actions/checkout leaves the token in git config, so a push is the reliable way to
+          # bootstrap the feed branch. Another ref may have created it since the check.
+          if ! git ls-remote --exit-code --heads origin dev-feed >/dev/null; then
+            git push origin "HEAD:refs/heads/dev-feed" || true
+          fi
+          git ls-remote --exit-code --heads origin dev-feed >/dev/null || { echo "dev-feed branch is missing"; exit 1; }
+          python3 - <<'PY'
+          import base64, glob, hashlib, json, os, subprocess
+
+          repo = os.environ['GITHUB_REPOSITORY']
+          ref, sha, version = os.environ['DEV_REF'], os.environ['DEV_SHA7'], os.environ['DEV_VERSION']
+          seq = int(os.environ['DEV_SEQ'])
+          assets = []
+          for path in sorted(glob.glob('feed/*.apk')):
+              name = os.path.basename(path)
+              digest = hashlib.sha256(open(path, 'rb').read()).hexdigest()
+              assets.append({
+                  'name': name,
+                  'url': 'https://github.com/%s/releases/download/dev-builds/%s' % (repo, name),
+                  'size': os.path.getsize(path),
+                  'sha256': digest,
+              })
+          # "seq" is the APK's version code (same minutes-since-epoch value passed to Gradle).
+          entry = {'sha': sha, 'version': version, 'seq': seq, 'assets': assets}
+
+          def read():
+              result = subprocess.run(
+                  ['gh', 'api', 'repos/%s/contents/manifest.json?ref=dev-feed' % repo],
+                  capture_output=True, text=True)
+              # The first publish has no file yet. An error response is JSON on stdout with a
+              # nonzero status; treat both that and any malformed body as an empty feed.
+              if result.returncode != 0 or not result.stdout.strip():
+                  return {}, None
+              try:
+                  response = json.loads(result.stdout)
+                  content = response.get('content', '')
+                  return (json.loads(base64.b64decode(content)).get('refs', {}) if content else {}), response.get('sha')
+              except (ValueError, KeyError, TypeError):
+                  return {}, None
+
+          # Two refs can be published at once. Retry with the latest file sha so neither loses
+          # the other's entry when GitHub rejects a stale update.
+          for _ in range(5):
+              refs, file_sha = read()
+              refs[ref] = entry
+              refs = dict(sorted(refs.items(), key=lambda item: item[1].get('seq', 0), reverse=True)[:30])
+              body = json.dumps({'schema': 1, 'refs': refs}, separators=(',', ':'))
+              command = ['gh', 'api', '-X', 'PUT', 'repos/%s/contents/manifest.json' % repo,
+                         '-f', 'message=dev feed: %s %s' % (ref, sha),
+                         '-f', 'branch=dev-feed',
+                         '-f', 'content=' + base64.b64encode(body.encode()).decode()]
+              if file_sha:
+                  command += ['-f', 'sha=' + file_sha]
+              if subprocess.run(command, capture_output=True, text=True).returncode != 0:
+                  continue
+              written, _ = read()
+              if written.get(ref, {}).get('sha') == sha:
+                  break
+          else:
+              raise SystemExit('could not publish the dev manifest')
+
+          # Delete release assets no longer named by the manifest. "Get a release by tag" does
+          # not paginate its embedded assets, so use the release-assets endpoint, which does;
+          # otherwise a ref that fell out of the feed keeps its APK forever and a repeated page
+          # never terminates. Workflow concurrency serializes this with other publishes.
+          # Re-read first: another ref may have published while we were writing. Never prune
+          # against an empty read, which would look like "keep nothing".
+          latest, _ = read()
+          if latest:
+              keep = {asset['name'] for build in latest.values() for asset in build.get('assets', [])}
+          else:
+              keep = None
+          if keep is not None:
+              release = subprocess.run(
+                  ['gh', 'api', 'repos/%s/releases/tags/dev-builds' % repo],
+                  capture_output=True, text=True)
+              try:
+                  release_id = json.loads(release.stdout).get('id') if release.returncode == 0 else None
+              except ValueError:
+                  release_id = None
+              page = 1
+              while release_id is not None:
+                  result = subprocess.run(
+                      ['gh', 'api',
+                       'repos/%s/releases/%s/assets?per_page=100&page=%d' % (repo, release_id, page)],
+                      capture_output=True, text=True)
+                  if result.returncode != 0:
+                      break
+                  listed = json.loads(result.stdout)
+                  for asset in listed:
+                      if asset['name'] not in keep:
+                          subprocess.run(['gh', 'api', '-X', 'DELETE',
+                                          'repos/%s/releases/assets/%s' % (repo, asset['id'])],
+                                         check=False)
+                  if len(listed) < 100:
+                      break
+                  page += 1
+          PY
