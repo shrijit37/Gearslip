@@ -26,6 +26,7 @@ logs/
 # For AI code
 .claude/
 CLAUDE.md
+opencode.json
 
 # Other
 archive/
