@@ -5,9 +5,10 @@ package app.seb3thehacker.gearslip
  * the phone). Only the changes a driver would notice. Plain words, short lines: this is read in
  * a parked car.
  *
- * After 0.3.40, the version code is the one the build works out from the tag (see gitVersion in
- * build.gradle.kts): ((major*100 + minor)*100 + patch)*10 + stage, so 0.4.0-beta is 4002. Older
- * entries keep the hand-set codes they shipped with, which are all lower.
+ * Entries match the installed build by version name, not version code: codes now come from a
+ * shared monotonic build sequence so a dev build can be replaced by a stable one (or back again)
+ * without Android treating it as a downgrade. The codes below are kept only as a record of what
+ * those releases shipped with; older entries used hand-set values.
  */
 object Changelog {
 
@@ -137,5 +138,5 @@ object Changelog {
     )
 
     /** The release that matches this build, if it has notes. */
-    val current: Release? get() = releases.firstOrNull { it.versionCode == BuildConfig.VERSION_CODE }
+    val current: Release? get() = releases.firstOrNull { it.versionName == BuildConfig.VERSION_NAME }
 }
