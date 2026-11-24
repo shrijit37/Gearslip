@@ -211,7 +211,7 @@ private fun DotAction(
  * active line; in this single-line slot that means the current line stays in view.
  */
 @Composable
-private fun LyricsView(
+internal fun LyricsView(
     title: String,
     artist: String,
     album: String,
@@ -271,7 +271,7 @@ private fun LyricsView(
 }
 
 @Composable
-private fun QueueView(queue: List<MusicCatalog.Track>, activeIndex: Int, modifier: Modifier) {
+internal fun QueueView(queue: List<MusicCatalog.Track>, activeIndex: Int, modifier: Modifier) {
     if (queue.isEmpty()) {
         EmptyState("NOTHING QUEUED", "Play something from BROWSE or SEARCH", modifier)
         return

@@ -729,4 +729,7 @@
     <string name="cert_link_again">Download again</string>
     <string name="cert_link_done">Downloaded and converted. It\'s used from the next connection.</string>
     <string name="cert_link_failed">Couldn\'t use it. %1$s</string>
+    <string name="music_layout_title">MUSIC LAYOUT</string>
+    <string name="choice_music_classic">Classic</string>
+    <string name="choice_music_stitch">Dot matrix</string>
 </resources>
