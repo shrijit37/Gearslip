@@ -683,6 +683,14 @@
     <string name="density_custom_note">Any value from %1$d to %2$d. Lower fits more on the screen; higher makes everything bigger.</string>
     <string name="car_nav_mic">Mic button</string>
     <string name="car_nav_mic_note">The assistant\'s button in the nav bar. The car\'s own voice button works either way.</string>
+    <string name="car_dock_nav">Navigation</string>
+    <string name="car_dock_media">Media</string>
+    <string name="car_dock_phone">Phone</string>
+    <string name="car_dock_car">Vehicle data</string>
+    <string name="car_dock_apps">All apps</string>
+    <string name="car_dock_voice">Voice</string>
+    <string name="car_dock_volume_down">Decrease volume</string>
+    <string name="car_dock_volume_up">Increase volume</string>
     <string name="car_apps_add">Add an app</string>
     <string name="car_apps_add_note">For an app the car doesn\'t list: its music plays through Gearslip\'s player, or its messages show on the Messages screen.</string>
     <string name="car_apps_add_pick">Choose an app</string>
