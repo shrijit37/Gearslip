@@ -18,6 +18,7 @@ import app.seb3thehacker.gearslip.audio.AudioCaptureService
 import app.seb3thehacker.gearslip.audio.CarAudio
 import app.seb3thehacker.gearslip.car.CarEnvironment
 import app.seb3thehacker.gearslip.car.CarSettings
+import app.seb3thehacker.gearslip.car.CarSettings.MusicUi
 import app.seb3thehacker.gearslip.car.CarUi
 import app.seb3thehacker.gearslip.traffic.MapPoint
 import app.seb3thehacker.gearslip.traffic.RealRoutePlanner
@@ -70,6 +71,8 @@ class CarPreviewActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         GearslipLog.init(this)
         CarSettings.init(this)
+        // --ez stitch true renders the alternate music layout without going through Settings.
+        if (intent.getBooleanExtra("stitch", false)) CarSettings.setMusicUi(MusicUi.STITCH)
         // The harness is an accepted-risk bench, so skip the one-time safety wizard and show the
         // rail (and therefore the dot map) immediately.
         CarSettings.markSafetyWarningSeen()
@@ -190,6 +193,9 @@ class CarPreviewActivity : ComponentActivity() {
             return
         }
 
+        // --ei delay moves the first snapshot and the tap script later on slow emulators, where
+        // the first virtual-display frame can arrive after the default two-second wait.
+        val delay = intent.getIntExtra("delay", 2000).toLong()
         main.postDelayed({
             snap()
             taps.forEachIndexed { i, (x, y) ->
@@ -200,7 +206,7 @@ class CarPreviewActivity : ComponentActivity() {
                 }, 2500L * (i + 1))
                 main.postDelayed({ snap() }, 2500L * (i + 1) + 1500)
             }
-        }, 2000)
+        }, delay)
     }
 
     override fun onDestroy() {

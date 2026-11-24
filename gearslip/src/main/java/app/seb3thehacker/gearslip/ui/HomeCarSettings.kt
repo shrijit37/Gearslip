@@ -57,6 +57,7 @@ import app.seb3thehacker.gearslip.car.AppTheme
 import app.seb3thehacker.gearslip.car.CarApps
 import app.seb3thehacker.gearslip.car.LauncherMode
 import app.seb3thehacker.gearslip.car.CarSettings.MusicSource
+import app.seb3thehacker.gearslip.car.CarSettings.MusicUi
 import app.seb3thehacker.gearslip.car.CarSettings
 import app.seb3thehacker.gearslip.car.LauncherCache
 import app.seb3thehacker.gearslip.car.NavBarMode
@@ -165,6 +166,7 @@ internal fun HomeCarSettings(onOpen: (CarGroup) -> Unit, modifier: Modifier = Mo
     val playerLeft by CarSettings.playerLeft.collectAsState()
     val theme by CarSettings.appTheme.collectAsState()
     val experimental by CarSettings.experimentalFeaturesEnabled.collectAsState()
+    val musicUi by CarSettings.musicUi.collectAsState()
 
     val opens = openChoices()
     val sizes = sizeChoices()
@@ -180,6 +182,7 @@ internal fun HomeCarSettings(onOpen: (CarGroup) -> Unit, modifier: Modifier = Mo
         CarGroup.NAV_BAR -> listOf(navBars.label(navBar), str(if (playerLeft) R.string.summary_player_left else R.string.summary_player_right))
         CarGroup.SOUND -> listOf(
             str(if (pipeAudio) R.string.summary_usb_audio else R.string.summary_bluetooth_audio),
+            str(if (musicUi == MusicUi.STITCH) R.string.choice_music_stitch else R.string.choice_music_classic),
         )
         CarGroup.PLACES -> places.mapIndexedNotNull { i, place ->
             when {
@@ -274,6 +277,7 @@ private fun GroupRows(group: CarGroup) {
     val locationWarning by CarSettings.locationWarning.collectAsState()
     val autoplay by CarSettings.autoplay.collectAsState()
     val musicSource by CarSettings.musicSource.collectAsState()
+    val musicUi by CarSettings.musicUi.collectAsState()
     val playerTitle by CarSettings.playerTitle.collectAsState()
     val playerLeft by CarSettings.playerLeft.collectAsState()
     val navMic by CarSettings.navMic.collectAsState()
@@ -327,6 +331,15 @@ private fun GroupRows(group: CarGroup) {
         }
         CarGroup.SOUND -> {
             Choice("MUSIC SOURCE", musicSourceChoices(), musicSource, CarSettings::setMusicSource)
+            Choice(
+                stringResource(R.string.music_layout_title),
+                listOf(
+                    MusicUi.CLASSIC to stringResource(R.string.choice_music_classic),
+                    MusicUi.STITCH to stringResource(R.string.choice_music_stitch),
+                ),
+                musicUi,
+                CarSettings::setMusicUi,
+            )
         }
         CarGroup.PLACES -> Unit
         CarGroup.WARNINGS -> {

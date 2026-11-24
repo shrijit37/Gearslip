@@ -61,6 +61,25 @@ reshape will need an update here. Attribution is in `NOTICE.md` and the disclosu
 | Vehicle | vehicle page | existing `VehicleDataScreen`, Nothing styling |
 | Screensaver | saver page A–F | `CarScreensaver` case matrix |
 
+### Stitch music screens (alternate layout)
+
+The Stitch project "Dot Matrix Car Player" holds seven music screens. They are an **optional**
+music layout, chosen by MUSIC LAYOUT in both the car's Settings and the phone's car settings;
+the original player stays the default.
+
+| Stitch screen | Compose target | Notes |
+|---|---|---|
+| Car Music Playback | `car/stitch/StitchMusicScreen.kt`, NOW PLAYING page | Dot-matrix art, live transport, status strip, UP NEXT panel. |
+| Car Music Playback (Lyrics) | LYRICS panel in the same screen | Shares `LyricsView` with the classic player. |
+| Car Music Playback (Lyrics + Visualizer) | Not ported | No PCM/FFT path exists yet, so the VISUALIZER tab is left out rather than filled with fake spectrum data. |
+| Car Music Browse | `car/stitch/StitchBrowse.kt`, BROWSE page | Live shelves from `MusicCatalog.homeFlow()`; ALL / FOLDERS / TRACKS filters. |
+| Car Music Search | `car/stitch/StitchBrowse.kt`, SEARCH page | Car keyboard, quick queries and live `MusicCatalog.search()` results. |
+| Nothing OS Car Dock | `car/CarDock.kt` | Already ported from this design; no changes needed. |
+| Car Music Interactive Prototype | Interaction reference only | Used for tap targets and flow, not a separate screen. |
+
+The mockups' device/cabin readings and demo catalogue (Klangwerk, Mono Unit, …) are not carried
+over: every reading on these screens comes from the connected media app's session.
+
 ## Screensaver case matrix
 
 | Case | Music | Direction | Behaviour |

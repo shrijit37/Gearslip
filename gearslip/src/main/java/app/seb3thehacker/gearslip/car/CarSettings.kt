@@ -55,6 +55,9 @@ object CarSettings {
     /** Which music app the car player drives: auto-detect, a fixed choice, or whatever played last. */
     enum class MusicSource { AUTO, VIVI, ECHO, LAST_USED }
 
+    /** Which layout the car's music screens use: the original player or the dot-matrix port. */
+    enum class MusicUi { CLASSIC, STITCH }
+
     private const val KEY_SCALE = "car_scale"
     private const val KEY_DENSITY = "car_density"
     private const val KEY_OPEN = "car_open_on_connect"
@@ -93,6 +96,7 @@ private const val KEY_CLUSTER_VIDEO = "cluster_video_enabled"
     private const val KEY_WHATS_NEW = "car_whats_new_after_updates"
     private const val KEY_WHATS_NEW_SEEN = "car_whats_new_seen_code"
     const val KEY_MUSIC_SOURCE = "car_music_source"
+    private const val KEY_MUSIC_UI = "car_music_ui"
 
     /** How many shortcuts the nav bar makes room for; a driver reaching for one needs it to
      * still be on the bar, not off the edge of a long list. */
@@ -117,6 +121,10 @@ private const val KEY_CLUSTER_VIDEO = "cluster_video_enabled"
 
     /** Which external media app the car player drives; see [MusicSource]. */
     val musicSource: StateFlow<MusicSource> = musicSourceFlow
+    private val musicUiFlow = MutableStateFlow(MusicUi.CLASSIC)
+
+    /** Which layout the first-party music screens are drawn in. */
+    val musicUi: StateFlow<MusicUi> = musicUiFlow
     private val playerTitleFlow = MutableStateFlow(false)
     private val playerLeftFlow = MutableStateFlow(false)
     private val navMicFlow = MutableStateFlow(true)
@@ -400,6 +408,9 @@ private const val KEY_CLUSTER_VIDEO = "cluster_video_enabled"
         musicSourceFlow.value = runCatching {
             MusicSource.valueOf(AppSettings.getString(app, KEY_MUSIC_SOURCE, "AUTO"))
         }.getOrDefault(MusicSource.AUTO)
+        musicUiFlow.value = runCatching {
+            MusicUi.valueOf(AppSettings.getString(app, KEY_MUSIC_UI, MusicUi.CLASSIC.name))
+        }.getOrDefault(MusicUi.CLASSIC)
         themeFlow.value = runCatching {
             AppTheme.valueOf(AppSettings.getString(app, KEY_THEME, AppTheme.PHONE.name))
         }.getOrDefault(AppTheme.PHONE)
@@ -511,6 +522,11 @@ private const val KEY_CLUSTER_VIDEO = "cluster_video_enabled"
     fun setMusicSource(source: MusicSource) {
         musicSourceFlow.value = source
         AppSettings.putString(app, KEY_MUSIC_SOURCE, source.name)
+    }
+
+    fun setMusicUi(ui: MusicUi) {
+        musicUiFlow.value = ui
+        AppSettings.putString(app, KEY_MUSIC_UI, ui.name)
     }
 
     /**

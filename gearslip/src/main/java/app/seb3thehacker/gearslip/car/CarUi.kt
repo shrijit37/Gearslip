@@ -89,6 +89,9 @@ import app.seb3thehacker.gearslip.car.theme.GsTone
 import app.seb3thehacker.gearslip.car.theme.gsColors
 import app.seb3thehacker.gearslip.car.theme.GsThemes
 import app.seb3thehacker.gearslip.car.theme.LocalGsTheme
+import app.seb3thehacker.gearslip.car.stitch.StitchMusicScreen
+import app.seb3thehacker.gearslip.car.stitch.TAB_BROWSE
+import app.seb3thehacker.gearslip.car.stitch.TAB_PLAYER
 import app.seb3thehacker.gearslip.media.CarMedia
 import app.seb3thehacker.gearslip.media.MediaArt
 import androidx.compose.ui.platform.LocalContext
@@ -117,6 +120,7 @@ fun CarUi() {
     val appTheme by CarSettings.appTheme.collectAsState()
     val uiThemeId by CarSettings.uiTheme.collectAsState()
     val darkStyle by CarSettings.darkStyle.collectAsState()
+    val musicUi by CarSettings.musicUi.collectAsState()
     val mediaApp by CarServices.mediaApp.collectAsState()
     val darkOutside by CarEnvironment.darkOutside.collectAsState()
     val appContext = LocalContext.current.applicationContext
@@ -349,8 +353,16 @@ fun CarUi() {
                                         CarScreen.Media -> CompositionLocalProvider(
                                             LocalNavBarInset provides if (!keyboardVisible && !fullscreen) bottomInset else 0.dp,
                                         ) { mediaApp?.let { MediaScreen(it) { navigator.back() } } }
-                                        CarScreen.FirstPartyMusic -> FirstPartyMusicScreen(onOpenPlayer = navigator::firstPartyPlayer)
-                                        CarScreen.FirstPartyPlayer -> FirstPartyPlayerScreen(onBack = navigator::back)
+                                        CarScreen.FirstPartyMusic -> if (musicUi == CarSettings.MusicUi.STITCH) {
+                                            StitchMusicScreen(TAB_BROWSE, navigator::firstPartyPlayer, navigator::back)
+                                        } else {
+                                            FirstPartyMusicScreen(onOpenPlayer = navigator::firstPartyPlayer)
+                                        }
+                                        CarScreen.FirstPartyPlayer -> if (musicUi == CarSettings.MusicUi.STITCH) {
+                                            StitchMusicScreen(TAB_PLAYER, navigator::firstPartyPlayer, navigator::back)
+                                        } else {
+                                            FirstPartyPlayerScreen(onBack = navigator::back)
+                                        }
                                         CarScreen.PlaceSearch -> PlaceSearchScreen()
                                         CarScreen.DotMap -> DotMapScreen()
                                         CarScreen.Browse -> BrowseAppScreen(navigator)
