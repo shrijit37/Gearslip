@@ -90,8 +90,11 @@ internal object BuiltInApps {
     // The dock has no rail any more, so the destinations the rail alone offered live in the grid.
     val Weather = BuiltInApp("weather", "Weather", R.string.crumb_weather, Icons.Filled.Place, CarScreen.Weather) { it.weather() }
     val Dashboard = BuiltInApp("dashboard", "Dashboard", R.string.crumb_dashboard, Icons.Filled.Info, CarScreen.Dashboard) { it.dashboard() }
-    /** An action, not a screen: fades the car display to its resting state. */
-    val Screensaver = BuiltInApp("screensaver", "Screensaver", R.string.car_screensaver, CarGlyph, null) { CarScreensaver.show() }
+    /**
+     * An action, not a screen: go Home, where the resting screen is allowed, then show it. Staying
+     * on Apps would let the next tick dismiss it immediately.
+     */
+    val Screensaver = BuiltInApp("screensaver", "Screensaver", R.string.car_screensaver, CarGlyph, null) { it.home(); CarScreensaver.show() }
 
     /**
      * The phone key on the head unit still points here, even though the dial pad screen is gone.

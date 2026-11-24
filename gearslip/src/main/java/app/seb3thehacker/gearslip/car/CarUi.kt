@@ -328,8 +328,8 @@ fun CarUi() {
                                     .graphicsLayer { if (fromHome) alpha = enter.value }
                                     .background(MaterialTheme.colorScheme.background)
                                     // The dock never hides here, so keep the screen clear of it,
-                                    // the full player included.
-                                    .padding(bottom = if (!keyboardVisible && !fullscreen) bottomInset else 0.dp)
+                                    // the full player included. Media reserves the inset itself.
+                                    .padding(bottom = if (!keyboardVisible && !fullscreen && shown != CarScreen.Media) bottomInset else 0.dp)
                                     // Keeps touches that miss this screen's controls off the map,
                                     // except on the dot map, where a tap sets the destination.
                                     .then(

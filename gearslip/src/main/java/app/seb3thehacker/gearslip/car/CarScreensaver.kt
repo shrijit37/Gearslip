@@ -88,6 +88,8 @@ object CarScreensaver {
         private set
 
     private var lastInput = SystemClock.uptimeMillis()
+    /** An explicit request from the Screensaver tile, which also works with idle timeout off. */
+    private var manual = false
 
     /** A minute is long enough not to hide a map the driver is still reading. */
     const val IDLE_MS = 60_000L
@@ -95,24 +97,30 @@ object CarScreensaver {
     /** Every pointer event and every knob move lands here. Cheap when already awake. */
     fun poke() {
         lastInput = SystemClock.uptimeMillis()
-        if (visible) visible = false
+        if (visible) {
+            visible = false
+            manual = false
+        }
     }
 
     fun dismiss() = poke()
 
-    /** Show the resting screen immediately, for the Nothing rail's SAVE button. */
+    /** Show the resting screen immediately, for the Screensaver tile. */
     fun show() {
         lastInput = 0L
+        manual = true
         visible = true
     }
 
     /**
      * Called on a timer. [allowed] is false off Home and while something needs the screen; that
      * also resets the clock, so coming back to Home starts a fresh wait instead of sleeping at once.
+     * An explicit [show] survives the idle setting being off, but not a call, keyboard or leaving Home.
      */
     fun tick(enabled: Boolean, allowed: Boolean) {
-        if (!enabled || !allowed) {
+        if (!allowed || (!enabled && !manual)) {
             if (visible) visible = false
+            manual = false
             lastInput = SystemClock.uptimeMillis()
             return
         }
