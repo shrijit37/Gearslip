@@ -274,17 +274,14 @@ fun CarUi() {
                 }
                 // Up to the bar's top edge, so the map's cards and the player end above it.
                 val homeInset = if (barShown) NAV_BAR_HEIGHT else 0.dp
-                // The Nothing shell moves navigation to a left rail and keeps a compact player
-                // along the bottom, the way the approved mockup lays the car screen out.
+                // The Nothing shell puts navigation in the bottom car dock. Every screen keeps
+                // clear of it, including the full player, which sits above it rather than hiding it.
                 val nothingShell = uiThemeId == GsThemes.Nothing.id
-                val railWidth = if (nothingShell) 104.dp else 0.dp
-                val bottomInset = if (nothingShell) 56.dp else homeInset
-                val shellPad = Modifier.padding(start = railWidth)
+                val bottomInset = if (nothingShell) NAV_BAR_HEIGHT else homeInset
                 // Only the screen that asked: going Home or anywhere else ends it.
                 val fullscreen = CarFullscreen.active && screen != CarScreen.Home
                 Box(Modifier.fillMaxSize().padding(pad)) {
-                if (nothingShell && safetyWarningSeen) CarNothingRail(navigator)
-                Column(Modifier.fillMaxSize().then(shellPad)) {
+                Column(Modifier.fillMaxSize()) {
                     if (!safetyWarningSeen) {
                         CarSafetyWizard(onDone = CarSettings::markSafetyWarningSeen)
                         return@Column
@@ -318,7 +315,7 @@ fun CarUi() {
                 val shown = if (screen != CarScreen.Home) screen else lastAway[0]
                 SideEffect { if (screen != CarScreen.Home) lastAway[0] = screen }
                 if (safetyWarningSeen) {
-                    Box(Modifier.fillMaxSize().then(shellPad)) {
+                    Box(Modifier.fillMaxSize()) {
                         androidx.compose.animation.AnimatedVisibility(
                             visible = screen != CarScreen.Home,
                             enter = androidx.compose.animation.EnterTransition.None,
@@ -330,10 +327,9 @@ fun CarUi() {
                                     .fillMaxSize()
                                     .graphicsLayer { if (fromHome) alpha = enter.value }
                                     .background(MaterialTheme.colorScheme.background)
-                                    // The bar never hides here, so keep the screen clear of it. The
-                                    // player runs on under the see-through bar and keeps clear itself.
-                                    // The first-party player is full bleed: it hides the mini player.
-                                    .padding(bottom = if (!keyboardVisible && !fullscreen && shown != CarScreen.Media && shown != CarScreen.FirstPartyPlayer) bottomInset else 0.dp)
+                                    // The dock never hides here, so keep the screen clear of it,
+                                    // the full player included. Media reserves the inset itself.
+                                    .padding(bottom = if (!keyboardVisible && !fullscreen && shown != CarScreen.Media) bottomInset else 0.dp)
                                     // Keeps touches that miss this screen's controls off the map,
                                     // except on the dot map, where a tap sets the destination.
                                     .then(
@@ -382,8 +378,8 @@ fun CarUi() {
                             // whatever the screen drew there.
                             DebugBuildBadge(Modifier.align(Alignment.BottomEnd).padding(bottom = bottomInset))
                         }
-                        if (nothingShell && !fullscreen && screen != CarScreen.FirstPartyPlayer) {
-                            NothingBottomPlayer(Modifier.align(Alignment.BottomCenter))
+                        if (nothingShell && !fullscreen) {
+                            CarDock(navigator, Modifier.align(Alignment.BottomCenter))
                         }
                         // Last of the resting layer so it covers the player too; a call or alert
                         // draws after it and the tick hides it as soon as one starts.
@@ -413,7 +409,7 @@ fun CarUi() {
     }
 }
 
-internal val NAV_BAR_HEIGHT = 56.dp
+internal val NAV_BAR_HEIGHT = 64.dp
 
 /**
  * How much of the bottom of Home the floating nav bar covers right now: its height while it shows,

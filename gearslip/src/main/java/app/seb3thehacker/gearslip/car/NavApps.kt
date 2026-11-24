@@ -87,6 +87,15 @@ internal object BuiltInApps {
     val VehicleData = BuiltInApp("vehicle", "Vehicle data", R.string.car_vehicle_data, Icons.Filled.Info, CarScreen.VehicleData) { it.vehicleData() }
     val Settings = BuiltInApp("settings", "Settings", R.string.settings_title, Icons.Filled.Settings, CarScreen.Settings) { it.settings() }
 
+    // The dock has no rail any more, so the destinations the rail alone offered live in the grid.
+    val Weather = BuiltInApp("weather", "Weather", R.string.crumb_weather, Icons.Filled.Place, CarScreen.Weather) { it.weather() }
+    val Dashboard = BuiltInApp("dashboard", "Dashboard", R.string.crumb_dashboard, Icons.Filled.Info, CarScreen.Dashboard) { it.dashboard() }
+    /**
+     * An action, not a screen: go Home, where the resting screen is allowed, then show it. Staying
+     * on Apps would let the next tick dismiss it immediately.
+     */
+    val Screensaver = BuiltInApp("screensaver", "Screensaver", R.string.car_screensaver, CarGlyph, null) { it.home(); CarScreensaver.show() }
+
     /**
      * The phone key on the head unit still points here, even though the dial pad screen is gone.
      * Kept as an object so that key keeps compiling; it is deliberately not in [all], so no tile
@@ -97,7 +106,7 @@ internal object BuiltInApps {
     /** Hands the screen back to the car's own interface, like Android Auto's Exit. */
     val Exit = BuiltInApp("exit", "Exit", R.string.app_exit, CarGlyph, screen = null) { CarFocus.exitToCar() }
 
-    val all = listOf(GoogleMaps, Music, Player, Places, VehicleData, Settings, Exit)
+    val all = listOf(GoogleMaps, Music, Player, Places, Weather, Dashboard, VehicleData, Settings, Screensaver, Exit)
     private val byApp = all.associateWith { Entry(it.label, icon = null, builtIn = it) }
     val everyEntry: List<Entry> = byApp.values.toList()
 
