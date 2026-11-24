@@ -198,19 +198,26 @@ private fun AboutSection(onReplayTutorial: () -> Unit) {
     }
 }
 
-/** The manual self-update check. Nothing here contacts GitHub until the driver taps the row. */
+/** The manual self-update check. Nothing here contacts a feed until the driver taps the row. */
 @Composable
 private fun UpdatesSection() {
     val context = LocalContext.current
     val observed by UpdateChecker.state.collectAsStateWithLifecycle()
     val state = observed
+    var channel by remember { mutableStateOf(UpdateChecker.channel(context)) }
+    var ref by remember { mutableStateOf(UpdateChecker.devRef(context)) }
     val installed = remember {
         runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull() ?: "?"
     }
+    val isDev = channel == UpdateChecker.CHANNEL_DEV
     val subtitle = when (state) {
-        UpdateChecker.State.Idle -> stringResource(R.string.settings_update_current, installed)
+        UpdateChecker.State.Idle -> if (isDev) {
+            stringResource(R.string.settings_update_dev_current, BuildConfig.BUILD_SHA, ref)
+        } else stringResource(R.string.settings_update_current, installed)
         UpdateChecker.State.Checking -> stringResource(R.string.settings_update_checking)
-        UpdateChecker.State.UpToDate -> stringResource(R.string.settings_update_up_to_date)
+        UpdateChecker.State.UpToDate -> stringResource(
+            if (isDev) R.string.settings_update_dev_up_to_date else R.string.settings_update_up_to_date,
+        )
         is UpdateChecker.State.Available -> stringResource(R.string.settings_update_available, state.release.version)
         is UpdateChecker.State.Downloading -> stringResource(R.string.update_downloading, (state.fraction * 100).toInt())
         is UpdateChecker.State.Ready -> state.error?.let { stringResource(R.string.settings_update_retry, it) }
@@ -220,8 +227,47 @@ private fun UpdatesSection() {
     val busy = state is UpdateChecker.State.Checking || state is UpdateChecker.State.Downloading
     SettingsSection(stringResource(R.string.settings_updates), footer = stringResource(R.string.update_waiting_car)) {
         SettingsRow(
+            stringResource(R.string.settings_update_channel),
+            subtitle = stringResource(if (isDev) R.string.settings_update_dev_sub else R.string.settings_update_stable_sub),
+            icon = Icons.Filled.Settings,
+        )
+        androidx.compose.foundation.layout.Row(
+            Modifier.fillMaxWidth().padding(start = 56.dp, end = 16.dp, bottom = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            listOf(UpdateChecker.CHANNEL_STABLE to R.string.settings_update_stable, UpdateChecker.CHANNEL_DEV to R.string.settings_update_dev).forEach { (value, label) ->
+                val chosen = channel == value
+                androidx.compose.material3.Button(
+                    onClick = {
+                        UpdateChecker.setChannel(context, value)
+                        channel = value
+                    },
+                    colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                        containerColor = if (chosen) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondaryContainer,
+                        contentColor = if (chosen) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer,
+                    ),
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp),
+                    modifier = Modifier.weight(1f).height(48.dp).semantics { selected = chosen },
+                ) { Text(stringResource(label), maxLines = 1) }
+            }
+        }
+        if (isDev) {
+            OutlinedTextField(
+                value = ref,
+                onValueChange = { ref = it },
+                singleLine = true,
+                label = { Text(stringResource(R.string.settings_update_dev_ref)) },
+                placeholder = { Text(stringResource(R.string.settings_update_dev_ref_hint)) },
+                modifier = Modifier.fillMaxWidth().padding(start = 56.dp, end = 16.dp, bottom = 12.dp),
+            )
+        }
+        SettingsDivider()
+        SettingsRow(
             stringResource(R.string.settings_update_check),
-            Modifier.clickable(enabled = !busy) { UpdateChecker.check(context) },
+            Modifier.clickable(enabled = !busy) {
+                if (isDev) UpdateChecker.setDevRef(context, ref)
+                UpdateChecker.check(context)
+            },
             subtitle = subtitle,
             icon = Icons.Filled.Refresh,
             trailing = if (busy) {

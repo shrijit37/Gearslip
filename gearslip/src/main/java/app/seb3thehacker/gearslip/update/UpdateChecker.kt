@@ -27,6 +27,10 @@ import java.security.MessageDigest
  *
  * Releases ship one APK per ABI (plus a universal fallback), so an update is about 20 MB instead
  * of the 35 MB universal build. [pickAsset] chooses which one to download.
+ *
+ * Two tracks share the app's identity and signing key: stable reads promoted GitHub releases,
+ * dev reads a manifest of branch-head builds. Both are manual, and dev compares commits rather
+ * than version numbers, since a branch head is not a semver successor of the installed build.
  */
 object UpdateChecker {
 
@@ -36,6 +40,11 @@ object UpdateChecker {
         val size: Long,
         val sha256: String?,
         val pageUrl: String,
+        val channel: String = CHANNEL_STABLE,
+        /** Ref shown on the card: a version tag for stable, a branch or `pr-<n>` for dev. */
+        val target: String = "",
+        /** The commit the APK was built from, pinned when the update was offered. */
+        val buildSha: String = "",
     )
 
     sealed interface State {
@@ -49,9 +58,9 @@ object UpdateChecker {
         data class Failed(val message: String, val release: Release? = null) : State
     }
 
-    // Every CI release is a prerelease, so /releases/latest would be a 404 here. The list
-    // endpoint returns prereleases too; drafts are filtered out in [newestFrom].
-    private const val RELEASES_URL = "https://api.github.com/repos/shrijit37/gearslip/releases?per_page=10"
+    // /releases/latest only sees a full release, and stable ones sit behind many prereleases
+    // from main. Ask for a page of them and let [newestFrom] keep only published releases.
+    private const val RELEASES_URL = "https://api.github.com/repos/shrijit37/gearslip/releases?per_page=100"
     private const val UNIVERSAL_ASSET = "Gearslip-universal-debug.apk"
     private val ABI_ASSETS = mapOf(
         "arm64-v8a" to "Gearslip-arm64-v8a-debug.apk",
@@ -61,8 +70,50 @@ object UpdateChecker {
     )
     private const val EXTRA_VERSION = "version"
 
+    const val CHANNEL_STABLE = "stable"
+    const val CHANNEL_DEV = "dev"
+    private const val PREFS = "gearslip_updates"
+    private const val KEY_CHANNEL = "channel"
+    private const val KEY_DEV_REF = "dev_ref"
+    private const val DEFAULT_DEV_REF = "main"
+
     private val flow = MutableStateFlow<State>(State.Idle)
     val state: StateFlow<State> = flow.asStateFlow()
+
+    // Bumped whenever the channel or dev ref changes, so work started for the old target can't
+    // finish later and install an APK the driver no longer asked for.
+    @Volatile private var generation = 0
+
+    private fun prefs(context: Context) = context.applicationContext.getSharedPreferences(PREFS, 0)
+
+    /** A build defaults to the channel that produced it; the driver's choice survives updates. */
+    fun channel(context: Context): String =
+        prefs(context).getString(KEY_CHANNEL, BuildConfig.UPDATE_CHANNEL) ?: BuildConfig.UPDATE_CHANNEL
+
+    fun devRef(context: Context): String =
+        prefs(context).getString(KEY_DEV_REF, DEFAULT_DEV_REF) ?: DEFAULT_DEV_REF
+
+    fun setChannel(context: Context, value: String) {
+        if (value != CHANNEL_STABLE && value != CHANNEL_DEV || value == channel(context)) return
+        prefs(context).edit().putString(KEY_CHANNEL, value).apply()
+        reset()
+    }
+
+    /** Only refs that can appear in a URL path or a manifest key are accepted. */
+    fun setDevRef(context: Context, value: String) {
+        val ref = value.trim()
+        if (ref.isEmpty() || ref.length > 100 || !ref.matches(Regex("""[A-Za-z0-9._/-]+"""))) return
+        if (ref == devRef(context)) return
+        prefs(context).edit().putString(KEY_DEV_REF, ref).apply()
+        reset()
+    }
+
+    private fun reset() {
+        synchronized(this) { generation++ }
+        installWhenAllowed = false
+        installWhenCarGone = false
+        flow.value = State.Idle
+    }
 
     /** Set when the driver had to allow installs from Gearslip before the download could be installed. */
     @Volatile private var installWhenAllowed = false
@@ -77,31 +128,78 @@ object UpdateChecker {
         // Build.SUPPORTED_ABIS is an Android property, so read it here rather than in the pure
         // [newestFrom] helper the unit tests call directly.
         val abis = Build.SUPPORTED_ABIS.toList()
+        val checkGeneration = generation
+        val target = channel(app)
         background("gearslip-update") {
             val result = runCatching {
-                val connection = (URL(RELEASES_URL).openConnection() as HttpURLConnection).apply {
-                    connectTimeout = 15_000
-                    readTimeout = 15_000
-                    setRequestProperty("Accept", "application/vnd.github+json")
-                    setRequestProperty("User-Agent", "Gearslip/${BuildConfig.VERSION_NAME}")
-                }
-                try {
-                    if (connection.responseCode !in 200..299) error("GitHub answered ${connection.responseCode}")
-                    connection.inputStream.bufferedReader().use {
-                        newestFrom(parseCandidates(it.readText()), BuildConfig.VERSION_NAME, abis)
-                    }
-                } finally {
-                    connection.disconnect()
-                }
+                if (target == CHANNEL_DEV) checkDev(app, abis) else checkStable(abis)
             }
+            if (checkGeneration != generation) return@background
             result.onFailure { GearslipLog.w("update: check failed: ${it.message}") }
-            flow.value = result.getOrElse { State.Failed(it.message ?: "Couldn't reach GitHub.") }
+            flow.value = result.getOrElse { State.Failed(it.message ?: "Couldn't reach the update feed.") }
+        }
+    }
+
+    private fun checkStable(abis: List<String>): State {
+        val connection = (URL(RELEASES_URL).openConnection() as HttpURLConnection).apply {
+            connectTimeout = 15_000
+            readTimeout = 15_000
+            setRequestProperty("Accept", "application/vnd.github+json")
+            setRequestProperty("User-Agent", "Gearslip/${BuildConfig.VERSION_NAME}")
+        }
+        return try {
+            if (connection.responseCode !in 200..299) error("GitHub answered ${connection.responseCode}")
+            connection.inputStream.bufferedReader().use {
+                newestFrom(parseCandidates(it.readText()), BuildConfig.VERSION_NAME, abis)
+            }
+        } finally {
+            connection.disconnect()
+        }
+    }
+
+    /** One manifest read, no GitHub API calls: an unauthenticated app has a small rate limit. */
+    private fun checkDev(app: Context, abis: List<String>): State {
+        val ref = devRef(app)
+        // Raw files are cached; the query makes a fresh head visible after a new publish.
+        val url = "${DevFeed.URL}?t=${System.currentTimeMillis()}"
+        val connection = (URL(url).openConnection() as HttpURLConnection).apply {
+            connectTimeout = 15_000
+            readTimeout = 15_000
+            setRequestProperty("User-Agent", "Gearslip/${BuildConfig.VERSION_NAME}")
+            setRequestProperty("Cache-Control", "no-cache")
+        }
+        try {
+            if (connection.responseCode !in 200..299) error("GitHub answered ${connection.responseCode}")
+            val feed = connection.inputStream.bufferedReader().use { DevFeed.parse(it.readText()) }
+            val build = DevFeed.select(feed, ref, BuildConfig.BUILD_SHA, abis) ?: return State.UpToDate
+            val asset = build.assets.first()
+            GearslipLog.i("update: dev ${build.sha} on $ref is out (this is ${BuildConfig.BUILD_SHA})")
+            return State.Available(
+                Release(
+                    version = build.version.ifBlank { build.sha },
+                    apkUrl = asset.url,
+                    size = asset.size,
+                    sha256 = asset.sha256,
+                    pageUrl = DevFeed.PAGE_URL,
+                    channel = CHANNEL_DEV,
+                    target = ref,
+                    buildSha = build.sha,
+                ),
+            )
+        } finally {
+            connection.disconnect()
         }
     }
 
     /** A GitHub release stripped down to what the choice needs. Kept separate from org.json so
      * the decision can be unit tested on the JVM, where the platform JSON classes are stubs. */
-    internal data class Candidate(val tag: String, val draft: Boolean, val pageUrl: String, val assets: List<Asset>) {
+    internal data class Candidate(
+        val tag: String,
+        val draft: Boolean,
+        val pageUrl: String,
+        val assets: List<Asset>,
+        val prerelease: Boolean = false,
+    ) {
         internal data class Asset(val name: String, val url: String, val size: Long, val sha256: String?)
     }
 
@@ -114,6 +212,7 @@ object UpdateChecker {
             Candidate(
                 tag = normalizeTag(json.optString("tag_name")),
                 draft = json.optBoolean("draft"),
+                prerelease = json.optBoolean("prerelease"),
                 assets = files.map { file ->
                     Candidate.Asset(
                         name = file.optString("name"),
@@ -138,10 +237,11 @@ object UpdateChecker {
         return "${postTag.groupValues[1]}+${postTag.groupValues[2]}.${postTag.groupValues[3]}"
     }
 
-    /** Picks the newest non-draft release that has an APK for this phone, if it's newer than [installedVersion]. */
+    /** Picks the newest published release that has an APK for this phone, if it's newer than [installedVersion]. */
     internal fun newestFrom(candidates: List<Candidate>, installedVersion: String, supportedAbis: List<String>): State {
+        // Main builds and dev builds are both prereleases; only a promoted tag is stable.
         val newestFirst = candidates
-            .filterNot { it.draft }
+            .filterNot { it.draft || it.prerelease }
             .sortedWith { a, b ->
                 when {
                     isNewer(a.tag, b.tag) -> -1
@@ -161,7 +261,14 @@ object UpdateChecker {
             if (isNewer(version, installedVersion)) {
                 GearslipLog.i("update: $version is out (this is $installedVersion)")
                 return State.Available(
-                    Release(version, apk.url, apk.size, hash, release.pageUrl),
+                    Release(
+                        version,
+                        apk.url,
+                        apk.size,
+                        hash,
+                        release.pageUrl,
+                        target = release.tag.removePrefix("v"),
+                    ),
                 )
             }
         }
@@ -180,12 +287,15 @@ object UpdateChecker {
     /** Downloads the chosen APK and installs it once the checksum has passed. */
     fun download(context: Context, release: Release) {
         if (flow.value is State.Downloading) return
+        if (release.channel != channel(context)) return
         val app = context.applicationContext
+        val downloadGeneration = generation
         flow.value = State.Downloading(release, 0f)
         background("gearslip-update") {
-            val dir = updatesDir(app).apply { deleteRecursively(); mkdirs() }
+            val dir = updatesDir(app, release.channel).apply { deleteRecursively(); mkdirs() }
             val apk = File(dir, "Gearslip-${release.version}.apk")
-            val result = runCatching { fetchApk(release, apk) }
+            val result = runCatching { fetchApk(release, apk, downloadGeneration) }
+            if (downloadGeneration != generation) return@background
             if (result.isSuccess) {
                 GearslipLog.i("update: downloaded ${release.version}")
                 flow.value = State.Ready(release, apk)
@@ -199,7 +309,7 @@ object UpdateChecker {
         }
     }
 
-    private fun fetchApk(release: Release, into: File) {
+    private fun fetchApk(release: Release, into: File, downloadGeneration: Int) {
         val connection = (URL(release.apkUrl).openConnection() as HttpURLConnection).apply {
             connectTimeout = 15_000
             readTimeout = 30_000
@@ -215,6 +325,7 @@ object UpdateChecker {
                 into.outputStream().use { output ->
                     val buffer = ByteArray(64 * 1024)
                     while (true) {
+                        if (downloadGeneration != generation) error("The update target changed.")
                         val n = input.read(buffer)
                         if (n < 0) break
                         output.write(buffer, 0, n)
@@ -245,6 +356,9 @@ object UpdateChecker {
      */
     fun install(context: Context) {
         val ready = flow.value as? State.Ready ?: return
+        // The driver may have switched channel while the APK was downloading or waiting for the
+        // car. Never hand bytes from the other track to the installer.
+        if (ready.release.channel != channel(context)) return
         // Installing closes Gearslip, which would drop the car screen mid-drive. Queue it and
         // say so on the card rather than silently throwing the tap away.
         if (carConnected) {
@@ -347,15 +461,16 @@ object UpdateChecker {
         }
     }
 
-    /** The new build is running: drop the downloaded file and the card that offered it. */
+    /** The new build is running: drop the downloaded files and the card that offered them. */
     fun onReplaced(context: Context) {
         installWhenAllowed = false
         installWhenCarGone = false
-        runCatching { updatesDir(context).deleteRecursively() }
+        updatesDir(context, CHANNEL_STABLE).deleteRecursively()
+        updatesDir(context, CHANNEL_DEV).deleteRecursively()
         flow.value = State.Idle
     }
 
-    private fun updatesDir(context: Context) = File(context.cacheDir, "updates")
+    private fun updatesDir(context: Context, target: String) = File(File(context.cacheDir, "updates"), target)
 
     private val carConnected: Boolean
         get() = SessionStatus.state.value.phase.let {

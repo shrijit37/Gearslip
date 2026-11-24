@@ -45,6 +45,12 @@ the tokens and the [mockup](carplay-nothing-final.html) for the intended layout.
    checks it against the checksum GitHub publishes, and hands it to Android's installer. Nothing
    happens in the background, and the install waits while a car is connected.
 
+   **Updates** has two channels. Stable offers only releases promoted from a `v*` version tag;
+   main-branch test builds stay on the Releases page and are not offered. Dev installs the head of
+   a branch or `pr-<number>` from this repository, pinned to that commit. Both replace the same
+   app with the same signing key, so car apps keep working with either — but a dev build can break
+   the install, and fork PRs are not published. See [CI.md](CI.md).
+
 Releases are **debug builds**. Unless the signing secrets below are configured, each one is
 signed by that runner's throwaway debug key, so a new release may need an uninstall first. There
 is no fixed fingerprint to compare; get APKs only from the releases page.

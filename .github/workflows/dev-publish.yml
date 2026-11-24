@@ -1,0 +1,170 @@
+name: Publish dev build
+
+# Branch heads and same-repository PRs get an APK the dev channel can install in place. The
+# manifest is published separately so the app reads one small file instead of paging the GitHub
+# API. Fork PRs are skipped: they have no signing key, and a throwaway-signed APK could never
+# install over the app a driver already has.
+on:
+  push:
+    branches-ignore:
+      - 'dev-feed'
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: dev-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  publish:
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Build the PR's head, not its merge with main, so the ref the driver picks is
+          # the commit that actually shipped. Tags give gitVersion a name for the build.
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Write stable signing config
+        env:
+          UPDATE_KEYSTORE_B64: ${{ secrets.UPDATE_KEYSTORE_B64 }}
+          UPDATE_STORE_PASSWORD: ${{ secrets.UPDATE_STORE_PASSWORD }}
+          UPDATE_KEY_ALIAS: ${{ secrets.UPDATE_KEY_ALIAS }}
+          UPDATE_KEY_PASSWORD: ${{ secrets.UPDATE_KEY_PASSWORD }}
+        run: |
+          if [ -z "$UPDATE_KEYSTORE_B64" ]; then
+            echo "::error::UPDATE_KEYSTORE_B64 is not set; dev APKs cannot replace an installed Gearslip."
+            exit 1
+          fi
+          echo "$UPDATE_KEYSTORE_B64" | base64 --decode > gearslip-release.jks
+          python3 - <<'PY'
+          import os
+
+          def escape(value):
+              return (value.replace('\\', '\\\\').replace(':', '\\:')
+                           .replace('=', '\\=').replace('\n', '\\n'))
+
+          props = {
+              'STORE_PASSWORD': 'storePassword',
+              'KEY_ALIAS': 'keyAlias',
+              'KEY_PASSWORD': 'keyPassword',
+          }
+          with open('keystore.properties', 'w') as out:
+              out.write('storeFile=gearslip-release.jks\n')
+              for env, prop in props.items():
+                  out.write('%s=%s\n' % (prop, escape(os.environ['UPDATE_' + env])))
+          PY
+
+      - name: Identify the build
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "DEV_REF=pr-${{ github.event.number }}" >> "$GITHUB_ENV"
+          else
+            echo "DEV_REF=${GITHUB_REF_NAME}" >> "$GITHUB_ENV"
+          fi
+          echo "DEV_SHA7=$(git rev-parse --short=7 HEAD)" >> "$GITHUB_ENV"
+          described=$(git describe --tags --match 'v*' --exclude '*-g*' --abbrev=7 2>/dev/null || echo 'v0.0.0-dev')
+          echo "DEV_VERSION=${described#v}" >> "$GITHUB_ENV"
+
+      - name: Build dev APKs
+        run: |
+          ./gradlew :gearslip:assembleDebug --no-daemon \
+            -PgearslipChannel=dev -PgearslipBuildSha="$DEV_SHA7" -PgearslipVersionName="$DEV_VERSION"
+
+      - name: Name assets by commit
+        run: |
+          mkdir -p feed
+          for apk in build/Gearslip-*-debug.apk; do
+            stem=$(basename "$apk" .apk)
+            abi=${stem#Gearslip-}
+            abi=${abi%-debug}
+            cp "$apk" "feed/Gearslip-$abi-dev-$DEV_SHA7.apk"
+          done
+          compgen -G 'feed/*.apk' > /dev/null || { echo "no dev APKs"; exit 1; }
+          ls -lh feed/*.apk
+
+      - name: Publish assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if ! gh release view dev-builds >/dev/null 2>&1; then
+            gh release create dev-builds --prerelease --target main \
+              --title "Dev builds" --notes "Branch-head builds for the dev update channel. Pinned by commit."
+          fi
+          # Keep the release from growing without bound; the manifest only keeps recent refs.
+          gh api "repos/$GITHUB_REPOSITORY/releases/tags/dev-builds" > release.json
+          python3 - <<'PY'
+          import json, os, subprocess
+          release = json.load(open('release.json'))
+          assets = sorted(release['assets'], key=lambda a: a['created_at'], reverse=True)
+          for asset in assets[40:]:
+              subprocess.run(['gh', 'api', '-X', 'DELETE',
+                              'repos/%s/releases/assets/%s' % (os.environ['GITHUB_REPOSITORY'], asset['id'])],
+                             check=False)
+          PY
+          gh release upload dev-builds feed/*.apk --clobber
+
+      - name: Publish the dev manifest
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if ! gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/dev-feed" >/dev/null 2>&1; then
+            gh api -X POST "repos/$GITHUB_REPOSITORY/git/refs" \
+              -f ref="refs/heads/dev-feed" -f sha="$(git rev-parse HEAD)"
+          fi
+          python3 - <<'PY'
+          import base64, glob, hashlib, json, os, subprocess, time
+
+          repo = os.environ['GITHUB_REPOSITORY']
+          ref, sha, version = os.environ['DEV_REF'], os.environ['DEV_SHA7'], os.environ['DEV_VERSION']
+          assets = []
+          for path in sorted(glob.glob('feed/*.apk')):
+              name = os.path.basename(path)
+              digest = hashlib.sha256(open(path, 'rb').read()).hexdigest()
+              assets.append({
+                  'name': name,
+                  'url': 'https://github.com/%s/releases/download/dev-builds/%s' % (repo, name),
+                  'size': os.path.getsize(path),
+                  'sha256': digest,
+              })
+          entry = {'sha': sha, 'version': version, 'seq': int(time.time() // 60), 'assets': assets}
+
+          def read():
+              result = subprocess.run(
+                  ['gh', 'api', 'repos/%s/contents/manifest.json?ref=dev-feed' % repo],
+                  capture_output=True, text=True)
+              if result.returncode != 0:
+                  return {}, None
+              response = json.loads(result.stdout)
+              return json.loads(base64.b64decode(response['content'])).get('refs', {}), response['sha']
+
+          # Two refs can be published at once. Retry with the latest file sha so neither loses
+          # the other's entry when GitHub rejects a stale update.
+          for _ in range(5):
+              refs, file_sha = read()
+              refs[ref] = entry
+              refs = dict(sorted(refs.items(), key=lambda item: item[1].get('seq', 0), reverse=True)[:30])
+              body = json.dumps({'schema': 1, 'refs': refs}, separators=(',', ':'))
+              command = ['gh', 'api', '-X', 'PUT', 'repos/%s/contents/manifest.json' % repo,
+                         '-f', 'message=dev feed: %s %s' % (ref, sha),
+                         '-f', 'branch=dev-feed',
+                         '-f', 'content=' + base64.b64encode(body.encode()).decode()]
+              if file_sha:
+                  command += ['-f', 'sha=' + file_sha]
+              if subprocess.run(command, capture_output=True, text=True).returncode == 0:
+                  break
+          else:
+              raise SystemExit('could not publish the dev manifest')
+          PY

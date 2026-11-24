@@ -161,6 +161,13 @@ private fun UpdateCard() {
     ) {
         Column(Modifier.fillMaxWidth().padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+            if (release.channel == UpdateChecker.CHANNEL_DEV) {
+                Text(
+                    stringResource(R.string.update_dev_badge, release.target, release.buildSha),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f),
+                )
+            }
             Text(body, style = MaterialTheme.typography.bodyMedium)
             if (state is UpdateChecker.State.Downloading) {
                 LinearProgressIndicator(progress = { state.fraction }, modifier = Modifier.fillMaxWidth())

@@ -96,6 +96,27 @@ class UpdateCheckerTest {
     }
 
     @Test
+    fun newestFromIgnoresPrereleasesSoOnlyPromotedReleasesReachStable() {
+        fun asset(name: String) = UpdateChecker.Candidate.Asset(name, "https://example/$name", 1, "abc")
+        fun candidate(tag: String, prerelease: Boolean) = UpdateChecker.Candidate(
+            tag, false, "https://example/$tag", listOf(asset("Gearslip-arm64-v8a-debug.apk")), prerelease,
+        )
+
+        val state = UpdateChecker.newestFrom(
+            listOf(
+                candidate("v0.9.0-alpha", true),
+                candidate("dev-builds", true),
+                candidate("v0.6.0", false),
+            ),
+            "0.5.0-alpha",
+            listOf("arm64-v8a"),
+        )
+        check(state is UpdateChecker.State.Available)
+        assertEquals("0.6.0", state.release.version)
+        assertEquals(UpdateChecker.CHANNEL_STABLE, state.release.channel)
+    }
+
+    @Test
     fun newestFromReportsUpToDateWhenNothingNewerHasAnApk() {
         val old = UpdateChecker.Candidate(
             "v0.3.0-alpha", false, "https://example/release",
