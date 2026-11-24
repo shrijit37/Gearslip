@@ -219,6 +219,7 @@ private fun UpdatesSection() {
         UpdateChecker.State.UpToDate -> stringResource(
             if (isDev) R.string.settings_update_dev_up_to_date else R.string.settings_update_up_to_date,
         )
+        UpdateChecker.State.NoStableRelease -> stringResource(R.string.settings_update_no_stable)
         is UpdateChecker.State.Available -> stringResource(R.string.settings_update_available, state.release.version)
         is UpdateChecker.State.Downloading -> stringResource(R.string.update_downloading, (state.fraction * 100).toInt())
         is UpdateChecker.State.Ready -> state.error?.let { stringResource(R.string.settings_update_retry, it) }

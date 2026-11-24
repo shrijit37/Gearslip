@@ -135,6 +135,29 @@ class UpdateCheckerTest {
         )
         check(state is UpdateChecker.State.Available)
         assertEquals(100, state.release.versionCode)
+
+        // Two promotions in the same minute share a code; equal codes install fine.
+        check(
+            UpdateChecker.newestFrom(
+                listOf(promoted), "0.5.0-alpha+30.abc1234", listOf("arm64-v8a"), 100,
+            ) is UpdateChecker.State.Available,
+        )
+    }
+
+    @Test
+    fun newestFromReportsNoStableReleaseBeforeAnyPromotion() {
+        val apk = UpdateChecker.Candidate.Asset("Gearslip-arm64-v8a-debug.apk", "https://example/arm.apk", 1, "abc")
+        val prerelease = UpdateChecker.Candidate(
+            "v0.5.0-alpha", false, "https://example/release", listOf(apk), true,
+        )
+        check(
+            UpdateChecker.newestFrom(listOf(prerelease), "0.4.0-alpha", listOf("arm64-v8a")) is
+                UpdateChecker.State.NoStableRelease,
+        )
+        check(
+            UpdateChecker.newestFrom(emptyList(), "0.4.0-alpha", listOf("arm64-v8a")) is
+                UpdateChecker.State.NoStableRelease,
+        )
     }
 
     @Test

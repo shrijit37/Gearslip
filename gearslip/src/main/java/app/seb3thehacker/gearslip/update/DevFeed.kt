@@ -66,7 +66,9 @@ internal object DevFeed {
         if (build.sha.equals(installedSha, ignoreCase = true)) return null
         // Channel switches install out of chronological order. A dev APK built before the
         // installed one has a lower version code, which Android would refuse at install time.
-        if (installedVersionCode >= 0 && build.versionCode in 0..installedVersionCode) return null
+        // Equal codes are installable, and CI stamps them per minute, so skip only strict
+        // downgrades — otherwise a fix force-published in the same minute is never offered.
+        if (installedVersionCode >= 0 && build.versionCode in 0 until installedVersionCode) return null
         val verified = build.assets.filter { !it.sha256.isNullOrBlank() }
         val name = pickAsset(verified.map { it.name }, supportedAbis) ?: return null
         return build.copy(assets = listOf(verified.first { it.name == name }))

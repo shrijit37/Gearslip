@@ -53,6 +53,8 @@ object UpdateChecker {
         data object Idle : State
         data object Checking : State
         data object UpToDate : State
+        /** No promoted stable release exists yet, rather than a stable release that is merely older. */
+        data object NoStableRelease : State
         data class Available(val release: Release) : State
         data class Downloading(val release: Release, val fraction: Float) : State
         /** [error] is set when starting the install failed, so the card can offer a retry without re-downloading. */
@@ -275,12 +277,14 @@ object UpdateChecker {
                     else -> 0
                 }
             }
+        if (newestFirst.isEmpty()) return State.NoStableRelease
         for (release in newestFirst) {
             // A promoted APK has a frozen version code. If a newer dev build is installed, this
             // release would be a downgrade even though its version name is higher, and Android
-            // would reject the install. Releases without a published code rely on the check
-            // against the downloaded APK in download().
-            if (release.versionCode >= 0 && release.versionCode <= installedVersionCode) continue
+            // would reject the install. Equal codes install fine (CI stamps them per minute), so
+            // only strict downgrades are skipped. Releases without a published code rely on the
+            // check against the downloaded APK in download().
+            if (release.versionCode >= 0 && release.versionCode < installedVersionCode) continue
             // Only install bytes we can check. If the phone's preferred ABI split has no digest,
             // fall through to a verified asset in the same release (the universal APK) instead of
             // reporting no update at all.
@@ -321,6 +325,8 @@ object UpdateChecker {
         if (flow.value is State.Downloading) return
         if (release.channel != channel(context)) return
         val app = context.applicationContext
+        // The ref can change between the UI reading the card and this tap.
+        if (release.channel == CHANNEL_DEV && release.target != devRef(app)) return
         val downloadGeneration = generation
         flow.value = State.Downloading(release, 0f)
         background("gearslip-update") {
@@ -340,6 +346,9 @@ object UpdateChecker {
                     flow.value = State.Failed("This build is older than the one installed. Pick a newer dev ref or wait for a newer stable release.")
                     return@background
                 }
+                // reset() may have run after the earlier generation check but before this point;
+                // never republish a Ready the driver no longer asked for.
+                if (downloadGeneration != generation) return@background
                 GearslipLog.i("update: downloaded ${release.version}")
                 flow.value = State.Ready(release, apk)
                 install(app)
@@ -402,6 +411,9 @@ object UpdateChecker {
         // The driver may have switched channel while the APK was downloading or waiting for the
         // car. Never hand bytes from the other track to the installer.
         if (ready.release.channel != channel(context)) return
+        // A dev ref change keeps the channel, so check the target too: every install entry point
+        // (the card's button, the return from install settings, the car disconnect) is covered.
+        if (ready.release.channel == CHANNEL_DEV && ready.release.target != devRef(context)) return
         // A published code lower than the installed one would be rejected as a downgrade. The
         // APK itself was checked in download(); this guards older feeds without a published code.
         if (ready.release.versionCode in 0 until BuildConfig.VERSION_CODE) {

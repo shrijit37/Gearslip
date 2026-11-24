@@ -41,6 +41,8 @@ class DevFeedTest {
 
         // A later dev build is installed, so this ref's older APK must not be offered.
         assertNull(DevFeed.select(feed, "main", "newer1", listOf("arm64-v8a"), 101))
+        // Equal codes mean two publishes in the same minute; Android still installs them.
+        check(DevFeed.select(feed, "main", "newer1", listOf("arm64-v8a"), 100) != null)
         // The same APK is fine over an older install.
         check(DevFeed.select(feed, "main", "newer1", listOf("arm64-v8a"), 99) != null)
     }
