@@ -10,6 +10,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -99,7 +100,7 @@ fun CarDock(navigator: CarNavigator, modifier: Modifier = Modifier) {
                 DockDivider(Modifier.padding(horizontal = if (compact) 8.dp else 24.dp))
                 Row(
                     Modifier.weight(1f),
-                    horizontalArrangement = androidx.compose.foundation.layout.Arrangement.Center,
+                    horizontalArrangement = Arrangement.Center,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     DockPill(
@@ -192,25 +193,35 @@ private fun DockPill(
     } else {
         base
     }
-    Row(
-        clickable,
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp),
-    ) {
-        if (indicator && active) {
-            Box(Modifier.size(8.dp).background(scheme.error, CircleShape))
+    // The Box centres the whole icon/label cluster inside the pill. A Row with the default
+    // spacedBy alignment (Start) would pin icon-only pills' icons to the left edge instead.
+    Box(clickable, contentAlignment = Alignment.Center) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Icon(icon, contentDescription = null, tint = content, modifier = Modifier.size(18.dp))
+            if (!compact && !iconOnly) {
+                Text(
+                    label.uppercase(),
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium,
+                        letterSpacing = 0.1.em,
+                    ),
+                    color = content,
+                    maxLines = 1,
+                )
+            }
         }
-        Icon(icon, contentDescription = null, tint = content, modifier = Modifier.size(18.dp))
-        if (!compact && !iconOnly) {
-            Text(
-                label.uppercase(),
-                style = MaterialTheme.typography.labelSmall.copy(
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Medium,
-                    letterSpacing = 0.1.em,
-                ),
-                color = content,
-                maxLines = 1,
+        // Drawn over the pill so the playing indicator never shifts the icon out of line.
+        if (indicator && active) {
+            Box(
+                Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(8.dp)
+                    .size(8.dp)
+                    .background(scheme.error, CircleShape),
             )
         }
     }
@@ -222,7 +233,7 @@ private fun VolumeStepper(volume: VolumeState) {
     val scheme = MaterialTheme.colorScheme
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         RoundButton(DockIcons.VolumeDown, stringResource(R.string.car_dock_volume_down), volume.lower)
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
