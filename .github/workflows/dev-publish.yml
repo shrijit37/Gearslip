@@ -120,10 +120,12 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          if ! gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/dev-feed" >/dev/null 2>&1; then
-            gh api -X POST "repos/$GITHUB_REPOSITORY/git/refs" \
-              -f ref="refs/heads/dev-feed" -f sha="$(git rev-parse HEAD)"
+          # actions/checkout leaves the token in git config, so a push is the reliable way to
+          # bootstrap the feed branch. Another ref may have created it since the check.
+          if ! git ls-remote --exit-code --heads origin dev-feed >/dev/null; then
+            git push origin "HEAD:refs/heads/dev-feed" || true
           fi
+          git ls-remote --exit-code --heads origin dev-feed >/dev/null || { echo "dev-feed branch is missing"; exit 1; }
           python3 - <<'PY'
           import base64, glob, hashlib, json, os, subprocess, time
 
@@ -145,10 +147,16 @@ jobs:
               result = subprocess.run(
                   ['gh', 'api', 'repos/%s/contents/manifest.json?ref=dev-feed' % repo],
                   capture_output=True, text=True)
-              if result.returncode != 0:
+              # The first publish has no file yet. An error response is JSON on stdout with a
+              # nonzero status; treat both that and any malformed body as an empty feed.
+              if result.returncode != 0 or not result.stdout.strip():
                   return {}, None
-              response = json.loads(result.stdout)
-              return json.loads(base64.b64decode(response['content'])).get('refs', {}), response['sha']
+              try:
+                  response = json.loads(result.stdout)
+                  content = response.get('content', '')
+                  return (json.loads(base64.b64decode(content)).get('refs', {}) if content else {}), response.get('sha')
+              except (ValueError, KeyError, TypeError):
+                  return {}, None
 
           # Two refs can be published at once. Retry with the latest file sha so neither loses
           # the other's entry when GitHub rejects a stale update.
@@ -163,7 +171,10 @@ jobs:
                          '-f', 'content=' + base64.b64encode(body.encode()).decode()]
               if file_sha:
                   command += ['-f', 'sha=' + file_sha]
-              if subprocess.run(command, capture_output=True, text=True).returncode == 0:
+              if subprocess.run(command, capture_output=True, text=True).returncode != 0:
+                  continue
+              written, _ = read()
+              if written.get(ref, {}).get('sha') == sha:
                   break
           else:
               raise SystemExit('could not publish the dev manifest')
