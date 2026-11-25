@@ -14,7 +14,13 @@ import app.seb3thehacker.gearslip.car.CarKeys
 import app.seb3thehacker.gearslip.car.CarSensors
 import app.seb3thehacker.gearslip.car.CarServices
 import app.seb3thehacker.gearslip.car.CarSettings
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 import java.io.IOException
 import app.seb3thehacker.gearslip.protocol.InputProtocol
 import app.seb3thehacker.gearslip.surface.FrameOutput
@@ -91,8 +97,20 @@ class GearslipRunner(
     val waitingForVersion: Boolean get() = running && state == State.WAIT_VERSION
     @Volatile private var lastProgress = System.currentTimeMillis()
     @Volatile private var running = true
-    /** Package scans can be slow: hosted apps are bound off the protocol thread, once per session. */
-    @Volatile private var autostartThread: Thread? = null
+    /**
+     * Hosted apps are bound once per session. The connection setup needs the main Looper
+     * (MediaBrowser), while the package scans inside it already use Dispatchers.IO.
+     */
+    @Volatile private var autostartScope: CoroutineScope? = null
+    @Volatile private var autostartJob: Job? = null
+
+    /** Cancel before the activity shuts the services down: no new app may bind after that. */
+    private fun cancelAutostart() {
+        autostartJob?.cancel()
+        autostartScope?.cancel()
+        autostartJob = null
+        autostartScope = null
+    }
 
     @Volatile private var videoChannelId: Int = -1
     private var videoConfigs: List<ServiceDiscovery.VideoConfig> = emptyList()
@@ -183,6 +201,7 @@ class GearslipRunner(
             // other kind of request with this car next time (see [ServiceDiscoveryQuirks]).
             if (!stopped && state == State.WAIT_SDR) ServiceDiscoveryQuirks.droppedAfter(tls.headUnitKey, plainDiscovery)
             running = false
+            cancelAutostart()
             // The car is gone, but nothing calls stop() when a wireless session drops: it waits
             // for the next one. Close the music channel now, so the audio capture behind it,
             // and the screen sharing Android shows for it, stop too (issue #43).
@@ -197,6 +216,7 @@ class GearslipRunner(
     fun stop() {
         stopped = true
         running = false
+        cancelAutostart()
         writer.shutdownNow()
         CarFocus.request = null
         CarFocus.set(true)
@@ -1111,20 +1131,22 @@ class GearslipRunner(
         }
         // The deleted car home screen bound the map and the media app once it knew the frame
         // geometry. With no UI that never happens: the car's keys have nothing to control and
-        // no track metadata reaches the session. Bind them here, off the protocol thread, and
-        // once per session even if focus is granted again.
-        if (autostartThread == null) {
+        // no track metadata reaches the session. Bind them here, on the main Looper that
+        // MediaBrowser needs, once per session even if focus is granted again. The package
+        // scans inside autostart run on IO, so the protocol read loop is never blocked.
+        if (autostartJob == null) {
             val frame = CarEnvironment.frame.value
-            autostartThread = Thread({
-                runCatching { runBlocking { CarServices.autostart(frame) } }
-                    .onFailure { log.w("hosted app autostart failed: ${it.message}") }
-                // The car may have left while the app scan was running. The activity has
-                // already shut the services down, so close anything opened after that.
-                if (!running || stopped) {
-                    CarServices.shutdown()
-                    log.i("hosted app autostart finished after the session ended - closed it again")
+            val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+            autostartScope = scope
+            autostartJob = scope.launch {
+                try {
+                    CarServices.autostart(frame)
+                } catch (e: CancellationException) {
+                    throw e // the session ended; let the cancelled job stay cancelled
+                } catch (e: Throwable) {
+                    log.w("hosted app autostart failed: ${e.message}")
                 }
-            }, "gearslip-autostart").apply { isDaemon = true; start() }
+            }
         }
 
         val start = Protobuf.varintField(1, SESSION_ID.toLong()) +
