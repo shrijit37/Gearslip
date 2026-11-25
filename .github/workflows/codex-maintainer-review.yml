@@ -48,11 +48,11 @@ jobs:
           base-url: https://llm.shrijit.tech/v1
           reasoning-effort: high
           max-output-tokens: 24000
-          max-diff-chars: 300000
-          max-files: 200
-          max-context-files: 24
-          max-context-chars: 120000
-          max-file-bytes: 100000
+          max-diff-chars: 150000
+          max-files: 60
+          max-context-files: 8
+          max-context-chars: 48000
+          max-file-bytes: 16000
           request-timeout-ms: 600000
           max-retries: 6
           verbose: true
