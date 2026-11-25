@@ -9,12 +9,21 @@ import app.seb3thehacker.gearslip.car.BluetoothAudioCheck
 import app.seb3thehacker.gearslip.car.LocationCheck
 import app.seb3thehacker.gearslip.car.CarBluetooth
 import app.seb3thehacker.gearslip.car.CarEnvironment
+import app.seb3thehacker.gearslip.car.CarData
 import app.seb3thehacker.gearslip.car.CarKeys
 import app.seb3thehacker.gearslip.car.CarSensors
 import app.seb3thehacker.gearslip.car.CarServices
 import app.seb3thehacker.gearslip.car.CarSettings
 import java.io.IOException
 import app.seb3thehacker.gearslip.protocol.InputProtocol
+import app.seb3thehacker.gearslip.surface.FrameOutput
+import app.seb3thehacker.gearslip.surface.FrameSources
+import app.seb3thehacker.gearslip.surface.FrameSource
+import app.seb3thehacker.gearslip.surface.HeadunitSurface
+import app.seb3thehacker.gearslip.surface.PlaceholderFrameSource
+import app.seb3thehacker.gearslip.surface.SurfaceCapability
+import app.seb3thehacker.gearslip.surface.SurfaceContext
+import app.seb3thehacker.gearslip.surface.VideoSpec
 import java.io.InputStream
 import java.io.OutputStream
 import java.util.concurrent.Executors
@@ -45,6 +54,11 @@ class GearslipRunner(
     private val wireless: Boolean = false,
     /** Gearslip's icon as 32, 64 and 128 px PNGs, for the car's phone tile. See [PhoneIcons]. */
     private val phoneIcons: () -> List<ByteArray> = { emptyList() },
+    /**
+     * Optional head-unit surface. The session drives it through [HeadunitSurface] only: it never
+     * knows what, if anything, is drawing on the car screen.
+     */
+    private val surface: HeadunitSurface? = null,
 ) {
     private val log = GearslipLog.tagged("PROTO")
 
@@ -84,7 +98,7 @@ class GearslipRunner(
     @Volatile private var videoStarted = false
     /** The car's screen has been asked for once, so asking again is in order. */
     @Volatile private var focusAsked = false
-    private var videoSource: VideoSource? = null
+    private var frameSource: FrameSource? = null
     @Volatile private var inFlight = 0
     /** Guards [inFlight]: the encoder thread waits on it for the head unit's acks. */
     private val ackLock = Object()
@@ -184,8 +198,9 @@ class GearslipRunner(
         CarFocus.request = null
         CarFocus.set(true)
         synchronized(ackLock) { ackLock.notifyAll() } // free an encoder waiting on an ack
-        videoSource?.stop()
-        videoSource = null
+        frameSource?.stop()
+        frameSource = null
+        surface?.detach()
         CarAudio.openSink = null
         audioLink?.close()
         audioLink = null
@@ -884,7 +899,13 @@ class GearslipRunner(
             log.w("the car said it took its screen back but still sends touches - showing ours again")
             onVideoFocus(VIDEO_FOCUS_PROJECTED)
         }
-        val (action, actionIndex, points) = InputProtocol.touch(touch, null) ?: return
+        // The car crops its margin off the frame and measures taps from the corner of what it
+        // shows, so the same gesture arrives short by half the margin on each side.
+        val config = videoConfigs.getOrNull(selectedConfigIndex ?: 0)
+        val insets = config?.marginInsets() ?: Insets.NONE
+        val size = config?.pixelSize()
+        val (action, actionIndex, points) =
+            InputProtocol.touch(touch, size, insets.left, insets.top) ?: return
         if (points.size > 1 && touchesSeen < 3) {
             log.i("multi-touch: ${points.size} pointers, action=$action index=$actionIndex")
         }
@@ -896,6 +917,9 @@ class GearslipRunner(
         }
         // Time the next frame against this tap: see [reportTouchLatency].
         if (action == ACTION_DOWN || action == ACTION_UP) touchAtUs = System.nanoTime() / 1000
+        if (surface != null && SurfaceCapability.TOUCH in surface.capabilities) {
+            surface.onTouch(action, actionIndex, points)
+        }
     }
 
     /**
@@ -927,6 +951,9 @@ class GearslipRunner(
             val down = Wire.varint(fields, 2) == 1L
             val longPress = Wire.varint(fields, 4) == 1L
             log.i("<- key event: keycode=$keycode ${if (down) "down" else "up"}${if (longPress) " long" else ""}")
+            if (surface != null && SurfaceCapability.KEYS in surface.capabilities) {
+                surface.onKey(keycode, down, longPress)
+            }
             if (!CarKeys.onKey(keycode, down, longPress) && down) log.i("unhandled keycode=$keycode")
         }
     }
@@ -941,7 +968,8 @@ class GearslipRunner(
             val keycode = Wire.varint(fields, 1)?.toInt() ?: continue
             // int32, so a turn the other way arrives as a 64-bit two's complement varint.
             val delta = Wire.varint(fields, 2)?.toInt() ?: continue
-            log.i("<- relative event: keycode=$keycode delta=$delta (no UI attached)")
+            log.i("<- relative event: keycode=$keycode delta=$delta")
+            if (surface != null && SurfaceCapability.KEYS in surface.capabilities) surface.onRotate(delta)
         }
     }
 
@@ -1023,7 +1051,7 @@ class GearslipRunner(
                 log.i("<- UpdateUiConfigRequest (${body.size} bytes) - sending the stream's start again")
                 log.hex("   ui config", body, limit = 64)
                 lastCodecConfig?.let { send(MSG_MEDIA_CODEC_CONFIG, it, encrypted = true, channel = videoChannelId) }
-                videoSource?.requestSyncFrame()
+                frameSource?.requestSyncFrame()
             }
 
             else -> log.i("<- unhandled video message id=$messageId (${body.size} bytes)")
@@ -1083,28 +1111,48 @@ class GearslipRunner(
         decoderBound = false
         adaptiveVideo = CarSettings.experimentalFeaturesEnabled.value && CarSettings.adaptiveVideoEnabled.value
         if (adaptiveVideo) log.i("video: adaptive bitrate on (experimental)")
-        videoSource = VideoSource(
-            width = width,
-            height = height,
-            frameRate = videoFrameRate,
-            wireless = wireless,
-            onCodecConfig = { csd ->
+        // The car crops its margins; publish them so any attached surface can keep its content
+        // inside the visible frame. A vehicle profile with its own insets takes precedence.
+        if (vehicleProfile?.insets.let { it == null || it == Insets.NONE }) {
+            CarEnvironment.setInsets(config.marginInsets())
+        }
+
+        val spec = VideoSpec(width, height, videoFrameRate, config.density, wireless)
+        val output = object : FrameOutput {
+            override fun onCodecConfig(csd: ByteArray) {
                 lastCodecConfig = csd
                 send(MSG_MEDIA_CODEC_CONFIG, csd, encrypted = true, channel = videoChannelId)
                 log.i("-> CodecConfig (${csd.size} bytes SPS/PPS)")
                 log.hex("   csd", csd, limit = 64)
-            },
-            onFrame = { data, presentationTimeUs, keyFrame ->
+            }
+
+            override fun onFrame(data: ByteArray, presentationTimeUs: Long, keyFrame: Boolean) {
                 sendVideoFrame(data, presentationTimeUs, keyFrame)
-            },
-        ).also { source ->
-            runCatching {
-                source.start()
-                SessionStatus.projecting()
-                BluetoothAudioCheck.onProjecting()
-                LocationCheck.onProjecting()
-            }.onFailure { e -> log.e("encoder start failed", e) }
+            }
         }
+        // A surface is attached for every session; only one that declares PROVIDES_FRAMES may
+        // replace the encoder's source. Everything else keeps the generated placeholder.
+        val source = FrameSources.choose(
+            surface, surfaceContext(), spec,
+            PlaceholderFrameSource(width, height, videoFrameRate, wireless),
+        )
+        frameSource = source
+        runCatching {
+            source.start(output)
+            SessionStatus.projecting()
+            BluetoothAudioCheck.onProjecting()
+            LocationCheck.onProjecting()
+        }.onFailure { e -> log.e("encoder start failed", e) }
+    }
+
+    /** A stable, read-only view of session state for whichever head-unit surface is attached. */
+    private fun surfaceContext() = object : SurfaceContext {
+        override val session = SessionStatus.state
+        override val frame = CarEnvironment.frame
+        override val insets = CarEnvironment.insets
+        override val night = CarEnvironment.darkOutside
+        override val carData = CarData.state
+        override val vehicle = CarEnvironment.vehicle
     }
 
     /**
@@ -1181,11 +1229,13 @@ class GearslipRunner(
             CarFocus.request = ::requestNativeFocus
             log.i("PHASE A COMPLETE - video focus granted; starting video source")
             startVideoSource()
+            surface?.onFocus(true)
             return
         }
         if (projected == videoProjected) return
         videoProjected = projected
         CarFocus.set(projected)
+        surface?.onFocus(projected)
         if (projected) {
             log.i("the car handed its screen back - restarting the stream")
             // Frames sent just before the car took over may never be acked.
@@ -1198,7 +1248,7 @@ class GearslipRunner(
             send(MSG_MEDIA_START, start, encrypted = true, channel = videoChannelId)
             log.i("-> Start(session_id=$SESSION_ID)")
             lastCodecConfig?.let { send(MSG_MEDIA_CODEC_CONFIG, it, encrypted = true, channel = videoChannelId) }
-            videoSource?.requestSyncFrame()
+            frameSource?.requestSyncFrame()
         } else {
             // A phone ends the stream when the car takes its screen. LIVI switches on the focus
             // answer alone, but the 2018 Uconnect kept showing our last frame until it got Stop.
@@ -1356,7 +1406,7 @@ class GearslipRunner(
                 } catch (e: IOException) {
                     if (running) log.w("send failed, stopping: ${e.message}")
                     running = false
-                    videoSource?.stop()
+                    frameSource?.stop()
                 }
             }
         } catch (e: RejectedExecutionException) {
@@ -1447,7 +1497,7 @@ class GearslipRunner(
                     log.i(
                         "video: ${"%.1f".format(fps)} fps over 5s | sent=$sent waited=${waited}ms " +
                             "acked=$acksSeen inFlight=$inFlight split=$splitMessages " +
-                            "kbps=${(videoSource?.bitRate ?: 0) / 1000}",
+                            "kbps=${(frameSource?.bitRate ?: 0) / 1000}",
                     )
                     adaptBitRate(fps, waited)
 
@@ -1457,7 +1507,7 @@ class GearslipRunner(
                     // some other path - a real decoder desync should never outlive this.
                     val idleSinceKeyframe = System.currentTimeMillis() - lastKeyframeSentAt
                     if (idleSinceKeyframe > PERIODIC_KEYFRAME_MS) {
-                        videoSource?.requestSyncFrame()
+                        frameSource?.requestSyncFrame()
                     }
                 }
             }
@@ -1484,7 +1534,7 @@ class GearslipRunner(
      */
     private fun adaptBitRate(fps: Double, waitedMs: Long) {
         if (!adaptiveVideo) return
-        val source = videoSource ?: return
+        val source = frameSource ?: return
         val target = videoFrameRate.toDouble()
         val behind = waitedMs > ADAPT_WINDOW_MS / 2 && fps < target * 0.8
         val easy = waitedMs < ADAPT_WINDOW_MS / 10
@@ -1496,12 +1546,12 @@ class GearslipRunner(
                     // The last cut bought no frames: the car's decoder is the limit, not the
                     // link, and smaller frames would only look worse. Undo it and stop here.
                     decoderBound = true
-                    source.setBitRate(cut.first)
+                    source.applyBitRate(cut.first)
                     log.i("video: a lower bitrate didn't help the car keep up - back to ${cut.first / 1000} kbps, adapting off")
                     return
                 }
                 val before = source.bitRate
-                source.setBitRate((before * 0.75).toInt())
+                source.applyBitRate((before * 0.75).toInt())
                 if (source.bitRate != before) {
                     lastCut = before to fps
                     log.i("video: car falling behind - bitrate ${before / 1000} -> ${source.bitRate / 1000} kbps")
@@ -1512,7 +1562,7 @@ class GearslipRunner(
                 if (++smoothWindows >= 2) {
                     smoothWindows = 0
                     val before = source.bitRate
-                    source.setBitRate((before * 1.1).toInt() + 1)
+                    source.applyBitRate((before * 1.1).toInt() + 1)
                     log.i("video: keeping up - bitrate ${before / 1000} -> ${source.bitRate / 1000} kbps")
                 }
             }
