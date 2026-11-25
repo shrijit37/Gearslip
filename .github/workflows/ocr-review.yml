@@ -1,0 +1,125 @@
+# OpenCodeReview - GitHub Actions PR auto-review.
+#
+# Mirrors alibaba/open-code-review's github_actions example: PR events and
+# on-demand '/open-code-review' or '@open-code-review' comments both run the
+# official action. No PR code is checked out or executed in this job; the
+# action fetches the base and head blobs itself, so pull_request_target can
+# safely expose secrets for fork PRs.
+#
+# Required secrets/vars (Settings -> Secrets and variables -> Actions):
+#   secret    OCR_LLM_URL            LLM endpoint, e.g. https://llm.example/v1/chat/completions
+#   secret    OCR_LLM_AUTH_TOKEN     LLM auth token
+#   variable  OCR_LLM_MODEL          model name
+#   variable  OCR_LLM_USE_ANTHROPIC  'false' for OpenAI-compatible endpoints
+#
+# GitHub blocks pull_request_target by default in public repos from Dec 2, 2026
+# unless an Actions policy explicitly allows it for this workflow. Allow
+# pull_request_target and issue_comment under Settings -> Actions -> Policies.
+
+name: OpenCodeReview PR Review
+
+# GitHub evaluates concurrency before job-level if. A flat group would let any
+# unrelated comment cancel a running review, so matching events share a per-PR
+# group and ignored comments get a unique noop group instead.
+concurrency:
+  group: >-
+    ${{
+      (
+        github.event_name == 'pull_request_target'
+        || (
+          github.event_name == 'issue_comment'
+          && github.event.issue.pull_request
+          && github.event.comment.user.type != 'Bot'
+          && (
+            github.event.comment.author_association == 'MEMBER'
+            || github.event.comment.author_association == 'OWNER'
+            || github.event.comment.author_association == 'COLLABORATOR'
+          )
+          && (
+            startsWith(github.event.comment.body, '/open-code-review')
+            || startsWith(github.event.comment.body, '@open-code-review')
+          )
+        )
+      )
+      && format('ocr-{0}', github.event.pull_request.number || github.event.issue.number)
+      || format('noop-{0}', github.run_id)
+    }}
+  cancel-in-progress: true
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  code-review:
+    runs-on: ubuntu-latest
+    # Thorough reviews of large diffs take longer than the example's 30 minutes.
+    timeout-minutes: 60
+    # Only PR events, or comments from collaborators asking for a re-review.
+    # The bot and author-association guards keep arbitrary commenters from
+    # spending LLM quota.
+    if: |
+      github.event_name == 'pull_request_target'
+      || (
+        github.event_name == 'issue_comment'
+        && github.event.issue.pull_request
+        && github.event.comment.user.type != 'Bot'
+        && (
+          github.event.comment.author_association == 'MEMBER'
+          || github.event.comment.author_association == 'OWNER'
+          || github.event.comment.author_association == 'COLLABORATOR'
+        )
+        && (
+          startsWith(github.event.comment.body, '/open-code-review')
+          || startsWith(github.event.comment.body, '@open-code-review')
+        )
+      )
+    steps:
+      - name: Get PR context
+        id: pr-context
+        if: github.event_name == 'issue_comment'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            // issue_comment has no top-level pull_request fields, so resolve
+            // the refs and title for the action and for review context.
+            const prNumber = context.issue.number;
+            const { data: pullRequest } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: prNumber
+            });
+            core.setOutput('base_ref', pullRequest.base.ref);
+            core.setOutput('head_sha', pullRequest.head.sha);
+            core.setOutput('title', pullRequest.title);
+
+      - name: Run OpenCodeReview
+        uses: alibaba/open-code-review@main
+        with:
+          llm_url: ${{ secrets.OCR_LLM_URL }}
+          llm_auth_token: ${{ secrets.OCR_LLM_AUTH_TOKEN }}
+          llm_model: ${{ vars.OCR_LLM_MODEL }}
+          llm_use_anthropic: ${{ vars.OCR_LLM_USE_ANTHROPIC }}
+          # issue_comment carries no PR refs; use the ones resolved above.
+          base_ref: ${{ steps.pr-context.outputs.base_ref }}
+          head_sha: ${{ steps.pr-context.outputs.head_sha }}
+          # Review the whole merge-base..head diff on every run, with no
+          # checkpoint narrowing and no duplicate-comment filtering.
+          sticky_summary: 'true'
+          incremental: 'false'
+          checkpoint_range: 'false'
+          # High effort, generous per-request timeouts, and no token cap so a
+          # large refactor is not cut short. Keep concurrency modest to stay
+          # within the LLM gateway's rate limits.
+          effort: high
+          review_task_timeout: '30'
+          llm_timeout: '900'
+          review_concurrency: '3'
+          stream_progress: 'true'
+          background: ${{ github.event.pull_request.title || steps.pr-context.outputs.title }}
