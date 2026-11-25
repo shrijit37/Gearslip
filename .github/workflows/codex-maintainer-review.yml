@@ -39,7 +39,7 @@ jobs:
     steps:
       - name: Review changed lines
         id: maintainer
-        uses: shrijit37/codex-maintainer@eb6677311908d0796270d2450d8f164329f7b2f4
+        uses: shrijit37/codex-maintainer@b21f491d8b944ac703fd07166a274161881f3177
         with:
           openai-api-key: ${{ secrets.OCR_LLM_AUTH_TOKEN }}
           github-token: ${{ github.token }}
@@ -53,6 +53,7 @@ jobs:
           max-context-files: 8
           max-context-chars: 48000
           max-file-bytes: 16000
+          exclude-paths: docs/,carplay-nothing-final.html,carplay-nothing-preview.html,.github/,LICENSE,NOTICE.md,PRIVACY.md,README.md,CONTRIBUTING.md,CARS.md,CLA.md,CI.md,design.md
           request-timeout-ms: 600000
           max-retries: 6
           verbose: true
