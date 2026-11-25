@@ -39,7 +39,7 @@ jobs:
     steps:
       - name: Review changed lines
         id: maintainer
-        uses: shrijit37/codex-maintainer@6b20c80643eb4a1d63583a3e1e92c2d3788389a7
+        uses: shrijit37/codex-maintainer@1a35c8f0ee94fd5014e6681b0b8f1267f615d53d
         with:
           openai-api-key: ${{ secrets.OCR_LLM_AUTH_TOKEN }}
           github-token: ${{ github.token }}
@@ -54,5 +54,6 @@ jobs:
           max-context-chars: 120000
           max-file-bytes: 100000
           request-timeout-ms: 600000
+          max-retries: 6
           verbose: true
           comment: 'true'
