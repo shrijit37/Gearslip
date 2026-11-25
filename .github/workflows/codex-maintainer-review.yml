@@ -39,7 +39,7 @@ jobs:
     steps:
       - name: Review changed lines
         id: maintainer
-        uses: shrijit37/codex-maintainer@1ed3a5bbc5b6532e4b7d9ab565fa24ac73b215dc
+        uses: shrijit37/codex-maintainer@6b20c80643eb4a1d63583a3e1e92c2d3788389a7
         with:
           openai-api-key: ${{ secrets.OCR_LLM_AUTH_TOKEN }}
           github-token: ${{ github.token }}
