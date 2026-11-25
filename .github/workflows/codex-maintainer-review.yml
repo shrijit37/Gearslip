@@ -39,7 +39,7 @@ jobs:
     steps:
       - name: Review changed lines
         id: maintainer
-        uses: shrijit37/codex-maintainer@4a9f750e14dc7510da3533da3e252098d8bc98e0
+        uses: shrijit37/codex-maintainer@32931680c3a1b4ea7e6e49dc51d7e4668f4d3739
         with:
           openai-api-key: ${{ secrets.OCR_LLM_AUTH_TOKEN }}
           github-token: ${{ github.token }}
@@ -48,5 +48,10 @@ jobs:
           base-url: https://llm.shrijit.tech/v1
           reasoning-effort: high
           max-output-tokens: 24000
+          max-diff-chars: 300000
+          max-files: 200
+          max-context-files: 24
+          max-context-chars: 120000
+          max-file-bytes: 100000
           verbose: true
           comment: 'true'
