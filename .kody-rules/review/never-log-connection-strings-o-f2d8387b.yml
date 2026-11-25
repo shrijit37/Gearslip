@@ -1,0 +1,32 @@
+title: Never log connection strings or raw database errors
+rule: >-
+  Logging and error reporting must not include the Postgres connection string,
+  password, or the full unredacted error object thrown by `pg` (it can carry
+  connection details and query text with embedded values). Log a stable message
+  plus only safe fields such as `err.code` / `err.message` summarized, and
+  surface a generic error to the client instead of the raw driver error.
+severity: medium
+scope: file
+path: '**/*'
+examples:
+  - snippet: |-
+      try {
+        await pool.query(sql, params);
+      } catch (err) {
+        console.error('query failed', err, process.env.DATABASE_URL);
+        throw err;
+      }
+    isCorrect: false
+  - snippet: |-
+      try {
+        await pool.query(sql, params);
+      } catch (err) {
+        console.error('query failed', { code: (err as { code?: string }).code });
+        throw new Error('Unable to complete request');
+      }
+    isCorrect: true
+inheritance:
+  inheritable: true
+  exclude: []
+  include: []
+enabled: false

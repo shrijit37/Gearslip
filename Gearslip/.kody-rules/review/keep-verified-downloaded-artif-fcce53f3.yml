@@ -1,0 +1,36 @@
+title: Keep Verified Downloaded Artifacts After Transient Failures
+rule: >-
+  Do not delete a successfully downloaded and verified file from a failure
+  branch of an install flow: a status from an older session can arrive while a
+  newer attempt is copying or installing the same file. Keep the file and let
+  retry reuse the same bytes; clear the cache only immediately before fetching
+  fresh bytes, and discard the file only when the bytes themselves are rejected
+  (e.g. signature mismatch).
+severity: high
+scope: file
+examples:
+  - snippet: |-
+      private fun onInstallStatus(status: SessionStatus) {
+          if (status is Failed) {
+              apkFile.deleteRecursively() // stale status deletes a file a newer attempt is copying
+              flow.value = State.Failed(status.message)
+          }
+      }
+    isCorrect: false
+  - snippet: |-
+      private fun onInstallStatus(status: SessionStatus) {
+          if (status is Failed) {
+              flow.value = State.Failed(status.message) // keep file; Install retries same bytes
+          }
+      }
+
+      private suspend fun download() {
+          apkFile.deleteRecursively() // clear only before fetching fresh bytes
+          apkFile.writeBytes(fetchApk())
+      }
+    isCorrect: true
+inheritance:
+  inheritable: true
+  exclude: []
+  include: []
+enabled: false

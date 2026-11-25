@@ -1,0 +1,49 @@
+title: Rate-limit every public API route with a shared Redis-backed store
+rule: >-
+  Any Express route that is reachable from the public internet must be protected
+  by express-rate-limit middleware. Configure the limiter with a shared store
+  backed by the existing ioredis client (e.g. rate-limit-redis) so limits are
+  enforced consistently across all instances and restarts, and use stricter
+  windows/limits for expensive or abuse-prone endpoints (auth, writes, upstream
+  market-data fetches). Do not rely on the default in-memory store in production
+  and do not leave a public route without a limiter.
+severity: high
+scope: file
+path: '**/*'
+examples:
+  - snippet: |-
+      const app = express();
+
+      app.post("/api/watchlist", addToWatchlist);
+      app.post("/api/auth/login", login);
+      app.get("/api/quotes/:symbol", getQuote);
+    isCorrect: false
+  - snippet: |-
+      import rateLimit from "express-rate-limit";
+      import { RedisStore } from "rate-limit-redis";
+      import { redis } from "./redis";
+
+      const createLimiter = (windowMs: number, limit: number) =>
+        rateLimit({
+          windowMs,
+          limit,
+          standardHeaders: true,
+          legacyHeaders: false,
+          store: new RedisStore({ sendCommand: (...args: string[]) => redis.call(...args) }),
+        });
+
+      const apiLimiter = createLimiter(60_000, 60);
+      const authLimiter = createLimiter(15 * 60_000, 5);
+
+      const app = express();
+
+      app.use("/api", apiLimiter);
+      app.post("/api/watchlist", addToWatchlist);
+      app.post("/api/auth/login", authLimiter, login);
+      app.get("/api/quotes/:symbol", getQuote);
+    isCorrect: true
+inheritance:
+  inheritable: true
+  exclude: []
+  include: []
+enabled: false

@@ -1,0 +1,54 @@
+title: Keep Pending State Flags Consistent on Failure Paths
+rule: >-
+  When a boolean pending/one-shot flag (e.g. installWhenAllowed,
+  installWhenCarDisconnected) drives deferred work, clear it whenever the
+  operation it guards fails or is abandoned, and do not clear it before that
+  work actually starts. Leaving a stale flag set makes a later resume silently
+  drop the action; clearing it too early drops a still-queued action.
+severity: high
+scope: file
+examples:
+  - snippet: |-
+      fun onAppResumed() {
+          if (!installWhenAllowed) return
+          install()
+      }
+
+      private fun install() {
+          val ready = flow.value as? State.Ready ?: return // Failed -> early return, flag stays true
+          attemptInstall(ready)
+      }
+
+      fun openUnknownSources() {
+          try {
+              context.startActivity(settingsIntent)
+          } catch (e: ActivityNotFoundException) {
+              flow.value = State.Failed(e.message) // installWhenAllowed left true
+          }
+      }
+    isCorrect: false
+  - snippet: |-
+      fun openUnknownSources() {
+          try {
+              context.startActivity(settingsIntent)
+          } catch (e: ActivityNotFoundException) {
+              installWhenAllowed = false // clear on failure
+              flow.value = State.Failed(e.message)
+          }
+      }
+
+      fun onCarDisconnected() {
+          install() // do not clear here; install() clears only when it proceeds
+      }
+
+      private fun install() {
+          val ready = flow.value as? State.Ready ?: return
+          pendingInstall = false
+          attemptInstall(ready)
+      }
+    isCorrect: true
+inheritance:
+  inheritable: true
+  exclude: []
+  include: []
+enabled: false

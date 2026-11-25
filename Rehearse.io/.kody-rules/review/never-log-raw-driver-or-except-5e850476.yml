@@ -1,0 +1,33 @@
+title: Never log raw driver or exception messages that carry bound parameters
+rule: >-
+  When a database driver, ORM or persistence call fails, log only the error's
+  name/kind (or a fixed message), never `error.message` or the error object.
+  Driver messages embed the failing SQL statement and its bound parameters,
+  which can contain the candidate's/user's payload. Persistence helpers should
+  return a status and let the caller log that, so the detailed message never
+  leaves the function that produced it.
+severity: critical
+scope: file
+examples:
+  - snippet: |-
+      try {
+          await db.insert(rehearsalSessions).values({ transcription, score });
+      } catch (err) {
+          // Noncompliant: the driver message carries the SQL and the transcript
+          console.error(`[live] failed to save session: ${(err as Error).message}`);
+      }
+    isCorrect: false
+  - snippet: >-
+      const status = await saveSession(session); // returns status, never throws
+      a driver message
+
+      if (status !== "ok") {
+          // Compliant: only the error kind reaches the log
+          console.warn(`[live] failed to save session (${status})`);
+      }
+    isCorrect: true
+inheritance:
+  inheritable: true
+  exclude: []
+  include: []
+enabled: false

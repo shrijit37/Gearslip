@@ -1,0 +1,39 @@
+title: Keep Shared Initialization Idempotent
+rule: >-
+  Shared init() methods that start coroutines, collectors, or listeners must be
+  safe to call more than once. Guard initialization and reset the guard on
+  release so duplicate collectors or listeners are not created when multiple
+  screens or reconnects call init().
+severity: high
+scope: file
+examples:
+  - snippet: |-
+      object MusicPlayer {
+          fun init() {
+              scope.launch { state.collect { updateState(it) } }
+              scope.launch { queue.collect { updateQueue(it) } }
+          }
+      }
+    isCorrect: false
+  - snippet: |-
+      object MusicPlayer {
+          private var initScope: CoroutineScope? = null
+
+          fun init() {
+              if (initScope != null) return
+              initScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+              initScope!!.launch { state.collect { updateState(it) } }
+              initScope!!.launch { queue.collect { updateQueue(it) } }
+          }
+
+          fun release() {
+              initScope?.cancel()
+              initScope = null
+          }
+      }
+    isCorrect: true
+inheritance:
+  inheritable: true
+  exclude: []
+  include: []
+enabled: false

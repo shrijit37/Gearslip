@@ -1,0 +1,26 @@
+title: Use parameterized pgx queries instead of string interpolation
+rule: >-
+  All SQL executed through pgx/pgxpool must use placeholders ($1, $2, ...) with
+  arguments passed to Query/QueryRow/Exec. Never build SQL by concatenating or
+  formatting user-controlled values with fmt.Sprintf, string concatenation, or
+  template literals, as this enables SQL injection. Dynamic identifiers
+  (table/column names) must be validated against a fixed allow-list rather than
+  interpolated directly.
+severity: critical
+scope: file
+path: '**/*'
+examples:
+  - snippet: >-
+      row := pool.QueryRow(ctx, "SELECT id, amount FROM bills WHERE customer_id
+      = $1 AND status = $2", customerID, status)
+    isCorrect: true
+  - snippet: >-
+      query := fmt.Sprintf("SELECT id, amount FROM bills WHERE customer_id =
+      '%s'", customerID)
+
+      rows, err := pool.Query(ctx, query)
+    isCorrect: false
+inheritance:
+  inheritable: true
+  exclude: []
+  include: []

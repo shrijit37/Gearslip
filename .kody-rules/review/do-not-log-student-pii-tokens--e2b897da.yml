@@ -1,0 +1,30 @@
+title: Do not log student PII, tokens, or raw LLM payloads
+rule: >-
+  Because this platform serves K-12 minors, application logs (morgan, console,
+  or any logger) must not emit personally identifiable student data — names,
+  emails, phone numbers, school/roll IDs, uploaded document contents, or
+  chat/LLM prompts and completions. Redact or omit sensitive fields, and never
+  log Authorization headers, JWTs, passwords, or password hashes (bcryptjs
+  output). Log request metadata (method, route, status, latency, correlation ID)
+  instead, and surface errors via structured error objects without embedding
+  user content.
+severity: high
+scope: file
+path: '**/*'
+examples:
+  - snippet: >-
+      app.use(morgan(':method :url :status :response-time ms
+      :req[x-correlation-id]'));
+
+      logger.info({ requestId, studentId: hash(studentId), status },
+      'curriculum.fetch');
+    isCorrect: true
+  - snippet: |-
+      console.log('Student login', { email, password, token });
+      logger.debug('LLM prompt', prompt, response);
+    isCorrect: false
+inheritance:
+  inheritable: true
+  exclude: []
+  include: []
+enabled: false

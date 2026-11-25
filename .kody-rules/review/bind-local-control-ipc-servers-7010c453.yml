@@ -1,0 +1,41 @@
+title: Bind local control/IPC servers to loopback and require authentication
+rule: >-
+  Any WebSocket or TCP server created in this project (e.g. with `ws`, `net`, or
+  Electron IPC bridges) must bind explicitly to a loopback address
+  (`127.0.0.1`/`::1`) instead of the default wildcard host, and every accepted
+  connection must be authenticated before it can issue commands. Do not rely on
+  obscurity of the port. Pass `host: '127.0.0.1'` (or `::1`) to the server
+  constructor and reject connections whose shared token/secret does not match
+  the value read from the environment or a user-only-readable config file,
+  closing the socket with code 1008 on failure.
+severity: critical
+scope: file
+path: '**/*'
+examples:
+  - snippet: |-
+      import { WebSocketServer } from 'ws';
+
+      // Defaults to 0.0.0.0 and accepts any client.
+      const wss = new WebSocketServer({ port: 8234 });
+      wss.on('connection', (socket) => {
+        socket.on('message', (raw) => handleCommand(raw.toString()));
+      });
+    isCorrect: false
+  - snippet: |-
+      import { WebSocketServer } from 'ws';
+
+      const wss = new WebSocketServer({ host: '127.0.0.1', port: 8234 });
+      wss.on('connection', (socket, req) => {
+        const token = req.headers['x-touchbar-token'];
+        if (typeof token !== 'string' || token !== process.env.TOUCHBAR_TOKEN) {
+          socket.close(1008, 'unauthorized');
+          return;
+        }
+        socket.on('message', (raw) => handleCommand(raw.toString()));
+      });
+    isCorrect: true
+inheritance:
+  inheritable: true
+  exclude: []
+  include: []
+enabled: false

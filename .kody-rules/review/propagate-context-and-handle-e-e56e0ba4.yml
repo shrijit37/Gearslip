@@ -1,0 +1,46 @@
+title: Propagate context and handle errors on every pgx call
+rule: >-
+  Every pgx/pgxpool call must receive a context.Context (from the request or a
+  context.WithTimeout) rather than context.Background() or no context, and its
+  returned error must be checked and wrapped with context. Query results must be
+  closed (defer rows.Close()) and rows.Err() must be checked after iteration. Do
+  not swallow database errors with the blank identifier or log-only handling
+  that discards the failure.
+severity: high
+scope: file
+path: '**/*'
+examples:
+  - snippet: >-
+      ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+
+      defer cancel()
+
+      rows, err := pool.Query(ctx, "SELECT id, amount FROM bills WHERE
+      customer_id = $1", customerID)
+
+      if err != nil {
+          return fmt.Errorf("query bills: %w", err)
+      }
+
+      defer rows.Close()
+
+      for rows.Next() {
+          // scan ...
+      }
+
+      if err := rows.Err(); err != nil {
+          return fmt.Errorf("iterate bills: %w", err)
+      }
+    isCorrect: true
+  - snippet: >-
+      rows, _ := pool.Query(context.Background(), "SELECT id, amount FROM
+      bills")
+
+      for rows.Next() {
+          // scan ...
+      }
+    isCorrect: false
+inheritance:
+  inheritable: true
+  exclude: []
+  include: []

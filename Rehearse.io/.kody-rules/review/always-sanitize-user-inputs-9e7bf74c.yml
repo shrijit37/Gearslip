@@ -1,0 +1,25 @@
+title: Always sanitize user inputs
+rule: >-
+  Check if user inputs are sanitized before being used in rendering or database
+  queries. Unsanitized inputs can lead to injection vulnerabilities like XSS or
+  SQL injection.
+severity: critical
+scope: file
+examples:
+  - snippet: |-
+      const userInput = '<script>alert("Hacked!")</script>';
+      document.innerHTML = userInput; // Vulnerable to XSS
+    isCorrect: false
+  - snippet: >-
+      const userInput = '<script>alert("Hacked!")</script>';
+
+      const sanitizedInput = userInput.replace(/</g, '&lt;').replace(/>/g,
+      '&gt;');
+
+      document.innerHTML = sanitizedInput; // Safe rendering
+    isCorrect: true
+inheritance:
+  inheritable: true
+  exclude: []
+  include: []
+enabled: false

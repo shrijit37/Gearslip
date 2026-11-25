@@ -1,0 +1,24 @@
+title: Do not send personally identifiable information to analytics
+rule: >-
+  Custom analytics events must not include PII such as emails, phone numbers,
+  full names, precise addresses, or raw user IDs. Only coarse, non-identifying
+  attributes (plan tier, feature name, counts, country) may be attached to
+  @vercel/analytics events or any other client telemetry call. This protects
+  users and keeps the app compliant with privacy expectations.
+severity: high
+scope: file
+path: '**/*'
+examples:
+  - snippet: |-
+      import { track } from '@vercel/analytics';
+      track('signup', { email: user.email, phone: user.phone });
+    isCorrect: false
+  - snippet: |-
+      import { track } from '@vercel/analytics';
+      track('signup', { plan: user.plan, source: 'landing' });
+    isCorrect: true
+inheritance:
+  inheritable: true
+  exclude: []
+  include: []
+enabled: false

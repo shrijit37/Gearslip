@@ -1,0 +1,63 @@
+title: Validate external URLs before opening them
+rule: >-
+  Any call to `Linking.openURL`, `Linking.openSettings`,
+  `WebBrowser.openBrowserAsync`, or router navigation that consumes a URL from a
+  deep link, route param, or remote payload must be validated against an
+  explicit allowlist of trusted origins before being opened. Reject or ignore
+  anything that does not match. This prevents deep-link injection, open-redirect
+  abuse, and accidental navigation to attacker-controlled or unsafe schemes
+  (`javascript:`, `file:`, custom schemes) in the TV app.
+severity: high
+scope: file
+path: '**/*'
+examples:
+  - snippet: |-
+      // app/video/[id].tsx
+      import * as Linking from "expo-linking";
+      import { useLocalSearchParams } from "expo-router";
+
+      export default function VideoScreen() {
+        const { redirectUrl } = useLocalSearchParams<{ redirectUrl: string }>();
+
+        const open = () => Linking.openURL(redirectUrl);
+        return <Pressable onPress={open} />;
+      }
+    isCorrect: false
+  - snippet: >-
+      // app/video/[id].tsx
+
+      import * as Linking from "expo-linking";
+
+      import { useLocalSearchParams } from "expo-router";
+
+
+      const TRUSTED_ORIGINS = ["https://example.com",
+      "https://cdn.example.com"];
+
+
+      const isTrusted = (raw?: string) => {
+        if (!raw) return false;
+        try {
+          const url = new URL(raw);
+          return url.protocol === "https:" && TRUSTED_ORIGINS.includes(url.origin);
+        } catch {
+          return false;
+        }
+      };
+
+
+      export default function VideoScreen() {
+        const { redirectUrl } = useLocalSearchParams<{ redirectUrl?: string }>();
+
+        const open = () => {
+          if (!isTrusted(redirectUrl)) return;
+          Linking.openURL(redirectUrl as string);
+        };
+        return <Pressable onPress={open} />;
+      }
+    isCorrect: true
+inheritance:
+  inheritable: true
+  exclude: []
+  include: []
+enabled: false

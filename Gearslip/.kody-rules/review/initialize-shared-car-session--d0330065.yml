@@ -1,0 +1,46 @@
+title: Initialize Shared Car Session Components in the Common Owner
+rule: >-
+  When a component provides state to multiple Android Auto entry points,
+  initialize it from the shared car-session/service owner rather than a single
+  browse screen. Otherwise mini-players or the built-in Player app can open
+  directly and display stale or missing state.
+severity: high
+scope: file
+examples:
+  - snippet: |-
+      class BrowseScreen {
+          fun onOpen() {
+              MusicPlayer.init(CarServices)
+          }
+      }
+
+      class RailMiniPlayer {
+          fun onOpen() {
+              // No init here: direct opens see no external player state.
+          }
+      }
+    isCorrect: false
+  - snippet: |-
+      class CarServices {
+          fun init() {
+              MusicPlayer.init(this)
+          }
+      }
+
+      class BrowseScreen {
+          fun onOpen() {
+              // Uses MusicPlayer state initialized by CarServices.
+          }
+      }
+
+      class RailMiniPlayer {
+          fun onOpen() {
+              // Uses MusicPlayer state initialized by CarServices.
+          }
+      }
+    isCorrect: true
+inheritance:
+  inheritable: true
+  exclude: []
+  include: []
+enabled: false

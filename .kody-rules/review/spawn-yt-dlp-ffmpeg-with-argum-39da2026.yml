@@ -1,0 +1,31 @@
+title: Spawn yt-dlp/ffmpeg with argument vectors, never a shell string
+rule: >-
+  All external processes (yt-dlp, ffmpeg, and any other helper) must be launched
+  by passing an argument vector directly to std::process::Command /
+  tokio::process::Command. Never build a command line with format!/string
+  concatenation and never route it through a shell (`sh -c`, `bash -c`, `cmd
+  /C`, `powershell -Command`). Untrusted values coming from the user or from
+  search results (search query, URL, video/playlist id, output path) must be
+  passed as their own single argument, placed after `--` when the tool supports
+  it, and validated first (reject non-http(s) schemes, control characters, and
+  values starting with `-`). Reject or sanitize anything that could be
+  interpreted as an option or a second command.
+severity: critical
+scope: file
+path: '**/*'
+examples:
+  - snippet: |-
+      let cmd = format!("yt-dlp -f bestaudio -o - {query}");
+      std::process::Command::new("sh").arg("-c").arg(cmd).spawn()?;
+    isCorrect: false
+  - snippet: |-
+      let mut c = std::process::Command::new("yt-dlp");
+      c.args(["-f", "bestaudio", "-o", "-", "--"]);
+      c.arg(validated_query); // single argument, validated, no shell
+      c.spawn()?;
+    isCorrect: true
+inheritance:
+  inheritable: true
+  exclude: []
+  include: []
+enabled: false

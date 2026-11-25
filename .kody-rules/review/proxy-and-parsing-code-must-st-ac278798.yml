@@ -1,0 +1,43 @@
+title: Proxy and parsing code must stay type-checked and covered by node:test
+rule: >-
+  The package ships TypeScript sources directly (`node
+  --experimental-strip-types`) with no build step, so type errors and
+  unvalidated parses become runtime failures in the host. Any change under
+  `extensions/` or `src/` must keep `npm run typecheck` clean: do not silence
+  errors with `@ts-ignore`, `@ts-expect-error`, or `as any` in networking,
+  header, or response-parsing code; instead model the shape with a declared
+  interface/type and narrow with an explicit runtime guard. Every new code path
+  in the relay, provider registry, or log writer must ship with a `node:test`
+  case under `test/**/*.test.ts` that exercises both the success path and the
+  failure path (unknown provider, non-2xx upstream, malformed JSON), asserting
+  that no secret is present in the output.
+severity: high
+scope: pull-request
+path: '**/*'
+examples:
+  - snippet: |-
+      // @ts-ignore
+      const data = await res.json() as any;
+      return data.choices[0].message;
+    isCorrect: false
+  - snippet: >-
+      interface ChatResponse { choices?: Array<{ message?: { content?: string }
+      }>; }
+
+      const data: unknown = await res.json();
+
+      if (!isChatResponse(data)) throw new UpstreamFormatError(providerId);
+
+      return data.choices[0]?.message?.content ?? '';
+
+
+      // test/relay.test.ts
+
+      await assert.rejects(() => relay({ provider: 'nope' }), /Unknown
+      provider/);
+    isCorrect: true
+inheritance:
+  inheritable: true
+  exclude: []
+  include: []
+enabled: false

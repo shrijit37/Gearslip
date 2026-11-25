@@ -1,0 +1,30 @@
+title: Keep Media IDs and Queue IDs as Separate Model Fields
+rule: >-
+  When UI rows can originate from both the browse tree and a MediaSession queue,
+  model the stable media ID and optional queue ID independently. Avoid
+  overloading mediaId with numeric queue IDs because some clients may reject
+  them as media IDs.
+severity: high
+scope: file
+examples:
+  - snippet: |-
+      data class Track(val id: String)
+
+      fun queueRow(queueId: Long) = Track(queueId.toString())
+      fun browseRow(mediaId: String) = Track(mediaId)
+    isCorrect: false
+  - snippet: |-
+      data class Track(val mediaId: String, val queueId: Long? = null)
+
+      fun queueRow(mediaId: String, queueId: Long) = Track(
+          mediaId = mediaId,
+          queueId = queueId
+      )
+
+      fun browseRow(mediaId: String) = Track(mediaId = mediaId)
+    isCorrect: true
+inheritance:
+  inheritable: true
+  exclude: []
+  include: []
+enabled: false

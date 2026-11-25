@@ -1,0 +1,48 @@
+title: Cancel Flow Collectors in Lifecycle Release Methods
+rule: >-
+  Any release()/onDestroy() method must cancel collectors and listeners started
+  by init. Otherwise the manager keeps observing stale sessions after teardown,
+  causing leaks and outdated UI state. Track each Job and cancel them during
+  lifecycle cleanup.
+severity: high
+scope: file
+examples:
+  - snippet: |-
+      class MusicPlayer {
+          private val scope = CoroutineScope(SupervisorJob())
+
+          fun init() {
+              scope.launch { playerState.collect { updateState(it) } }
+              scope.launch { queueState.collect { updateQueue(it) } }
+          }
+
+          fun release() {
+              mediaController.release()
+          }
+      }
+    isCorrect: false
+  - snippet: |-
+      class MusicPlayer {
+          private var scope = CoroutineScope(SupervisorJob())
+          private var jobs = mutableListOf<Job>()
+
+          fun init() {
+              if (jobs.isNotEmpty()) return
+              jobs += scope.launch { playerState.collect { updateState(it) } }
+              jobs += scope.launch { queueState.collect { updateQueue(it) } }
+          }
+
+          fun release() {
+              jobs.forEach { it.cancel() }
+              jobs.clear()
+              scope.cancel()
+              scope = CoroutineScope(SupervisorJob())
+              mediaController.release()
+          }
+      }
+    isCorrect: true
+inheritance:
+  inheritable: true
+  exclude: []
+  include: []
+enabled: false

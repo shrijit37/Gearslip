@@ -1,0 +1,27 @@
+title: Avoid equality operators in loop termination conditions
+rule: >-
+  Check if loops use equality operators (== or !=) in termination conditions.
+  These can lead to infinite loops if the condition is never met exactly.
+  Instead, use relational operators like < or > for safer loop termination.
+severity: critical
+scope: file
+examples:
+  - snippet: |-
+      for (var i = 1; i <= 10; i += 2)  // Compliant
+      {
+        //...
+      }
+    isCorrect: false
+  - snippet: >-
+      for (var i = 1; i != 10; i += 2)  // Noncompliant. Infinite; i goes from 9
+      straight to 11.
+
+      {
+        //...
+      }
+    isCorrect: true
+inheritance:
+  inheritable: true
+  exclude: []
+  include: []
+enabled: false

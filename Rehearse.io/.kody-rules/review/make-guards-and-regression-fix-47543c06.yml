@@ -1,0 +1,32 @@
+title: Make guards and regression fixes verifiable by breaking them
+rule: >-
+  When a review fixes a defect, check that the accompanying test would fail
+  without the fix. Tests whose fakes diverge from the real dependency's contract
+  (throwing where the real call returns a status, or capturing the harness's own
+  output as if the app logged it) are structurally blind. Assert allow-lists
+  rather than diffs for sensitive structures, and hold async operations open to
+  prove ordering, so any later regression makes the suite red.
+severity: medium
+scope: file
+examples:
+  - snippet: >-
+      const fakeDb = { saveSession: async () => { throw new Error("boom"); } };
+
+      test("persistence failure is handled", async () => { await relay.close();
+      assert(true); }); // Noncompliant: fake diverges, assertion proves nothing
+    isCorrect: false
+  - snippet: >-
+      const TICKET_CLAIMS = ["purpose", "mode", "inviteId", "question",
+      "questionIndex", "targetRole"];
+
+      check("a ticket carries nothing beyond the turn",
+      Object.keys(decoded).every((k) => TICKET_CLAIMS.includes(k)));
+
+      // Compliant: reverting the fix (adding an instruction claim) fails this
+      assertion
+    isCorrect: true
+inheritance:
+  inheritable: true
+  exclude: []
+  include: []
+enabled: false

@@ -1,0 +1,38 @@
+title: Never interpolate external input into shell commands
+rule: >-
+  Do not build shell command strings from configuration values, DBus payloads,
+  clipboard contents, user input, or any other external data.
+  `child_process.exec`/`execSync` and `shell: true` must not be used with
+  concatenated or template-literal arguments. Use `execFile`/`spawn` (or
+  `spawnSync`) with the executable as the first argument and each parameter
+  passed as a separate element of an argument array, so the value is never
+  parsed by a shell. This applies to wrappers around `fzf`, `dbus-send`,
+  `clipboardy`, and any helper launched by the control center or install/config
+  GUIs.
+severity: critical
+scope: file
+path: '**/*'
+examples:
+  - snippet: |-
+      import { exec } from 'node:child_process';
+
+      const query = config.fzfQuery; // comes from the user's config file
+      // A query containing "; rm -rf ~" executes arbitrary commands.
+      exec(`fzf --query "${query}" --select-1`, (err, stdout) => run(stdout));
+    isCorrect: false
+  - snippet: >-
+      import { execFile } from 'node:child_process';
+
+
+      const query = config.fzfQuery;
+
+      // The value is passed as a single argv entry, not interpreted by a shell.
+
+      execFile('fzf', ['--query', query, '--select-1'], (err, stdout) =>
+      run(stdout));
+    isCorrect: true
+inheritance:
+  inheritable: true
+  exclude: []
+  include: []
+enabled: false

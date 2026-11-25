@@ -1,0 +1,45 @@
+title: Bind IPC/WebSocket servers to loopback and validate every inbound message
+rule: >-
+  Any ws.Server, net.Server, or socket-based IPC endpoint must bind to 127.0.0.1
+  (or a unix domain socket) rather than 0.0.0.0/::. Incoming frames must be
+  parsed defensively (try/catch around JSON.parse or binary decode) and
+  validated against an explicit schema/type guard before being used; never cast
+  a parsed payload to a domain type with `as any`/`as Foo`. Reject and close
+  connections on oversized frames or unknown message types.
+severity: high
+scope: file
+path: '**/*'
+examples:
+  - snippet: |-
+      const wss = new WebSocketServer({ port: 9999 });
+
+      wss.on('connection', (socket) => {
+        socket.on('message', (raw) => {
+          const msg = JSON.parse(raw.toString()) as TouchbarCommand;
+          applyCommand(msg);
+        });
+      });
+    isCorrect: false
+  - snippet: >-
+      const wss = new WebSocketServer({ host: '127.0.0.1', port: 9999,
+      maxPayload: 64 * 1024 });
+
+
+      wss.on('connection', (socket) => {
+        socket.on('message', (raw) => {
+          let parsed: unknown;
+          try {
+            parsed = JSON.parse(raw.toString());
+          } catch {
+            return socket.close(1003, 'invalid payload');
+          }
+          if (!isTouchbarCommand(parsed)) return socket.close(1003, 'unknown message');
+          applyCommand(parsed);
+        });
+      });
+    isCorrect: true
+inheritance:
+  inheritable: true
+  exclude: []
+  include: []
+enabled: false

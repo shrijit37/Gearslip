@@ -1,0 +1,44 @@
+title: >-
+  Route all external HTTP through a shared axios client with timeout and
+  explicit error handling
+rule: >-
+  All outbound HTTP calls must go through a single shared axios instance (e.g.
+  src/services/api.js) created with axios.create({ baseURL, timeout }), instead
+  of calling axios.get/axios.post with a raw URL in components. Every call must
+  handle failure explicitly (try/catch or .catch) by surfacing user-visible
+  state and reporting the error (console.error or an error boundary/logger);
+  empty catch blocks, silently swallowed rejections, and unbounded requests
+  without a timeout are not allowed.
+severity: high
+scope: file
+path: '**/*'
+examples:
+  - snippet: |-
+      useEffect(() => {
+        axios.get('https://api.coingecko.com/api/v3/coins/markets').then(setCoins);
+      }, []);
+    isCorrect: false
+  - snippet: |-
+      // src/services/api.js
+      export const api = axios.create({
+        baseURL: process.env.REACT_APP_API_BASE_URL,
+        timeout: 10000,
+      });
+
+      // component
+      useEffect(() => {
+        let cancelled = false;
+        api.get('/coins/markets')
+          .then(({ data }) => { if (!cancelled) setCoins(data); })
+          .catch((err) => {
+            console.error('Failed to load markets', err);
+            setError('Unable to load market data.');
+          });
+        return () => { cancelled = true; };
+      }, []);
+    isCorrect: true
+inheritance:
+  inheritable: true
+  exclude: []
+  include: []
+enabled: false

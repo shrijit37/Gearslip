@@ -1,0 +1,43 @@
+title: Do not leak internal error details from Route Handlers or Server Actions
+rule: >-
+  Route Handlers and Server Actions must catch failures at the boundary, log the
+  full error server-side (with request/correlation context, never with secrets
+  or tokens), and return a generic, non-enumerating message to the client. Never
+  return raw `error.message`, stack traces, SQL/driver errors, upstream response
+  bodies, or environment values in the HTTP response. Use explicit status codes
+  and a stable error shape instead.
+severity: high
+scope: file
+path: '**/*'
+examples:
+  - snippet: |-
+      export async function POST(req: Request) {
+        try {
+          const body = await req.json();
+          await saveLead(body);
+          return Response.json({ ok: true }, { status: 201 });
+        } catch (err) {
+          console.error('lead.create failed', { err, requestId: crypto.randomUUID() });
+          return Response.json({ error: 'Unable to process request' }, { status: 500 });
+        }
+      }
+    isCorrect: true
+  - snippet: |-
+      export async function POST(req: Request) {
+        try {
+          const body = await req.json();
+          await saveLead(body);
+          return Response.json({ ok: true });
+        } catch (err) {
+          return Response.json(
+            { error: (err as Error).message, stack: (err as Error).stack, env: process.env.DATABASE_URL },
+            { status: 500 }
+          );
+        }
+      }
+    isCorrect: false
+inheritance:
+  inheritable: true
+  exclude: []
+  include: []
+enabled: false

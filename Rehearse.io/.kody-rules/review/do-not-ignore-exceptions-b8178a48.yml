@@ -1,0 +1,29 @@
+title: Do Not Ignore Exceptions
+rule: >-
+  Always handle or log caught exceptions instead of silently ignoring them to
+  improve debugging and maintain application stability.
+severity: medium
+scope: file
+examples:
+  - snippet: |-
+      void save() {
+        try {
+          saveDocument();
+        } catch (exception) {
+        }
+      }
+    isCorrect: false
+  - snippet: |-
+      void save() {
+        try {
+          saveDocument();
+        } catch (exception) {
+          log(exception);
+        }
+      }
+    isCorrect: true
+inheritance:
+  inheritable: true
+  exclude: []
+  include: []
+enabled: false

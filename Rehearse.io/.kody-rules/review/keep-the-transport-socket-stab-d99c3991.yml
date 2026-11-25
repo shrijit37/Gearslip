@@ -1,0 +1,35 @@
+title: Keep the transport socket stable across renders by holding callbacks in refs
+rule: >-
+  Check subscription effects (WebSocket, event listeners, timers) for unstable
+  dependencies. Handlers passed into a socket subscription should be stored in
+  refs and excluded from the effect's dependency array so the subscription is
+  created once and survives re-renders, instead of reconnecting (or re-greeting,
+  or losing a socket slot) on every render or every state change.
+severity: high
+scope: file
+examples:
+  - snippet: >-
+      useEffect(() => {
+        const socket = new WebSocket(url);
+        socket.onmessage = (e) => reportTurn(JSON.parse(e.data));
+        return () => socket.close();
+      }, [reportTurn, startOptions]); // Noncompliant: reconnect on every render
+      that changes a handler
+    isCorrect: false
+  - snippet: >-
+      const reportTurnRef = useRef(reportTurn);
+
+      useEffect(() => { reportTurnRef.current = reportTurn; });
+
+      useEffect(() => {
+        const socket = new WebSocket(url);
+        socket.onmessage = (e) => reportTurnRef.current(JSON.parse(e.data));
+        return () => socket.close();
+      }, [active, generation]); // Compliant: callbacks in refs, subscription
+      stable
+    isCorrect: true
+inheritance:
+  inheritable: true
+  exclude: []
+  include: []
+enabled: false

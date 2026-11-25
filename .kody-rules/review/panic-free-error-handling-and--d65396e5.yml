@@ -1,0 +1,29 @@
+title: Panic-free error handling and structured logging in service code
+rule: >-
+  In all Rust sources under `next/*/`, propagate errors with `Result`/`?` and
+  emit diagnostics through the `tracing` (or equivalent) facade instead of
+  `unwrap()`, `expect()`, `panic!`, `println!`, `eprintln!` or `dbg!`. The
+  workspace lints already deny `panic`, `print_stdout`, `print_stderr`,
+  `dbg_macro`, `todo` and `unimplemented`; treat those as non-negotiable and
+  convert any fallible I/O, parsing or lock acquisition into a returned error
+  that the HTTP layer (e.g. `/health`, `/api/invoke`) can map to a status code.
+  Add context (request id, endpoint, path) to log fields so production incidents
+  are observable without re-deploying.
+severity: high
+scope: file
+path: '**/*'
+examples:
+  - snippet: |-
+      let cfg = std::fs::read_to_string(path).unwrap();
+      println!("loaded config from {}", path);
+    isCorrect: false
+  - snippet: |-
+      let cfg = std::fs::read_to_string(path)
+          .map_err(AppError::Config)?;
+      tracing::info!(path = %path, "config loaded");
+    isCorrect: true
+inheritance:
+  inheritable: true
+  exclude: []
+  include: []
+enabled: false

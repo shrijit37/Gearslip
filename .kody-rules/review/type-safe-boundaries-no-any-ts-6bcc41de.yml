@@ -1,0 +1,33 @@
+title: 'Type-safe boundaries: no any, @ts-ignore, or unchecked API data'
+rule: >-
+  Do not introduce `any`, `as any`, `@ts-ignore`, or `@ts-expect-error` in
+  application code. Data crossing an external boundary (fetch/SSE responses,
+  expo-secure-store reads, route params from expo-router, deep links) must be
+  typed and narrowed with a runtime guard before use instead of being asserted
+  with `as`. Non-null assertions (`!`) on values that can be null/undefined are
+  not allowed; handle the null case explicitly.
+severity: medium
+scope: file
+path: '**/*'
+examples:
+  - snippet: |-
+      type Session = { accessToken: string };
+
+      function isSession(value: unknown): value is Session {
+        return typeof value === 'object' && value !== null && typeof (value as Session).accessToken === 'string';
+      }
+
+      const parsed: unknown = JSON.parse(raw);
+      if (!isSession(parsed)) throw new Error('invalid session payload');
+      const token = parsed.accessToken;
+    isCorrect: true
+  - snippet: |-
+      const session = JSON.parse(raw) as any;
+      // @ts-ignore
+      const token = session.user!.accessToken;
+    isCorrect: false
+inheritance:
+  inheritable: true
+  exclude: []
+  include: []
+enabled: false

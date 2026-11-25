@@ -1,0 +1,25 @@
+title: Forbid unsafe code and raw pointer escape hatches
+rule: >-
+  Never introduce `unsafe` blocks, `unsafe fn`, `unsafe impl`, `unsafe` trait
+  impls or raw-pointer dereferences in `next/*/` crates. The workspace sets
+  `unsafe_code = "forbid"`, so any such addition is a policy violation
+  regardless of local justification. When a system-level operation is required,
+  depend on a vetted, memory-safe crate that wraps the FFI boundary, or isolate
+  the unsafe surface in a dedicated, audited crate that is explicitly listed as
+  an exception — but do not scatter `unsafe` across application or HTTP-handler
+  code.
+severity: critical
+scope: file
+path: '**/*'
+examples:
+  - snippet: |-
+      let raw = buf.as_ptr();
+      let value = unsafe { *raw.add(offset) };
+    isCorrect: false
+  - snippet: let value = buf.get(offset).copied().ok_or(AppError::OutOfRange)?;
+    isCorrect: true
+inheritance:
+  inheritable: true
+  exclude: []
+  include: []
+enabled: false

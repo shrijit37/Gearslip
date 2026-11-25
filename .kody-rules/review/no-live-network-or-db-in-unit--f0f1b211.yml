@@ -1,0 +1,16 @@
+title: No live network or DB in unit tests—use fakes/mocks
+rule: >-
+  Unit tests must stub or fake external HTTP/DB calls; allow real I/O only in
+  integration/e2e tests tagged accordingly.
+severity: critical
+scope: file
+examples:
+  - snippet: 'unit: uses fakeHttp()/mockClient()'
+    isCorrect: true
+  - snippet: 'unit: calls https://...'
+    isCorrect: false
+inheritance:
+  inheritable: true
+  exclude: []
+  include: []
+enabled: false

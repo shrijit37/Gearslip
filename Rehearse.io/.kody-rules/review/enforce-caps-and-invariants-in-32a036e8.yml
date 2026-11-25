@@ -1,0 +1,27 @@
+title: Enforce caps and invariants in the state updater, not only in the UI
+rule: >-
+  Check that limits (maximum list length, character bounds, etc.) are enforced
+  inside the state update function or the validating schema rather than relying
+  solely on a disabled attribute, `maxLength`, or a handler check. A disabled
+  button is not a guarantee — the cap must be the single place that holds
+  regardless of how the control is wired, and the same bound must apply to every
+  write path that can store the value.
+severity: medium
+scope: file
+examples:
+  - snippet: |-
+      function addSkill(skill: string) {
+        setSkills([...skills, skill]);
+      }
+      // button uses disabled={skills.length >= SKILLS_MAX} only
+    isCorrect: false
+  - snippet: |-
+      function addSkill(skill: string) {
+        setSkills((prev) => (prev.length >= SKILLS_MAX ? prev : [...prev, skill]));
+      }
+    isCorrect: true
+inheritance:
+  inheritable: true
+  exclude: []
+  include: []
+enabled: false

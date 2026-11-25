@@ -1,0 +1,41 @@
+title: Load ONNX/embedding models once per process, not per request
+rule: >-
+  FastAPI, onnxruntime, fastembed and rapidocr sessions are expensive and
+  thread-unsafe to recreate. Construct TextEmbedding / RapidOCR / onnxruntime
+  InferenceSession once in an application lifespan (or module-level singleton)
+  and reuse it via app.state or dependency injection. Do not instantiate models
+  inside route handlers or per request, and set intra_op_num_threads /
+  inter_op_num_threads explicitly so the worker does not oversubscribe threads
+  under a container CPU quota.
+severity: high
+scope: file
+path: '**/*'
+examples:
+  - snippet: |
+      @asynccontextmanager
+      async def lifespan(app: FastAPI):
+          app.state.ocr = RapidOCR()
+          app.state.embedder = TextEmbedding(model_name="BAAI/bge-small-en")
+          yield
+          app.state.ocr = None
+          app.state.embedder = None
+
+      app = FastAPI(lifespan=lifespan)
+
+      @app.post("/ocr")
+      def ocr(request: Request, file: UploadFile = File(...)):
+          return request.app.state.ocr(read_validated_image(file))
+    isCorrect: true
+  - snippet: |
+      @app.post("/ocr")
+      def ocr(file: UploadFile = File(...)):
+          # rebuilds the ONNX session and reloads weights on every request
+          ocr = RapidOCR()
+          embedder = TextEmbedding()
+          return ocr(read_image(file))
+    isCorrect: false
+inheritance:
+  inheritable: true
+  exclude: []
+  include: []
+enabled: false

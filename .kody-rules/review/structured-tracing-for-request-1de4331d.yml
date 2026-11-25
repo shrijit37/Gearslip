@@ -1,0 +1,32 @@
+title: Structured tracing for requests with sensitive fields redacted
+rule: >-
+  Request handling, upstream calls, and database access in the server crate must
+  emit structured `tracing` events (with fields such as `request_id`, `method`,
+  `path`, `status`, `latency_ms`) instead of `println!`/`dbg!`/`eprintln!`, so
+  `tower-http` request-id and trace layers stay useful. Never log full
+  `Authorization`, `Cookie`, or `Set-Cookie` header values, raw request/response
+  bodies, or query parameters that carry credentials; log a redacted or
+  truncated form instead. Errors returned to clients must not surface internal
+  error chains or SQL text.
+severity: high
+scope: file
+path: '**/*'
+examples:
+  - snippet: |-
+      println!("request headers: {:?}", req.headers());
+      let body = axum::body::to_bytes(req.into_body(), usize::MAX).await?;
+      tracing::debug!("body: {:?}", String::from_utf8_lossy(&body));
+    isCorrect: false
+  - snippet: |-
+      tracing::info!(
+          request_id = %request_id,
+          method = %req.method(),
+          path = %req.uri().path(),
+          "handling request"
+      );
+      // bodies and auth headers are intentionally not logged
+    isCorrect: true
+inheritance:
+  inheritable: true
+  exclude: []
+  include: []

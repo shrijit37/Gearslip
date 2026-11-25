@@ -1,0 +1,48 @@
+title: Harden Better Auth session cookies, trusted origins and CSRF/rate limiting
+rule: >-
+  In the betterAuth configuration, session cookies must be issued with httpOnly,
+  secure and an explicit sameSite value, `trustedOrigins` must be an explicit
+  allowlist sourced from configuration (never a wildcard, regex catch-all, or a
+  reflection of the incoming Origin header), CSRF protection must stay enabled,
+  and the built-in rate limiter must be enabled for credential and OTP
+  endpoints. Disabling `advanced.disableCSRFCheck`, `useSecureCookies: false` in
+  production, or accepting arbitrary origins is not allowed.
+severity: critical
+scope: file
+path: '**/*'
+examples:
+  - snippet: |-
+      export const auth = betterAuth({
+        advanced: {
+          disableCSRFCheck: true,
+          useSecureCookies: false,
+          defaultCookieAttributes: { httpOnly: false, sameSite: "none" },
+        },
+        trustedOrigins: (request) => [request.headers.get("origin") ?? "*"],
+      });
+    isCorrect: false
+  - snippet: |-
+      const TRUSTED_ORIGINS = (process.env.TRUSTED_ORIGINS ?? "")
+        .split(",")
+        .map((o) => o.trim())
+        .filter(Boolean);
+
+      export const auth = betterAuth({
+        trustedOrigins: TRUSTED_ORIGINS,
+        advanced: {
+          useSecureCookies: true,
+          defaultCookieAttributes: {
+            httpOnly: true,
+            secure: true,
+            sameSite: "lax",
+            path: "/",
+          },
+        },
+        rateLimit: { enabled: true, window: 60, max: 10 },
+      });
+    isCorrect: true
+inheritance:
+  inheritable: true
+  exclude: []
+  include: []
+enabled: false

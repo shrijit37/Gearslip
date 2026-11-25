@@ -1,0 +1,24 @@
+title: Do not log or print raw CV text or extracted personal data
+rule: >-
+  Never log or print raw resume/CV text, full LLM extraction payloads, or
+  personal fields (name, email, phone, address, national ID). Emit only
+  non-identifying metadata such as document id, entity/relationship counts,
+  status, and durations; redact or hash identifiers when correlation across logs
+  is required.
+severity: high
+scope: file
+path: '**/*'
+examples:
+  - snippet: >-
+      logger.info("Extracted CV for %s %s <%s>, text=%s", person.first_name,
+      person.last_name, person.email, raw_text)
+    isCorrect: false
+  - snippet: >-
+      logger.info("Extraction complete doc_id=%s entities=%d relations=%d
+      duration_ms=%d", doc_id, len(entities), len(relations), elapsed_ms)
+    isCorrect: true
+inheritance:
+  inheritable: true
+  exclude: []
+  include: []
+enabled: false

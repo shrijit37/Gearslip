@@ -1,0 +1,39 @@
+title: Only signal processes owned by this checkout when stopping or claiming ports
+rule: >-
+  In scripts that kill processes by pid file or by listening port, verify
+  ownership before signalling (check the process is running out of this
+  checkout, e.g. via its working directory or command), and never treat 'pid is
+  recorded' as proof of ownership. Report and skip foreign pids so a dev script
+  cannot kill an unrelated process. Helper functions that time out waiting for
+  readiness should return non-zero for the caller to decide rather than exiting
+  the whole stack, so optional services can be skipped.
+severity: high
+scope: file
+examples:
+  - snippet: >-
+      claim_ports() {
+        for pid in $(cat .dev/pids); do
+          kill "$pid" 2>/dev/null
+        done
+      }
+
+      wait_for_http() { timeout 60 curl -sf "$1" || die "$2 failed to start"; }
+      // Noncompliant: kills foreign pids, dies for optional services
+    isCorrect: false
+  - snippet: >-
+      stop_stack() {
+        for pid in $(cat .dev/pids); do
+          if is_repo_process "$pid"; then kill "$pid"; else warn "pid $pid no longer belongs to this checkout; skipping"; fi
+        done
+      }
+
+      wait_for_http "$url" || die "api failed to start"
+
+      wait_for_http "$ai_url" || warn "ai-service is slow; continuing without
+      it" # Compliant
+    isCorrect: true
+inheritance:
+  inheritable: true
+  exclude: []
+  include: []
+enabled: false

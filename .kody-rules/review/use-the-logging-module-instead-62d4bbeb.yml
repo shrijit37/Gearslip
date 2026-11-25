@@ -1,0 +1,29 @@
+title: Use the logging module instead of print, and keep sensitive data out of logs
+rule: >-
+  Runtime diagnostics in bot and vision code must go through the standard
+  logging module (module-level logger = logging.getLogger(__name__)) with an
+  appropriate level, not print() or bare stderr writes. Log messages must not
+  contain secrets, raw credentials, or full user identifiers/frames; log
+  summarized or redacted values instead (e.g. frame shape, detection counts).
+  Configure handlers/levels once at the application entry point rather than
+  inside library modules.
+severity: medium
+scope: file
+path: '**/*'
+examples:
+  - snippet: |
+      print(f"token={BOT_TOKEN} processing frame {frame}")
+    isCorrect: false
+  - snippet: |-
+      import logging
+
+      logger = logging.getLogger(__name__)
+
+      logger.info("processing frame shape=%s", frame.shape)
+      logger.debug("detected %d objects", len(detections))
+    isCorrect: true
+inheritance:
+  inheritable: true
+  exclude: []
+  include: []
+enabled: false

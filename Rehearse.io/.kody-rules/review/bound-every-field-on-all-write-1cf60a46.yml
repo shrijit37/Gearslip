@@ -1,0 +1,42 @@
+title: Bound every field on all write paths, not just creation
+rule: >-
+  Any field with a length or size limit must be bounded on every path that
+  persists it (create, update, and any internal write), using the same shared
+  constant. An unbounded update path lets a value in that no consumer of the
+  bound can handle, and makes the bound on the create path meaningless.
+severity: high
+scope: file
+examples:
+  - snippet: |-
+      // Noncompliant: questions are bounded on creation only
+      export const createInterviewSchema = z.object({
+          questions: z.array(z.string().max(LIVE_MAX_QUESTION_CHARS)).max(LIVE_MAX_QUESTIONS),
+      });
+
+      export async function updateInterview(id: string, patch: InterviewPatch) {
+          const allowed = ["questions", "targetRole"];
+          await db.update(interviews).set(pick(patch, allowed)).where(eq(interviews.id, id));
+      }
+    isCorrect: false
+  - snippet: >-
+      export const interviewQuestionsSchema = z
+          .array(z.string().max(LIVE_MAX_QUESTION_CHARS))
+          .max(LIVE_MAX_QUESTIONS);
+
+      export const createInterviewSchema = z.object({ questions:
+      interviewQuestionsSchema });
+
+      export const updateInterviewSchema = z.object({ questions:
+      interviewQuestionsSchema.optional() });
+
+
+      export async function updateInterview(id: string, patch: z.infer<typeof
+      updateInterviewSchema>) {
+          await db.update(interviews).set(patch).where(eq(interviews.id, id));
+      }
+    isCorrect: true
+inheritance:
+  inheritable: true
+  exclude: []
+  include: []
+enabled: false

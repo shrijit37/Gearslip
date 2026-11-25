@@ -1,0 +1,47 @@
+title: Add Jest coverage for new hooks, utilities, and focus/TV logic
+rule: >-
+  Every new custom hook, utility module, or TV-specific interaction (focus
+  handling, `react-tv-space-navigation` configuration, key-event handling) must
+  ship with a matching Jest test in a `__tests__` folder or a `*.test.ts(x)`
+  file, using the existing `jest-expo` preset. Tests must assert behavior
+  (inputs to outputs, focus transitions, key handling) rather than snapshotting
+  whole trees, so regressions in remote-control navigation are caught.
+severity: medium
+scope: pull-request
+path: '**/*'
+examples:
+  - snippet: |-
+      // hooks/useRemoteKey.ts
+      export const useRemoteKey = (onSelect: () => void) => {
+        useEffect(() => {
+          const sub = KeyEvent.onKeyUpListener(({ keyCode }) => {
+            if (keyCode === 23) onSelect();
+          });
+          return () => sub.remove();
+        }, [onSelect]);
+      };
+      // no accompanying test added in this change
+    isCorrect: false
+  - snippet: |-
+      // hooks/__tests__/useRemoteKey.test.ts
+      import { renderHook } from "@testing-library/react-native";
+      import KeyEvent from "react-native-keyevent";
+      import { useRemoteKey } from "../useRemoteKey";
+
+      jest.mock("react-native-keyevent");
+
+      test("calls onSelect when the DPAD center key is released", () => {
+        const onSelect = jest.fn();
+        renderHook(() => useRemoteKey(onSelect));
+
+        const handler = (KeyEvent.onKeyUpListener as jest.Mock).mock.calls[0][0];
+        handler({ keyCode: 23 });
+
+        expect(onSelect).toHaveBeenCalledTimes(1);
+      });
+    isCorrect: true
+inheritance:
+  inheritable: true
+  exclude: []
+  include: []
+enabled: false

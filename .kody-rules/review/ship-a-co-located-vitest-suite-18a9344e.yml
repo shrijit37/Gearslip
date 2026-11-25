@@ -1,0 +1,46 @@
+title: >-
+  Ship a co-located vitest suite with every new src module, covering auth and
+  failure paths
+rule: >-
+  Any new or substantially changed module under src/ must come with a co-located
+  `*.test.ts` vitest suite that runs under the existing `pnpm test` script (no
+  CI-only tooling). Tests must cover at least: the happy path, missing/invalid
+  credentials or authorization, upstream timeout/error handling, and the
+  redaction guarantee (assert that API keys and Authorization/x-api-key values
+  never appear in captured log output or error responses). Use Hono's
+  `app.request(...)` to exercise routes and stub outbound calls rather than
+  hitting real provider APIs.
+severity: medium
+scope: file
+path: '**/*'
+examples:
+  - snippet: |-
+      // src/proxy.ts added with no src/proxy.test.ts
+      export async function proxyToProvider(c: Context) { /* ... */ }
+    isCorrect: false
+  - snippet: |-
+      // src/proxy.test.ts
+      import { describe, it, expect, vi, beforeEach } from 'vitest';
+      import { app } from './app.js';
+
+      describe('proxy', () => {
+        beforeEach(() => { process.env.ANTHROPIC_API_KEY = 'test-key'; });
+
+        it('rejects requests without a gateway token', async () => {
+          const res = await app.request('/proxy', { method: 'POST' });
+          expect(res.status).toBe(401);
+        });
+
+        it('does not leak the api key in error logs', async () => {
+          const spy = vi.spyOn(console, 'error');
+          const res = await app.request('/proxy', { method: 'POST', headers: { authorization: 'Bearer t' } });
+          expect(spy.mock.calls.flat().join(' ')).not.toContain('test-key');
+          expect(res.status).toBeGreaterThanOrEqual(400);
+        });
+      });
+    isCorrect: true
+inheritance:
+  inheritable: true
+  exclude: []
+  include: []
+enabled: false

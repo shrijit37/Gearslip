@@ -1,0 +1,30 @@
+title: Refuse or bound out-of-range indices instead of silently falling back
+rule: >-
+  When a request carries an index into a list (question index, page, step),
+  verify it against the list actually loaded — not just against the practice
+  list the caller sent, but against the rows read from the database — and return
+  400 on out-of-range values. Silently serving element 0 for a bad index scores
+  an answer against a question that was never asked, and a session
+  restart/reload can overwrite an already stored answer.
+severity: high
+scope: file
+examples:
+  - snippet: >-
+      const question = interview.questions[body.questionIndex] ??
+      interview.questions[0];
+
+      // Noncompliant: an out-of-range index silently becomes question 0
+    isCorrect: false
+  - snippet: >-
+      if (!Number.isInteger(body.questionIndex) || body.questionIndex < 0 ||
+      body.questionIndex >= interview.questions.length) {
+        return { status: 400, body: { error: "questionIndex out of range" } };
+      }
+
+      const question = interview.questions[body.questionIndex]; // Compliant
+    isCorrect: true
+inheritance:
+  inheritable: true
+  exclude: []
+  include: []
+enabled: false

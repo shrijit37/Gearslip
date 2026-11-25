@@ -1,0 +1,33 @@
+title: Never log, persist, or return API keys and Authorization headers
+rule: >-
+  This package is a relay proxy that holds provider credentials, so secrets must
+  never reach logs, error messages, telemetry, or thrown errors. When logging
+  requests/responses, log only non-sensitive metadata (provider id, model,
+  status code, duration, byte counts). Never log raw `Authorization`, `api-key`,
+  `x-api-key`, `cookie`, or query-string token values, never dump whole
+  `Headers`/`req.headers` objects, and never include upstream response bodies in
+  error output. When a secret must appear in a message (e.g. a masked key for
+  diagnostics), reduce it to a fixed mask (first 4 chars + '...' + last 4 chars,
+  or fully '***') via a single shared redact helper. The same applies to any
+  file written by the logging feature: redact before writing, and never write
+  the request body of an authenticated call by default.
+severity: critical
+scope: file
+path: '**/*'
+examples:
+  - snippet: >-
+      logger.info('relay request', { headers: req.headers, body: await
+      req.text() });
+    isCorrect: false
+  - snippet: >-
+      const redact = (v?: string) => (v ? `${v.slice(0, 4)}***${v.slice(-4)}` :
+      'none');
+
+      logger.info('relay request', { provider, model, key: redact(apiKey),
+      status });
+    isCorrect: true
+inheritance:
+  inheritable: true
+  exclude: []
+  include: []
+enabled: false

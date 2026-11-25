@@ -1,0 +1,25 @@
+title: Avoid Generic `except:` Blocks
+rule: >-
+  Detect `except:` blocks that catch all exceptions indiscriminately. Using a
+  broad `except:` can hide real issues and prevent necessary errors like
+  `KeyboardInterrupt`. Recommend catching specific exceptions instead.
+severity: high
+scope: file
+examples:
+  - snippet: |-
+      try:
+          result = 10 / 0
+      except:
+          print('An error occurred')
+    isCorrect: false
+  - snippet: |-
+      try:
+          result = 10 / 0
+      except ZeroDivisionError:
+          print('Cannot divide by zero')
+    isCorrect: true
+inheritance:
+  inheritable: true
+  exclude: []
+  include: []
+enabled: false

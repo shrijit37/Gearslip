@@ -1,0 +1,39 @@
+title: Use skipToQueueItem for MediaSession Queue Rows
+rule: >-
+  Do not send a MediaSession queue ID to playFromMediaId(). Queue rows must
+  carry their queue ID and be played through skipToQueueItem(); browse/search
+  rows must continue using their browse-tree media ID with playFromMediaId().
+severity: critical
+scope: file
+examples:
+  - snippet: |-
+      data class Track(val mediaId: String)
+
+      fun playAt(track: Track) {
+          CarMedia.playFromMediaId(track.mediaId)
+          // For queue rows, mediaId holds a numeric MediaSession queue id.
+      }
+    isCorrect: false
+  - snippet: |-
+      data class Track(val mediaId: String, val queueId: Long? = null)
+
+      fun playAt(track: Track) {
+          val queueId = track.queueId
+          if (queueId != null) {
+              CarMedia.playQueueItem(queueId)
+          } else {
+              CarMedia.playFromMediaId(track.mediaId)
+          }
+      }
+
+      object CarMedia {
+          fun playQueueItem(queueId: Long) {
+              mediaController.transportControls.skipToQueueItem(queueId)
+          }
+      }
+    isCorrect: true
+inheritance:
+  inheritable: true
+  exclude: []
+  include: []
+enabled: false

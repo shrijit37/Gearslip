@@ -1,0 +1,39 @@
+title: Never hardcode or log provider credentials; load from env and redact
+rule: >-
+  All upstream provider credentials (Anthropic/OpenAI/Gemini API keys, gateway
+  tokens, bearer secrets) must be read at runtime from process.env (or an
+  injected config object populated from process.env) and must never appear as
+  string literals in source, test fixtures, or defaults. When logging, tracing,
+  or returning errors, redact sensitive headers/fields (authorization,
+  x-api-key, api_key, token, secret) before serialization — log only a masked
+  form such as the first 4 characters plus '***'. Any request/response dump must
+  strip Authorization and x-api-key headers on both the inbound and upstream
+  sides.
+severity: critical
+scope: file
+path: '**/*'
+examples:
+  - snippet: |-
+      const apiKey = 'sk-ant-api03-REALKEY1234567890';
+      console.log('calling upstream with', apiKey);
+      await fetch(url, { headers: { 'x-api-key': apiKey } });
+    isCorrect: false
+  - snippet: |-
+      const apiKey = process.env.ANTHROPIC_API_KEY;
+      if (!apiKey) throw new Error('ANTHROPIC_API_KEY is not set');
+      logger.info({ key: mask(apiKey) }, 'calling upstream');
+      await fetch(url, { headers: { 'x-api-key': apiKey } });
+    isCorrect: true
+  - snippet: 'logger.error({ err, headers: c.req.header() }, ''proxy failed'');'
+    isCorrect: false
+  - snippet: |-
+      const SENSITIVE = /^(authorization|x-api-key|api[_-]?key|token|secret)$/i;
+      const redact = (h: Record<string, string>) =>
+        Object.fromEntries(Object.entries(h).map(([k, v]) => [k, SENSITIVE.test(k) ? '***' : v]));
+      logger.error({ err, headers: redact(c.req.header()) }, 'proxy failed');
+    isCorrect: true
+inheritance:
+  inheritable: true
+  exclude: []
+  include: []
+enabled: false

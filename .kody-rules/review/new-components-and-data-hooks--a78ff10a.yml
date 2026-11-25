@@ -1,0 +1,30 @@
+title: New components and data hooks must ship with React Testing Library tests
+rule: >-
+  Every new or modified component, hook, or data-fetching module under src/ must
+  include a co-located test (Component.test.jsx) using @testing-library/react
+  and @testing-library/jest-dom. Tests must assert rendered output or
+  user-visible behavior (getByRole/getByText, user-event interactions) and cover
+  the error/loading branches of API-backed views; snapshot-only tests that
+  assert no behavior are not acceptable.
+severity: medium
+scope: pull-request
+path: '**/*'
+examples:
+  - snippet: |-
+      it('renders coin list', () => {
+        const { asFragment } = render(<CoinList coins={coins} />);
+        expect(asFragment()).toMatchSnapshot();
+      });
+    isCorrect: false
+  - snippet: |-
+      it('shows an error message when the request fails', async () => {
+        jest.spyOn(api, 'get').mockRejectedValueOnce(new Error('network'));
+        render(<CoinList />);
+        expect(await screen.findByRole('alert')).toHaveTextContent(/unable to load market data/i);
+      });
+    isCorrect: true
+inheritance:
+  inheritable: true
+  exclude: []
+  include: []
+enabled: false

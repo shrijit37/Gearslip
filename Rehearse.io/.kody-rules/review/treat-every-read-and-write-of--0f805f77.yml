@@ -1,0 +1,48 @@
+title: Treat every read and write of local storage as able to throw
+rule: >-
+  Wrap each `getItem`, `setItem` and `removeItem` in its own `try`. A parse
+  failure or a disabled/private-mode storage must drop only the key it belongs
+  to, never the whole cache, and must not sign the user out or escape as an
+  unhandled rejection. When migrating a key, write the new record first and
+  delete the old one only after the write succeeds.
+severity: high
+scope: file
+examples:
+  - snippet: |-
+      try {
+          const raw = localStorage.getItem(KEY);
+          const user = JSON.parse(raw ?? "");
+          localStorage.setItem(KEY, JSON.stringify(user));
+          localStorage.removeItem(LEGACY_KEY);
+      } catch {
+          // Noncompliant: one corrupt or throwing access clears everything
+          localStorage.clear();
+      }
+    isCorrect: false
+  - snippet: |-
+      function readKey(key: string): string | null {
+          try {
+              return localStorage.getItem(key);
+          } catch {
+              return null;
+          }
+      }
+
+      function adoptLegacy(): User | null {
+          const raw = readKey(LEGACY_KEY);
+          const adopted = parseUser(raw, LEGACY_KEY);
+          if (!adopted) return null;
+          try {
+              localStorage.setItem(SESSION_USER_KEY, raw!);
+          } catch {
+              return adopted; // legacy record still readable; retry next read
+          }
+          localStorage.removeItem(LEGACY_KEY);
+          return adopted;
+      }
+    isCorrect: true
+inheritance:
+  inheritable: true
+  exclude: []
+  include: []
+enabled: false

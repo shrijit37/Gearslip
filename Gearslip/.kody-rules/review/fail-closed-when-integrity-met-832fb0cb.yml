@@ -1,0 +1,34 @@
+title: Fail Closed When Integrity Metadata Is Missing
+rule: >-
+  In updaters or any code that verifies downloaded artifacts, treat missing
+  integrity metadata (e.g. a release asset digest) as a failure instead of
+  proceeding with an unchecked file. Filter out unverified candidates before
+  selection, log a warning, skip the release when no candidate can be verified,
+  and never hand unverified bytes to an installer.
+severity: high
+scope: file
+examples:
+  - snippet: |-
+      private fun pickAsset(release: Release): Asset? =
+          release.assets.maxByOrNull { it.size } // digest may be null
+
+      val apk = pickAsset(release) ?: return
+      installer.install(apk.url) // only a size check was performed
+    isCorrect: false
+  - snippet: |-
+      private fun pickAsset(release: Release): Asset? =
+          release.assets.filter { !it.digest.isNullOrBlank() }
+              .maxByOrNull { it.size }
+
+      val apk = pickAsset(release)
+      if (apk == null) {
+          Log.w(TAG, "Skipping ${release.tag}: no asset with a digest")
+          return
+      }
+      installer.install(apk.url, expectedDigest = apk.digest!!)
+    isCorrect: true
+inheritance:
+  inheritable: true
+  exclude: []
+  include: []
+enabled: false

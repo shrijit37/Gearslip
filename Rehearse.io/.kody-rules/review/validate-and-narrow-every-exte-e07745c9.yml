@@ -1,0 +1,31 @@
+title: Validate and narrow every external response with a schema, not a cast
+rule: >-
+  Check that values crossing a trust boundary (upstream API bodies, model/LLM
+  JSON replies, files) are parsed with a validating schema such as zod before
+  use. An `as` cast asserts a shape without checking it, so a provider change
+  crashes the request or smuggles wrong types into stored records. Similarly, a
+  field expected to be a list must be guarded so a string or object answer
+  degrades to an empty field rather than one character per element or a 500.
+severity: high
+scope: file
+examples:
+  - snippet: >-
+      const body = (await res.json()) as ScoringEnvelope;
+
+      const verdict = body.candidates[0].content.parts[0].text; // Noncompliant:
+      asserts, never validates
+    isCorrect: false
+  - snippet: >-
+      const envelope = scoringEnvelopeSchema.parse(await res.json());
+
+      const verdict =
+      scoringVerdictSchema.safeParse(envelope.candidates[0]?.content);
+
+      if (!verdict.success) return { score: null }; // Compliant: validated,
+      degrades safely
+    isCorrect: true
+inheritance:
+  inheritable: true
+  exclude: []
+  include: []
+enabled: false

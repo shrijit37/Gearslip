@@ -1,0 +1,25 @@
+title: Bugfix PRs must match the real production failure (root cause, not band-aid)
+rule: >-
+  If the PR claims to fix a specific issue (e.g., 'Fixes #123' / 'Fix PAY-123'),
+  validate it against the real production error.
+
+  - If an observability MCP is available (Sentry/Datadog/Bugsnag): fetch the
+  event/stack trace and confirm the change addresses the root cause.
+
+  - Require a regression test (or a clearly documented reason why a test cannot
+  be added).
+
+  Call out fixes that only hide symptoms (catch-and-ignore, broader retries,
+  defaulting values) without removing the underlying failure mode.
+severity: high
+scope: file
+examples:
+  - snippet: catch(Exception) { return OK; } // hides production error
+    isCorrect: false
+  - snippet: Fix root cause + regression test + Sentry event link
+    isCorrect: true
+inheritance:
+  inheritable: true
+  exclude: []
+  include: []
+enabled: false

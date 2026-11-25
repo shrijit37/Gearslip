@@ -1,0 +1,34 @@
+title: Enforce authentication and ownership checks on every non-public Express route
+rule: >-
+  Every Express route that touches student, teacher, or curriculum data must be
+  registered behind the JWT authentication middleware; inside the handler,
+  verify the token with jsonwebtoken using an explicit algorithm and secret from
+  env, and derive the caller identity only from the verified token — never from
+  req.body, req.query, or a client-supplied userId/schoolId. Return 401 for
+  missing/invalid tokens and 403 when the authenticated user does not own the
+  requested resource. Rate-limit auth endpoints with the existing
+  express-rate-limit dependency instead of trusting client-side throttling.
+severity: critical
+scope: file
+path: '**/*'
+examples:
+  - snippet: |-
+      router.get('/students/:id/curriculum', requireAuth, async (req, res) => {
+        if (req.user.id !== req.params.id && req.user.role !== 'teacher') {
+          return res.status(403).json({ error: 'Forbidden' });
+        }
+        // fetch curriculum scoped to req.user
+      });
+    isCorrect: true
+  - snippet: |-
+      router.get('/students/:id/curriculum', async (req, res) => {
+        const { userId } = req.body; // identity trusted from client
+        const curriculum = await Curriculum.find({ studentId: req.params.id });
+        res.json(curriculum);
+      });
+    isCorrect: false
+inheritance:
+  inheritable: true
+  exclude: []
+  include: []
+enabled: false

@@ -1,0 +1,41 @@
+title: >-
+  Constrain upstream relay targets to configured providers (no SSRF / open
+  proxy)
+rule: >-
+  The relay must never build its outbound URL from client-controlled input.
+  Resolve the upstream base URL only from a static, in-repo provider registry
+  (id -> base URL), validate the requested provider id against that registry,
+  and reject anything else before any network call. Additionally: do not forward
+  inbound client `Authorization`/`api-key`/`cookie` headers upstream — inject
+  only the credential belonging to the resolved provider; do not follow
+  redirects to a different origin; and always pass an explicit
+  `AbortSignal`/timeout to undici so a hung upstream cannot hold the relay open.
+  Reject non-HTTPS base URLs in the registry.
+severity: critical
+scope: file
+path: '**/*'
+examples:
+  - snippet: |-
+      const target = new URL(req.query.url as string);
+      const res = await fetch(target, { headers: req.headers });
+    isCorrect: false
+  - snippet: >-
+      const provider = PROVIDERS[providerId];
+
+      if (!provider || !provider.baseUrl.startsWith('https://')) throw new
+      Error(`Unknown provider: ${providerId}`);
+
+      const res = await fetch(new URL('/v1/chat/completions', provider.baseUrl),
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${provider.apiKey}` },
+        body: payload,
+        signal: AbortSignal.timeout(30_000),
+        redirect: 'error',
+      });
+    isCorrect: true
+inheritance:
+  inheritable: true
+  exclude: []
+  include: []
+enabled: false

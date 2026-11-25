@@ -1,0 +1,56 @@
+title: >-
+  Centralize HTTP access in the axios instance and handle failures with TanStack
+  Query
+rule: >-
+  All network calls must go through the shared axios instance created with
+  import.meta.env.VITE_API_BASE_URL and an explicit timeout, and must be
+  consumed through TanStack Query (useQuery/useMutation) instead of raw
+  fetch/axios inside components. Wrap the instance with interceptors that
+  normalize errors into a typed shape and never log or re-throw raw tokens,
+  Authorization headers, request bodies, or response payloads
+  (console.log(err.config.headers) leaks credentials). Components must render
+  explicit loading and error states returned by the query hook rather than
+  firing effects manually, and mutations must define onError handling. Never
+  disable TLS verification or use `rejectUnauthorized: false`.
+
+
+  Correct: `useQuery({ queryKey: ['orders', id], queryFn: () =>
+  api.get(...).then(r => r.data) })`
+
+  Incorrect: `useEffect(() => { axios.get(url).then(setData) }, [])` inside a
+  component
+severity: high
+scope: file
+path: '**/*'
+examples:
+  - snippet: |-
+      // src/features/orders/useOrders.ts
+      import { useQuery } from "@tanstack/react-query";
+      import { api } from "@/lib/api";
+
+      export function useOrders(id: string) {
+        return useQuery({
+          queryKey: ["orders", id],
+          queryFn: async () => (await api.get(`/orders/${id}`)).data,
+          staleTime: 30_000,
+        });
+      }
+    isCorrect: true
+  - snippet: |-
+      // src/features/orders/OrdersList.tsx
+      export function OrdersList({ id }: { id: string }) {
+        const [data, setData] = useState(null);
+        useEffect(() => {
+          axios.get(`https://api.example.com/orders/${id}`, {
+            headers: { Authorization: localStorage.getItem("token")! },
+            rejectUnauthorized: false,
+          }).then((res) => { console.log(res.config.headers); setData(res.data); });
+        }, [id]);
+        return <div>{JSON.stringify(data)}</div>;
+      }
+    isCorrect: false
+inheritance:
+  inheritable: true
+  exclude: []
+  include: []
+enabled: false

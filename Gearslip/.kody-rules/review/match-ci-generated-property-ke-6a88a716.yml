@@ -1,0 +1,34 @@
+title: Match CI-Generated Property Keys to Build Script Lookups
+rule: >-
+  When a workflow generates a properties file consumed by the build (e.g.
+  keystore.properties for signing), the key names must exactly match those read
+  by the build script, including camelCase. Reproduce the generation locally and
+  run the affected build task to verify the build actually picks up the values
+  instead of silently producing an unsigned or differently signed artifact.
+severity: medium
+scope: file
+examples:
+  - snippet: >-
+      # workflow step
+
+      echo "signing.store.file=$KEYSTORE" >> keystore.properties
+
+
+      // build.gradle.kts
+
+      val storeFile = props["signingStoreFile"] // null -> wrong key, wrong
+      signature
+    isCorrect: false
+  - snippet: |-
+      # workflow step
+      echo "signingStoreFile=$KEYSTORE" >> keystore.properties
+
+      // build.gradle.kts
+      val storeFile = props["signingStoreFile"] // matches exactly
+      // verify: assembleDebug + compare APK certificate fingerprint
+    isCorrect: true
+inheritance:
+  inheritable: true
+  exclude: []
+  include: []
+enabled: false

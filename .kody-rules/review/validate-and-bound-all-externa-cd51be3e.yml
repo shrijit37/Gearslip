@@ -1,0 +1,37 @@
+title: Validate and bound all external input before queries or upstream calls
+rule: >-
+  Search params, dynamic route segments, request bodies, and external media URLs
+  must be normalized and validated before being used in MongoDB queries or
+  passed to youtubei.js / hls.js. Coerce values to the expected primitive type
+  with an explicit allowlist or schema check, reject objects/arrays where a
+  string is expected (NoSQL injection guard), cap length and result counts, and
+  return a typed error response instead of forwarding raw input to the driver or
+  upstream API.
+severity: high
+scope: file
+path: '**/*'
+examples:
+  - snippet: >-
+      const body = await request.json();
+
+      const results = await db.collection('titles').find({ name: body.q
+      }).toArray();
+
+      return Response.json(results);
+    isCorrect: false
+  - snippet: |-
+      const raw = searchParams.get('q') ?? '';
+      const q = raw.trim().slice(0, 100);
+      if (!q) return Response.json({ results: [] }, { status: 200 });
+      const results = await db
+        .collection('titles')
+        .find({ name: { $eq: q } })
+        .limit(50)
+        .toArray();
+      return Response.json({ results });
+    isCorrect: true
+inheritance:
+  inheritable: true
+  exclude: []
+  include: []
+enabled: false

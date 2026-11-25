@@ -1,0 +1,51 @@
+title: >-
+  Harden all outbound provider calls: explicit timeouts, allowlisted hosts,
+  bounded bodies
+rule: >-
+  Every outbound HTTP call made with undici must (a) set explicit
+  connect/headers/body timeouts via a shared Agent or per-request options so a
+  slow upstream cannot hang the gateway, (b) target a host taken from a static
+  allowlist of provider base URLs or from server-side configuration — never from
+  a client-supplied URL, header, or query parameter (SSRF), and (c) avoid
+  unbounded buffering: stream responses or cap the buffered size. On failure,
+  surface a generic error to the caller instead of the raw upstream
+  error/response body, which may echo credentials.
+severity: high
+scope: file
+path: '**/*'
+examples:
+  - snippet: |-
+      app.post('/proxy', async (c) => {
+        const { targetUrl } = await c.req.json();
+        const res = await fetch(targetUrl, { headers: c.req.header() });
+        return c.json(await res.json());
+      });
+    isCorrect: false
+  - snippet: >-
+      const ALLOWED_HOSTS = new Set(['api.anthropic.com', 'api.openai.com']);
+
+      const agent = new Agent({ headersTimeout: 30_000, bodyTimeout: 60_000,
+      connect: { timeout: 5_000 } });
+
+
+      const upstream = new URL(process.env.ANTHROPIC_BASE_URL ??
+      'https://api.anthropic.com');
+
+      if (!ALLOWED_HOSTS.has(upstream.hostname)) throw new Error('upstream host
+      not allowed');
+
+
+      const res = await fetch(new URL('/v1/messages', upstream), {
+        method: 'POST',
+        dispatcher: agent,
+        headers: { 'x-api-key': apiKey, 'content-type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      return new Response(res.body, { status: res.status });
+    isCorrect: true
+inheritance:
+  inheritable: true
+  exclude: []
+  include: []
+enabled: false

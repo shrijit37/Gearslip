@@ -1,0 +1,47 @@
+title: Share one schema for fields written by multiple paths
+rule: >-
+  When the same field is accepted by more than one entry point (create and
+  update, start-session and create, etc.), define its Zod schema once as a
+  shared exported constant and compose both schemas from it. Do not copy enum
+  values, bounds or defaults into a second schema: a copy is how the vocabulary
+  and the limits drift from each other and from the column that stores them.
+  Never derive an update schema with `.partial()`, since partial keeps defaults
+  and would silently write them over stored values.
+severity: high
+scope: file
+examples:
+  - snippet: >-
+      export const createInterviewSchema = z.object({
+          status: z.enum(["draft", "active"]).default("draft"),
+          targetRole: z.string().max(200),
+      });
+
+
+      // Noncompliant: the enum was copied, so it can be narrower than the
+      column
+
+      export const updateInterviewSchema = createInterviewSchema.partial();
+    isCorrect: false
+  - snippet: >-
+      export const interviewStatusSchema = z.enum(["draft", "active",
+      "closed"]);
+
+
+      export const createInterviewSchema = z.object({
+          status: interviewStatusSchema.default("draft"),
+          targetRole: z.string().max(200),
+      });
+
+
+      // Compliant: no defaults, so a status-only patch writes only the status
+
+      export const updateInterviewSchema = z.object({
+          status: interviewStatusSchema.optional(),
+          targetRole: z.string().max(200).optional(),
+      });
+    isCorrect: true
+inheritance:
+  inheritable: true
+  exclude: []
+  include: []
+enabled: false

@@ -1,0 +1,46 @@
+title: Do Not Silently Discard User Actions
+rule: >-
+  When an action is rejected because of current state (e.g. a car is connected,
+  or a screen has not been reached yet), either queue it with a pending flag
+  that fires when the state changes, or show an explicit waiting state in the
+  UI. Returning without state or feedback leaves the user believing the tap did
+  nothing. Also ensure periodic/background checks do not immediately cancel an
+  explicit user-triggered state, and that a manual action is not gated behind
+  the corresponding automatic setting.
+severity: high
+scope: file
+examples:
+  - snippet: |-
+      fun install() {
+          if (carConnected) return // tap lost; card still says "Downloaded. Installing closes Gearslip."
+          performInstall()
+      }
+
+      fun showScreensaverTile() {
+          CarScreensaver.show() // launchEntry opens without navigating; tick sees Apps and dismisses it
+      }
+    isCorrect: false
+  - snippet: |-
+      fun install() {
+          if (carConnected) {
+              pendingInstall = true
+              _uiState.value = UiState.WaitingForCarDisconnect
+              return
+          }
+          performInstall()
+      }
+
+      fun onCarDisconnected() {
+          if (pendingInstall) performInstall()
+      }
+
+      fun showScreensaverTile() {
+          it.home() // establish the required screen before the timed show
+          CarScreensaver.show()
+      }
+    isCorrect: true
+inheritance:
+  inheritable: true
+  exclude: []
+  include: []
+enabled: false

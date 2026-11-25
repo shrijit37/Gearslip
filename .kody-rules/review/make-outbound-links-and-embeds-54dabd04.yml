@@ -1,0 +1,35 @@
+title: Make outbound links and embeds safe
+rule: >-
+  Every anchor that opens a new context (`target="_blank"`) must include
+  `rel="noopener noreferrer"`. Never build an `href` or `src` from untrusted
+  input without validating the protocol: allow only `https:` (and `mailto:` for
+  email), rejecting `javascript:`, `data:`, and `vbscript:` URLs. Do not use
+  inline event-handler strings or `eval`-style sinks to attach behavior; use
+  React props and event handlers instead.
+severity: medium
+scope: file
+path: '**/*'
+examples:
+  - snippet: |-
+      const isSafeUrl = (url) => /^https:\/\//i.test(url);
+
+      export function ExternalLink({ href, children }) {
+        if (!isSafeUrl(href)) return <span>{children}</span>;
+        return (
+          <a href={href} target="_blank" rel="noopener noreferrer">
+            {children}
+          </a>
+        );
+      }
+    isCorrect: true
+  - snippet: >-
+      // project.link comes from user/CMS data
+
+      <a href={project.link} target="_blank" dangerouslySetInnerHTML={{ __html:
+      project.label }} />
+    isCorrect: false
+inheritance:
+  inheritable: true
+  exclude: []
+  include: []
+enabled: false

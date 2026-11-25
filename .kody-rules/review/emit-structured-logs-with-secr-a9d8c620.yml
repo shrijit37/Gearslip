@@ -1,0 +1,52 @@
+title: Emit structured logs with secret and credential redaction
+rule: >-
+  Logging in Workers must use structured, single-line JSON records with stable
+  fields (event, requestId, route, status, durationMs) so they are queryable in
+  `wrangler tail` and Logpush. Never log secrets or credential material:
+  Telegram bot tokens, S3 secret keys, Authorization headers, presigned URL
+  query strings, cookie values, or full request/response bodies containing user
+  data. Log identifiers (key, bucket, chatId, hashed token prefix) instead of
+  the secret itself, and wrap request handling so unexpected errors are logged
+  as a sanitized message plus stack while returning a generic 500 body to the
+  client.
+severity: medium
+scope: file
+path: '**/*'
+examples:
+  - snippet: |-
+      console.log("incoming request", request.headers.get("Authorization"));
+      console.log(`tg token = ${env.TELEGRAM_BOT_TOKEN}`);
+      try {
+        await uploadObject(env, key, request.body);
+      } catch (err) {
+        return new Response(String(err), { status: 500 });
+      }
+    isCorrect: false
+  - snippet: |-
+      const requestId = crypto.randomUUID();
+      const started = Date.now();
+      console.log(
+        JSON.stringify({
+          event: "s3.put",
+          requestId,
+          bucket: "tg-s3",
+          key,
+          status: 200,
+          durationMs: Date.now() - started,
+        })
+      );
+
+      try {
+        await uploadObject(env, key, request.body);
+      } catch (err) {
+        console.error(
+          JSON.stringify({ event: "s3.put.error", requestId, message: (err as Error).message })
+        );
+        return new Response("Internal Server Error", { status: 500 });
+      }
+    isCorrect: true
+inheritance:
+  inheritable: true
+  exclude: []
+  include: []
+enabled: false

@@ -1,0 +1,33 @@
+title: Do Not Reserve Window Insets Already Applied by Child Composables
+rule: >-
+  When a destination composable consumes a window inset itself (e.g.
+  LocalNavBarInset / navigationBarsPadding), the parent layout must not add the
+  same inset again. Exclude those destinations from the outer inset, otherwise
+  space is reserved twice. Conversely, if the child reserves no inset, the
+  parent must keep it.
+severity: medium
+scope: file
+examples:
+  - snippet: |-
+      Box(Modifier.navigationBarsPadding()) { // parent reserves 64dp
+          when (screen) {
+              CarScreen.Media -> MediaScreen() // also applies LocalNavBarInset internally
+              else -> FirstPartyPlayer()
+          }
+      }
+    isCorrect: false
+  - snippet: |-
+      Box(Modifier.then(
+          if (screen == CarScreen.Media) Modifier else Modifier.navigationBarsPadding()
+      )) {
+          when (screen) {
+              CarScreen.Media -> MediaScreen() // applies its own inset
+              else -> FirstPartyPlayer() // dock is drawn in the outer inset
+          }
+      }
+    isCorrect: true
+inheritance:
+  inheritable: true
+  exclude: []
+  include: []
+enabled: false

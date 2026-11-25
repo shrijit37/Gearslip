@@ -1,0 +1,26 @@
+title: Never log candidate PII, interview transcripts, or raw AI scoring payloads
+rule: >-
+  Logging statements must not emit candidate emails/names, interview
+  transcripts, audio or video URLs, invite tokens, or full AI request/response
+  bodies. Log only non-identifying identifiers (e.g. interviewId, requestId,
+  hashed candidate id), status codes, durations, and error types. Redact or omit
+  fields when serializing objects/errors that may contain user content, and
+  prefer structured logs over string-concatenated payloads.
+severity: high
+scope: file
+path: '**/*'
+examples:
+  - snippet: |-
+      logger.info(`scoring transcript for ${candidate.email}: ${transcript}`);
+      console.log('AI response', aiResponse);
+    isCorrect: false
+  - snippet: >-
+      logger.info({ interviewId, requestId, durationMs, status: 'scored' },
+      'interview scored');
+
+      logger.error({ interviewId, errType: err.name }, 'scoring failed');
+    isCorrect: true
+inheritance:
+  inheritable: true
+  exclude: []
+  include: []

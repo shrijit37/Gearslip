@@ -1,0 +1,46 @@
+title: >-
+  Harden Electron renderers (contextIsolation on, nodeIntegration off, no remote
+  shell)
+rule: >-
+  Every Electron BrowserWindow/webPreferences created in the GUI workspaces must
+  set contextIsolation: true, nodeIntegration: false, sandbox: true and enable
+  webSecurity. Expose privileged functionality only through a contextBridge
+  preload script with an explicit, minimal API surface. Never pass untrusted or
+  renderer-supplied strings to child_process, shell.openExternal, or the
+  deprecated remote module; validate/allowlist any URL or argument in the main
+  process before acting on it.
+severity: critical
+scope: file
+path: '**/*'
+examples:
+  - snippet: |-
+      const win = new BrowserWindow({
+        webPreferences: {
+          nodeIntegration: true,
+          contextIsolation: false,
+          webSecurity: false,
+        },
+      });
+
+      ipcMain.on('run', (_e, cmd) => exec(cmd));
+    isCorrect: false
+  - snippet: |-
+      const win = new BrowserWindow({
+        webPreferences: {
+          preload: path.join(__dirname, 'preload.js'),
+          contextIsolation: true,
+          nodeIntegration: false,
+          sandbox: true,
+        },
+      });
+
+      ipcMain.handle('set-brightness', (_e, level: number) => {
+        if (!Number.isInteger(level) || level < 0 || level > 100) throw new Error('invalid level');
+        return applyBrightness(level);
+      });
+    isCorrect: true
+inheritance:
+  inheritable: true
+  exclude: []
+  include: []
+enabled: false

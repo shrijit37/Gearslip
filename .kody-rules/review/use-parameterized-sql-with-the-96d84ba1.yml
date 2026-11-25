@@ -1,0 +1,28 @@
+title: Use parameterized SQL with the pg client
+rule: >-
+  All database access through the `pg` driver must use parameterized queries
+  ($1, $2, ...) or a query builder. Never build SQL by interpolating or
+  concatenating variables, request data, route/query params, or user input into
+  the query string, even for identifiers. When a dynamic identifier
+  (table/column name) is genuinely required, validate it against an explicit
+  allowlist before use.
+severity: critical
+scope: file
+path: '**/*'
+examples:
+  - snippet: |-
+      const { rows } = await pool.query(
+        `SELECT * FROM tasks WHERE board_id = '${boardId}' AND title ILIKE '%${term}%'`,
+      );
+    isCorrect: false
+  - snippet: |-
+      const { rows } = await pool.query(
+        'SELECT * FROM tasks WHERE board_id = $1 AND title ILIKE $2',
+        [boardId, `%${term}%`],
+      );
+    isCorrect: true
+inheritance:
+  inheritable: true
+  exclude: []
+  include: []
+enabled: false

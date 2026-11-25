@@ -1,0 +1,30 @@
+title: Never hardcode, log, or persist credentials; redact before emitting
+rule: >-
+  API keys, cookies, OAuth/session tokens, and yt-dlp cookie contents must be
+  read at runtime from environment variables or an OS keyring/file outside the
+  repository, and must never appear as literals in source. Do not print or log
+  them at any level: no `log::debug!/info!/warn!` of raw tokens, Authorization
+  headers, cookie jars, or full request/response bodies, and no `unwrap`-style
+  error printing of a request that embeds the token. Emit only presence/redacted
+  indicators (e.g. a fixed mask or a hash prefix). Config written to disk (TOML)
+  must not contain plaintext tokens unless the file is created with restrictive
+  permissions and documented as sensitive.
+severity: high
+scope: file
+path: '**/*'
+examples:
+  - snippet: |-
+      let api_key = "sk-live-9f2c...";
+      log::debug!("sending Authorization: Bearer {}", api_key);
+    isCorrect: false
+  - snippet: >-
+      let api_key = std::env::var("TUNA_API_KEY")?;
+
+      log::debug!("sending authenticated request (token present: {})",
+      !api_key.is_empty());
+    isCorrect: true
+inheritance:
+  inheritable: true
+  exclude: []
+  include: []
+enabled: false

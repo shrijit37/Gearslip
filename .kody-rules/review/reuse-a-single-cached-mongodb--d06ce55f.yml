@@ -1,0 +1,38 @@
+title: Reuse a single cached MongoDB client instead of reconnecting per request
+rule: >-
+  Do not construct `new MongoClient(...)` inside route handlers, server actions,
+  or per-request helpers. Export one lazily-created client from a shared server
+  module and cache it on `globalThis` in development so hot reloads do not
+  exhaust the connection pool. Keep connection errors out of logs and error
+  responses: never include the connection string, credentials, or full driver
+  error objects in thrown messages or API payloads.
+severity: high
+scope: file
+path: '**/*'
+examples:
+  - snippet: |-
+      export async function getTitles() {
+        const client = new MongoClient(process.env.MONGODB_URI!);
+        await client.connect();
+        return client.db().collection('titles').find().toArray();
+      }
+    isCorrect: false
+  - snippet: |-
+      let clientPromise: Promise<MongoClient> | undefined;
+
+      export function getDb() {
+        if (!clientPromise) {
+          const uri = process.env.MONGODB_URI;
+          if (!uri) throw new Error('MONGODB_URI is not configured');
+          const globalWithCache = globalThis as { __mongoClient?: Promise<MongoClient> };
+          globalWithCache.__mongoClient ??= new MongoClient(uri).connect();
+          clientPromise = globalWithCache.__mongoClient;
+        }
+        return clientPromise.then((c) => c.db());
+      }
+    isCorrect: true
+inheritance:
+  inheritable: true
+  exclude: []
+  include: []
+enabled: false

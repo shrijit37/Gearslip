@@ -1,0 +1,45 @@
+title: Return generic errors and log only non-sensitive request metadata
+rule: >-
+  Route handlers must catch pipeline exceptions, log them server-side with
+  structured context (request id, byte size, duration, model name) and return a
+  generic message plus status code to the client. Never echo str(exception),
+  tracebacks, absolute filesystem paths, or raw uploaded bytes / decoded image
+  content into responses or logs, because OCR inputs may contain personal data
+  and internal stack details aid attackers.
+severity: medium
+scope: file
+path: '**/*'
+examples:
+  - snippet: |
+      @app.post("/ocr")
+      async def ocr(request: Request, file: UploadFile = File(...)):
+          rid = request.state.request_id
+          started = time.perf_counter()
+          try:
+              result = await run_pipeline(file)
+          except PipelineError:
+              logger.exception("ocr_failed request_id=%s", rid)
+              raise HTTPException(500, "processing failed")
+          logger.info(
+              "ocr_completed request_id=%s bytes=%d duration_ms=%d",
+              rid, file.size, (time.perf_counter() - started) * 1000,
+          )
+          return {"text": result.text}
+    isCorrect: true
+  - snippet: |
+      @app.post("/ocr")
+      async def ocr(file: UploadFile = File(...)):
+          try:
+              return run_pipeline(file)
+          except Exception as e:
+              # leaks internals and the payload to the caller and the log
+              return JSONResponse(
+                  status_code=500,
+                  content={"error": str(e), "traceback": traceback.format_exc(), "image": file.filename},
+              )
+    isCorrect: false
+inheritance:
+  inheritable: true
+  exclude: []
+  include: []
+enabled: false

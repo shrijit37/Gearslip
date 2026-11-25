@@ -1,0 +1,31 @@
+title: Do not inject untrusted HTML into the DOM
+rule: >-
+  Avoid `dangerouslySetInnerHTML`, `innerHTML`, `outerHTML`, `document.write`,
+  and `insertAdjacentHTML` with any value that is not a hardcoded literal. When
+  rendering rich content that must be HTML (markdown, CMS copy, user input),
+  sanitize it first with a maintained sanitizer (e.g. DOMPurify) inside a single
+  small wrapper component, and pass the sanitized string only to that wrapper.
+  Prefer rendering text as React children, which escapes by default.
+severity: high
+scope: file
+path: '**/*'
+examples:
+  - snippet: |-
+      import DOMPurify from "dompurify";
+
+      export function RichText({ html }) {
+        const clean = DOMPurify.sanitize(html, { USE_PROFILES: { html: true } });
+        return <div dangerouslySetInnerHTML={{ __html: clean }} />;
+      }
+    isCorrect: true
+  - snippet: |-
+      export function Bio({ profile }) {
+        // profile.bio comes from the CMS / query string
+        return <div dangerouslySetInnerHTML={{ __html: profile.bio }} />;
+      }
+    isCorrect: false
+inheritance:
+  inheritable: true
+  exclude: []
+  include: []
+enabled: false

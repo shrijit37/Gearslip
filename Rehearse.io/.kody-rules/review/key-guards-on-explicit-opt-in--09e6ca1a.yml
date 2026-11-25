@@ -1,0 +1,29 @@
+title: Key guards on explicit opt-in plus a confirmed non-production environment
+rule: >-
+  A dev-only override (fake upstream, debug socket, relaxed auth) must require
+  the opt-in flag to equal the string `true` **and** an environment that is not
+  production under every name the stack may set (`APP_ENV` and `NODE_ENV`). Both
+  signals must default closed, so a missing or mis-cased variable cannot open
+  the override.
+severity: critical
+scope: file
+examples:
+  - snippet: >-
+      // Noncompliant: an absent APP_ENV is treated as dev, and NODE_ENV is
+      ignored
+
+      const useFakeUpstream = process.env.APP_ENV !== "production";
+    isCorrect: false
+  - snippet: >-
+      const isProduction =
+          process.env.APP_ENV === "production" || process.env.NODE_ENV === "production";
+      // Compliant: explicit opt-in AND a confirmed non-production environment
+
+      const useFakeUpstream = process.env.ALLOW_LIVE_WS_OVERRIDE === "true" &&
+      !isProduction;
+    isCorrect: true
+inheritance:
+  inheritable: true
+  exclude: []
+  include: []
+enabled: false

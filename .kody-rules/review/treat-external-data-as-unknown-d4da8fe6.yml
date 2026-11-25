@@ -1,0 +1,39 @@
+title: Treat external data as unknown and keep TypeScript strict
+rule: >-
+  Do not silence the type system to move faster: avoid `any`, blanket `//
+  @ts-ignore`, and `// eslint-disable` on type rules in application code. Values
+  coming from `fetch`, `req.json()`, `localStorage`, URL params, or third-party
+  SDKs must be typed as `unknown` and narrowed with a runtime check (type guard
+  or schema parse) before use. Keep `compilerOptions.strict` enabled in
+  tsconfig.json and do not enable `typescript.ignoreBuildErrors` or
+  `eslint.ignoreDuringBuilds` in next.config.
+severity: medium
+scope: file
+path: '**/*'
+examples:
+  - snippet: |-
+      type Lead = { email: string; message: string };
+
+      function isLead(value: unknown): value is Lead {
+        if (typeof value !== 'object' || value === null) return false;
+        const v = value as Record<string, unknown>;
+        return typeof v.email === 'string' && typeof v.message === 'string';
+      }
+
+      const payload: unknown = await res.json();
+      if (!isLead(payload)) {
+        return Response.json({ error: 'Invalid payload' }, { status: 400 });
+      }
+      await saveLead(payload);
+    isCorrect: true
+  - snippet: |-
+      // @ts-ignore
+      const payload: any = await res.json();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await saveLead(payload);
+    isCorrect: false
+inheritance:
+  inheritable: true
+  exclude: []
+  include: []
+enabled: false

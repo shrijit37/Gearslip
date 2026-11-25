@@ -1,0 +1,48 @@
+title: Validate and range-check all values crossing the N-API boundary
+rule: >-
+  Every native binding exposed through `node-addon-api` must validate the
+  argument count, type, and size before touching memory, and must report
+  failures as `Napi::Error`/`Napi::TypeError`/`Napi::RangeError` instead of
+  throwing a C++ exception or dereferencing unchecked pointers. Concretely:
+  check `info.Length()`, use `IsBuffer`/`IsTypedArray`/`IsNumber` guards, verify
+  buffer lengths against the destination framebuffer or DRM plane size before
+  `memcpy`, validate integer ranges for geometry/format values, and wrap all
+  native work in try/catch that converts failures into a JS error. Never store a
+  raw `Napi::Buffer` pointer beyond the callback without copying into owned
+  memory.
+severity: high
+scope: file
+path: '**/*'
+examples:
+  - snippet: |-
+      Napi::Value WriteFrame(const Napi::CallbackInfo& info) {
+        auto env = info.Env();
+        auto buf = info[0].As<Napi::Buffer<uint8_t>>();
+        // No length check: an oversized buffer overflows the mapped DRM framebuffer.
+        memcpy(framebuffer, buf.Data(), buf.Length());
+        return env.Undefined();
+      }
+    isCorrect: false
+  - snippet: |-
+      Napi::Value WriteFrame(const Napi::CallbackInfo& info) {
+        auto env = info.Env();
+        if (info.Length() < 1 || !info[0].IsBuffer()) {
+          throw Napi::TypeError::New(env, "expected a Buffer argument");
+        }
+        auto buf = info[0].As<Napi::Buffer<uint8_t>>();
+        if (buf.Length() > framebufferSize) {
+          throw Napi::RangeError::New(env, "frame exceeds framebuffer size");
+        }
+        try {
+          memcpy(framebuffer, buf.Data(), buf.Length());
+        } catch (const std::exception& e) {
+          throw Napi::Error::New(env, e.what());
+        }
+        return env.Undefined();
+      }
+    isCorrect: true
+inheritance:
+  inheritable: true
+  exclude: []
+  include: []
+enabled: false

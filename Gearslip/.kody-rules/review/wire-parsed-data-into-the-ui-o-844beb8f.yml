@@ -1,0 +1,33 @@
+title: Wire Parsed Data Into the UI or Remove It
+rule: >-
+  If a model field is parsed and asserted in tests (e.g. Release.pageUrl) but is
+  never used at runtime, either consume it (add the link/button) or remove the
+  field and correct the surrounding comments. Dead fields mislead reviewers into
+  believing an escape hatch exists when the user actually has no path forward on
+  an error.
+severity: medium
+scope: file
+examples:
+  - snippet: >-
+      data class Release(val tag: String, val pageUrl: String) // parsed +
+      tested, never opened
+
+
+      // Comment: "on signature mismatch the driver can use the release page."
+
+      Text(errorMessage) // error card has only text, no link
+    isCorrect: false
+  - snippet: |-
+      data class Release(val tag: String, val pageUrl: String)
+
+      if (installFailedWithSignatureMismatch) {
+          Button(onClick = {
+              context.startActivity(Intent(Intent.ACTION_VIEW, release.pageUrl.toUri()))
+          }) { Text("View on GitHub") }
+      }
+    isCorrect: true
+inheritance:
+  inheritable: true
+  exclude: []
+  include: []
+enabled: false

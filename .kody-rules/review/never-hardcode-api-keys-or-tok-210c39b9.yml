@@ -1,0 +1,30 @@
+title: Never hardcode API keys or tokens; use REACT_APP_ environment variables
+rule: >-
+  Do not hardcode secrets, API keys, tokens, or credentials in source files. Any
+  external service credential (e.g. CoinGecko API key, auth token, webhook URL)
+  must be read from a CRA environment variable prefixed with REACT_APP_
+  (process.env.REACT_APP_*) and supplied via a local .env file that is never
+  committed. Also never build request headers with inline literal secrets, and
+  never log secrets to the console.
+severity: critical
+scope: file
+path: '**/*'
+examples:
+  - snippet: |-
+      const API_KEY = 'cg_live_9f8a7b6c5d4e3f2a1b0c';
+      const res = await axios.get(BASE_URL + '/coins/markets', {
+        headers: { 'x-cg-demo-api-key': API_KEY },
+      });
+    isCorrect: false
+  - snippet: |-
+      const API_KEY = process.env.REACT_APP_COINGECKO_API_KEY;
+      if (!API_KEY) throw new Error('Missing REACT_APP_COINGECKO_API_KEY');
+      const res = await api.get('/coins/markets', {
+        headers: { 'x-cg-demo-api-key': API_KEY },
+      });
+    isCorrect: true
+inheritance:
+  inheritable: true
+  exclude: []
+  include: []
+enabled: false

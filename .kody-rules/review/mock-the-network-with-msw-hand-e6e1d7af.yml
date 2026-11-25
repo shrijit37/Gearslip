@@ -1,0 +1,47 @@
+title: Mock the network with MSW handlers in tests instead of stubbing axios
+rule: >-
+  Vitest tests that touch data fetching must use the MSW server (setupServer
+  from msw/node) with request handlers defined per test, started in setup and
+  reset between tests, rather than jest.mock/vitest.mock of the axios instance
+  or ad-hoc response objects. This keeps axios interceptors, error paths, and
+  TanStack Query retries under test. Tests must render through
+  @testing-library/react with a fresh QueryClientProvider (retry disabled) and
+  assert on user-visible outcomes using @testing-library/jest-dom matchers;
+  cleanup must run via afterEach. Do not commit real endpoints, tokens, or
+  recorded production payloads into handlers — use fixtures with synthetic data.
+severity: medium
+scope: file
+path: '**/*'
+examples:
+  - snippet: |-
+      // src/features/orders/OrdersList.test.tsx
+      import { http, HttpResponse } from "msw";
+      import { server } from "@/test/server";
+
+      it("shows an error state when the API fails", async () => {
+        server.use(
+          http.get("/api/orders", () => new HttpResponse(null, { status: 500 }))
+        );
+        renderWithQueryClient(<OrdersList />);
+        expect(await screen.findByRole("alert")).toHaveTextContent(/failed/i);
+      });
+    isCorrect: true
+  - snippet: |-
+      // src/features/orders/OrdersList.test.tsx
+      import axios from "axios";
+
+      vi.mock("axios");
+
+      it("renders orders", async () => {
+        (axios.get as any).mockResolvedValue({
+          data: { token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.real-prod-token" },
+        });
+        render(<OrdersList />);
+        await waitFor(() => expect(screen.getByText("ok")).toBeInTheDocument());
+      });
+    isCorrect: false
+inheritance:
+  inheritable: true
+  exclude: []
+  include: []
+enabled: false

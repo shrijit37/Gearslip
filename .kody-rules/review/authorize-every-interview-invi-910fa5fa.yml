@@ -1,0 +1,31 @@
+title: >-
+  Authorize every interview/invite and scoring endpoint server-side before
+  processing
+rule: >-
+  Each recruiter, invite, candidate, and scoring route handler must verify the
+  caller's identity and ownership (valid session/JWT plus invite token bound to
+  that interview) before reading or mutating interview data. Do not rely on
+  client-supplied ids, query params, or UI-only gating; return 401/403 without
+  leaking resource existence, and apply the same check to any internal/admin
+  endpoint.
+severity: high
+scope: file
+path: '**/*'
+examples:
+  - snippet: |-
+      app.get('/api/interviews/:id', async (req, res) => {
+        const interview = await db.interviews.findById(req.params.id);
+        res.json(interview);
+      });
+    isCorrect: false
+  - snippet: |-
+      app.get('/api/interviews/:id', requireAuth, async (req, res) => {
+        const interview = await db.interviews.findById(req.params.id);
+        if (!interview || interview.recruiterId !== req.user.id) return res.sendStatus(403);
+        res.json(interview);
+      });
+    isCorrect: true
+inheritance:
+  inheritable: true
+  exclude: []
+  include: []

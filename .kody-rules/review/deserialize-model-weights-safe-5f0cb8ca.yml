@@ -1,0 +1,40 @@
+title: Deserialize model weights safely (weights_only / safetensors)
+rule: >-
+  Never call torch.load() on an untrusted or externally downloaded checkpoint
+  without weights_only=True, since pickle-based deserialization can execute
+  arbitrary code. Prefer safetensors (safetensors.torch.load_file) for model
+  weights. torch.load(path, map_location=...) must be called with
+  weights_only=True unless the file is a locally produced, trusted checkpoint,
+  and any downloaded model artifact should be validated (checksum or pinned
+  trusted source) before loading.
+severity: high
+scope: file
+path: '**/*'
+examples:
+  - snippet: >-
+      import torch
+
+
+      model = torch.load("models/detector.pt")  # arbitrary pickle payload
+      execution
+    isCorrect: false
+  - snippet: >-
+      from safetensors.torch import load_file
+
+      import torch
+
+
+      state = load_file("models/detector.safetensors")
+
+      model.load_state_dict(state)
+
+      # or, for .pt files:
+
+      state = torch.load("models/detector.pt", map_location="cpu",
+      weights_only=True)
+    isCorrect: true
+inheritance:
+  inheritable: true
+  exclude: []
+  include: []
+enabled: false

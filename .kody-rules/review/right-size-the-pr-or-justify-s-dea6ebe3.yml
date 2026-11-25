@@ -1,0 +1,17 @@
+title: Right-size the PR or justify size
+rule: >-
+  If the PR is large (many files/lines), split it into logical chunks or provide
+  a clear justification and review guide listing file groups and what to focus
+  on.
+severity: high
+scope: file
+examples:
+  - snippet: Huge PR, no description
+    isCorrect: false
+  - snippet: Review guide section with file clusters
+    isCorrect: true
+inheritance:
+  inheritable: true
+  exclude: []
+  include: []
+enabled: false

@@ -1,0 +1,33 @@
+title: Revoke object URLs in the same step that replaces them
+rule: >-
+  Every `URL.createObjectURL` result must be tracked in a ref and revoked by a
+  single helper when it is replaced or cleared, in the same call that drops it
+  from the tracking list. Revoking on unmount only is not enough: repeated
+  replacements leak one blob per replacement.
+severity: medium
+scope: file
+examples:
+  - snippet: |-
+      function setPreview(kind: string, file: File) {
+          const url = URL.createObjectURL(file);
+          // Noncompliant: the previous URL is never revoked
+          urlsRef.current.push(url);
+          setPreviews((prev) => ({ ...prev, [kind]: url }));
+      }
+    isCorrect: false
+  - snippet: |-
+      function setStoredUrl(kind: string, url?: string) {
+          const previous = storedRef.current[kind];
+          if (previous) {
+              URL.revokeObjectURL(previous); // Compliant: released as it is replaced
+              urlsRef.current.delete(previous);
+          }
+          if (url) urlsRef.current.add(url);
+          setPreviews((prev) => ({ ...prev, [kind]: url }));
+      }
+    isCorrect: true
+inheritance:
+  inheritable: true
+  exclude: []
+  include: []
+enabled: false

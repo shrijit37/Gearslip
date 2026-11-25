@@ -1,0 +1,52 @@
+title: Authenticate every S3-compatible route before touching storage
+rule: >-
+  Each HTTP handler that serves or mutates stored objects must verify the
+  caller's credentials (AWS SigV4 signature verification, presigned URL
+  signature plus expiry, or a constant-time-compared bearer/admin token) before
+  any D1/KV/R2 read or write. Authorization decisions must be made per
+  bucket/key after authentication, and unauthenticated or invalid requests must
+  return 401/403 without revealing whether the bucket or key exists. Do not rely
+  on CORS, path obscurity, or client-supplied headers such as `X-User-Id` as the
+  sole access control, and never allow wildcard `Access-Control-Allow-Origin: *`
+  on routes that accept credentials.
+severity: high
+scope: file
+path: '**/*'
+examples:
+  - snippet: |-
+      export default {
+        async fetch(request: Request, env: Env) {
+          const url = new URL(request.url);
+          const key = url.pathname.slice(1);
+          const object = await env.BUCKET.get(key);
+          return new Response(object?.body ?? "not found", {
+            headers: { "Access-Control-Allow-Origin": "*" },
+          });
+        },
+      };
+    isCorrect: false
+  - snippet: |-
+      export default {
+        async fetch(request: Request, env: Env) {
+          const url = new URL(request.url);
+          const key = url.pathname.slice(1);
+
+          const auth = await verifySigV4(request, env);
+          if (!auth.ok) {
+            return new Response("Access Denied", { status: 403 });
+          }
+          if (!auth.allowsRead(key)) {
+            return new Response("Access Denied", { status: 403 });
+          }
+
+          const object = await env.BUCKET.get(key);
+          if (!object) return new Response("Not Found", { status: 404 });
+          return new Response(object.body);
+        },
+      };
+    isCorrect: true
+inheritance:
+  inheritable: true
+  exclude: []
+  include: []
+enabled: false

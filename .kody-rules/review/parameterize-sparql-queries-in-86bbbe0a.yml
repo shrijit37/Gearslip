@@ -1,0 +1,36 @@
+title: Parameterize SPARQL queries instead of string interpolation
+rule: >-
+  Never build SPARQL queries by interpolating untrusted values (values extracted
+  from CVs, entity IDs, or user input) with f-strings or string concatenation.
+  Use rdflib prepared queries with initBindings, or a strictly validated/escaped
+  value allowlist, so that untrusted data is bound as a variable rather than
+  spliced into the query text.
+severity: high
+scope: file
+path: '**/*'
+examples:
+  - snippet: |-
+      def skills_for(graph, person_name):
+          query = f"""
+          SELECT ?skill WHERE {{
+            ?p foaf:name "{person_name}" ; ex:hasSkill ?skill .
+          }}
+          """
+          return graph.query(query)
+    isCorrect: false
+  - snippet: |-
+      from rdflib import Variable
+
+      def skills_for(graph, person_name):
+          query = """
+          SELECT ?skill WHERE {
+            ?p foaf:name ?name ; ex:hasSkill ?skill .
+          }
+          """
+          return graph.query(query, initBindings={"name": person_name})
+    isCorrect: true
+inheritance:
+  inheritable: true
+  exclude: []
+  include: []
+enabled: false
