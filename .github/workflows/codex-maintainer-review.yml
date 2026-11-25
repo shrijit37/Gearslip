@@ -35,11 +35,11 @@ jobs:
   recommend:
     if: ${{ github.event_name == 'workflow_dispatch' || !github.event.pull_request.draft }}
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     steps:
       - name: Review changed lines
         id: maintainer
-        uses: shrijit37/codex-maintainer@32931680c3a1b4ea7e6e49dc51d7e4668f4d3739
+        uses: shrijit37/codex-maintainer@1ed3a5bbc5b6532e4b7d9ab565fa24ac73b215dc
         with:
           openai-api-key: ${{ secrets.OCR_LLM_AUTH_TOKEN }}
           github-token: ${{ github.token }}
@@ -53,5 +53,6 @@ jobs:
           max-context-files: 24
           max-context-chars: 120000
           max-file-bytes: 100000
+          request-timeout-ms: 600000
           verbose: true
           comment: 'true'
