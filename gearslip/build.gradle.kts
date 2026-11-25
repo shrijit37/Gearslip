@@ -1,5 +1,7 @@
 import java.util.Properties
 import com.android.build.api.dsl.ApplicationBuildType
+import org.gradle.api.provider.ValueSource
+import org.gradle.api.provider.ValueSourceParameters
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import org.jetbrains.kotlin.gradle.tasks.KotlinJvmCompile
 
@@ -33,6 +35,9 @@ val keystoreProperties = Properties().apply {
 // long as minor and patch stay under 100. Changelog entries use the same number.
 class GitVersion(val name: String, val code: Int)
 
+// providers.exec is ValueSource-backed: Gradle records the command's output as a configuration
+// input, re-runs it on later builds and invalidates the cache entry only when the value changes.
+// So these git reads are safe with the configuration cache; the clock below is not, without help.
 val gitVersion: GitVersion = run {
     val described = runCatching {
         providers.exec {
@@ -71,8 +76,18 @@ val buildSha = project.findProperty("gearslipBuildSha")?.toString()
             isIgnoreExitValue = true
         }.standardOutput.asText.get().trim()
     }.getOrNull().orEmpty()
+// A bare System.currentTimeMillis() at configuration time is not a tracked input: with the
+// configuration cache its value would be baked into a cached entry and reused by a later build,
+// giving two different APKs the same version code. Reading the clock through a ValueSource makes
+// it a configuration input, so Gradle re-reads it every build and invalidates the entry when it
+// changes. Return minutes from obtain(), not milliseconds converted afterwards: Gradle tracks the
+// ValueSource's own result, so dividing outside it would invalidate the entry on every build.
+abstract class BuildClockValueSource : ValueSource<Long, ValueSourceParameters.None> {
+    override fun obtain(): Long = System.currentTimeMillis() / 60_000L
+}
+
 val buildSequence = project.findProperty("gearslipBuildSeq")?.toString()?.toIntOrNull()
-    ?: (System.currentTimeMillis() / 60_000).toInt()
+    ?: providers.of(BuildClockValueSource::class) { }.get().toInt()
 
 // Keeps build output out of the module folder: <root>/build/gearslip/... instead of
 // <root>/gearslip/build/..., so everything this project produces lands under one
@@ -153,10 +168,18 @@ android {
     // we didn't list. The DSL below is the public AGP API (verified against AGP 9.1.1).
     splits {
         abi {
+            // -PgearslipAbi=arm64-v8a builds only that ABI, without the 35 MB universal fallback,
+            // for quick local iteration. CI leaves this unset and still publishes every ABI plus
+            // the universal APK the updater falls back to.
+            val abis = project.findProperty("gearslipAbi")?.toString()
+                ?.split(',')
+                ?.map { it.trim() }
+                ?.filter { it.isNotEmpty() }
+                ?: listOf("arm64-v8a", "armeabi-v7a", "x86", "x86_64")
             isEnable = true
             reset()
-            include("arm64-v8a", "armeabi-v7a", "x86", "x86_64")
-            isUniversalApk = true
+            include(*abis.toTypedArray())
+            isUniversalApk = abis.size > 1
         }
     }
 

@@ -40,6 +40,12 @@ inputs:
     description: Set to false to only prepare the environment (CodeQL instruments its own build).
     required: false
     default: 'true'
+  gradle-encryption-key:
+    description: >-
+      Base64 AES key from the GRADLE_ENCRYPTION_KEY secret. Needed for setup-gradle to restore
+      configuration-cache entries; without it entries are written but never read back.
+    required: false
+    default: ''
 
 outputs:
   sha7:
@@ -62,8 +68,11 @@ runs:
 
     # Caches the Gradle user home (distribution, dependencies and - with org.gradle.caching=true
     # in gradle.properties - task outputs). Non-default branches restore but do not write, so a
-    # feature branch cannot evict main's cache.
+    # feature branch cannot evict main's cache. The encryption key is also what lets the action
+    # save and restore configuration-cache entries; without it CI only catches CC regressions.
     - uses: gradle/actions/setup-gradle@v4
+      with:
+        cache-encryption-key: ${{ inputs.gradle-encryption-key }}
 
     # A stable signature is what lets an installed Gearslip accept the next build. Without it
     # each runner's throwaway debug key makes Android refuse the update. Forks of release.yml
