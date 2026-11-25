@@ -15,69 +15,26 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: ./.github/actions/gearslip-build
+        id: build
         with:
-          # gitVersion names the build after the newest tag, so it needs the tag history.
-          fetch-depth: 0
+          # A promoted APK must carry the key an installed Gearslip already trusts, or Android
+          # refuses to install it. The shared action fails here when the key is missing.
+          signing: required
+          keystore-b64: ${{ secrets.UPDATE_KEYSTORE_B64 }}
+          store-password: ${{ secrets.UPDATE_STORE_PASSWORD }}
+          key-alias: ${{ secrets.UPDATE_KEY_ALIAS }}
+          key-password: ${{ secrets.UPDATE_KEY_PASSWORD }}
 
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "21"
-
-      - uses: gradle/actions/setup-gradle@v4
-
-      # Same four secrets as release.yml: a promoted build must carry the key an installed
-      # Gearslip already trusts, or Android refuses to install it.
-      - name: Write stable signing config
-        env:
-          UPDATE_KEYSTORE_B64: ${{ secrets.UPDATE_KEYSTORE_B64 }}
-          UPDATE_STORE_PASSWORD: ${{ secrets.UPDATE_STORE_PASSWORD }}
-          UPDATE_KEY_ALIAS: ${{ secrets.UPDATE_KEY_ALIAS }}
-          UPDATE_KEY_PASSWORD: ${{ secrets.UPDATE_KEY_PASSWORD }}
+      - name: Write release body
         run: |
-          if [ -z "$UPDATE_KEYSTORE_B64" ]; then
-            echo "::error::UPDATE_KEYSTORE_B64 is not set; a promoted build cannot update an installed Gearslip."
-            exit 1
-          fi
-          echo "$UPDATE_KEYSTORE_B64" | base64 --decode > gearslip-release.jks
-          python3 - <<'PY'
-          import os
-
-          def escape(value):
-              return (value.replace('\\', '\\\\').replace(':', '\\:')
-                           .replace('=', '\\=').replace('\n', '\\n'))
-
-          props = {
-              'STORE_PASSWORD': 'storePassword',
-              'KEY_ALIAS': 'keyAlias',
-              'KEY_PASSWORD': 'keyPassword',
-          }
-          with open('keystore.properties', 'w') as out:
-              out.write('storeFile=gearslip-release.jks\n')
-              for env, prop in props.items():
-                  out.write('%s=%s\n' % (prop, escape(os.environ['UPDATE_' + env])))
-          PY
-
-      # The same sequence Gradle uses by default (minutes since the epoch), stated explicitly so
-      # it can be published with the release. A promoted APK has a frozen version code; the app
-      # needs to know it to refuse an install that would be a downgrade from a later dev build.
-      - name: Identify the build
-        run: |
-          seq=$(($(date +%s) / 60))
-          echo "BUILD_SEQ=$seq" >> "$GITHUB_ENV"
+          # The sequence Gradle compiled into the APK (minutes since the epoch) is published
+          # with the release so the app can refuse an out-of-order downgrade from a later dev
+          # build. The shared action computed it once for both the build and this comment.
           {
-            echo "<!-- gearslip-version-code: $seq -->"
+            echo "<!-- gearslip-version-code: ${{ steps.build.outputs.seq }} -->"
             cat .github/release-notes.md
           } > release-body.md
-
-      - name: Build stable APK
-        run: ./gradlew :gearslip:assembleDebug --no-daemon -PgearslipChannel=stable -PgearslipBuildSha="$(git rev-parse --short=7 HEAD)" -PgearslipBuildSeq="$BUILD_SEQ"
-
-      - name: Locate APKs
-        run: |
-          compgen -G 'build/Gearslip-*-debug.apk' > /dev/null || { echo "no split APKs in build/"; exit 1; }
-          ls -lh build/Gearslip-*-debug.apk
 
       - name: Publish stable release
         uses: softprops/action-gh-release@v2

@@ -25,71 +25,24 @@ jobs:
     if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      # The shared action checks out the PR's head (not its merge with main), sets up the
+      # toolchain and stable key, builds the dev APKs and verifies they exist. The SHA and
+      # version code it outputs are compiled into the APK and written to the manifest, so the
+      # feed can never advertise a different build than the one it points at.
+      - uses: ./.github/actions/gearslip-build
+        id: build
         with:
-          # Build the PR's head, not its merge with main, so the ref the driver picks is
-          # the commit that actually shipped. Tags give gitVersion a name for the build.
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
-          fetch-depth: 0
-
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "21"
-
-      - uses: gradle/actions/setup-gradle@v4
-
-      - name: Write stable signing config
-        env:
-          UPDATE_KEYSTORE_B64: ${{ secrets.UPDATE_KEYSTORE_B64 }}
-          UPDATE_STORE_PASSWORD: ${{ secrets.UPDATE_STORE_PASSWORD }}
-          UPDATE_KEY_ALIAS: ${{ secrets.UPDATE_KEY_ALIAS }}
-          UPDATE_KEY_PASSWORD: ${{ secrets.UPDATE_KEY_PASSWORD }}
-        run: |
-          if [ -z "$UPDATE_KEYSTORE_B64" ]; then
-            echo "::error::UPDATE_KEYSTORE_B64 is not set; dev APKs cannot replace an installed Gearslip."
-            exit 1
-          fi
-          echo "$UPDATE_KEYSTORE_B64" | base64 --decode > gearslip-release.jks
-          python3 - <<'PY'
-          import os
-
-          def escape(value):
-              return (value.replace('\\', '\\\\').replace(':', '\\:')
-                           .replace('=', '\\=').replace('\n', '\\n'))
-
-          props = {
-              'STORE_PASSWORD': 'storePassword',
-              'KEY_ALIAS': 'keyAlias',
-              'KEY_PASSWORD': 'keyPassword',
-          }
-          with open('keystore.properties', 'w') as out:
-              out.write('storeFile=gearslip-release.jks\n')
-              for env, prop in props.items():
-                  out.write('%s=%s\n' % (prop, escape(os.environ['UPDATE_' + env])))
-          PY
-
-      - name: Identify the build
-        run: |
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            echo "DEV_REF=pr-${{ github.event.number }}" >> "$GITHUB_ENV"
-          else
-            echo "DEV_REF=${GITHUB_REF_NAME}" >> "$GITHUB_ENV"
-          fi
-          echo "DEV_SHA7=$(git rev-parse --short=7 HEAD)" >> "$GITHUB_ENV"
-          # Minutes since the epoch: the APK's version code and the feed's "seq" are the same
-          # number, so the app can tell whether an offered build would be a downgrade.
-          echo "DEV_SEQ=$(($(date +%s) / 60))" >> "$GITHUB_ENV"
-          described=$(git describe --tags --match 'v*' --exclude '*-g*' --abbrev=7 2>/dev/null || echo 'v0.0.0-dev')
-          echo "DEV_VERSION=${described#v}" >> "$GITHUB_ENV"
-
-      - name: Build dev APKs
-        run: |
-          ./gradlew :gearslip:assembleDebug --no-daemon \
-            -PgearslipChannel=dev -PgearslipBuildSha="$DEV_SHA7" -PgearslipVersionName="$DEV_VERSION" \
-            -PgearslipBuildSeq="$DEV_SEQ"
+          signing: required
+          keystore-b64: ${{ secrets.UPDATE_KEYSTORE_B64 }}
+          store-password: ${{ secrets.UPDATE_STORE_PASSWORD }}
+          key-alias: ${{ secrets.UPDATE_KEY_ALIAS }}
+          key-password: ${{ secrets.UPDATE_KEY_PASSWORD }}
+          channel: dev
 
       - name: Name assets by commit
+        env:
+          DEV_SHA7: ${{ steps.build.outputs.sha7 }}
         run: |
           mkdir -p feed
           for apk in build/Gearslip-*-debug.apk; do
@@ -116,6 +69,10 @@ jobs:
       - name: Publish the dev manifest
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DEV_REF: ${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.number) || github.ref_name }}
+          DEV_SHA7: ${{ steps.build.outputs.sha7 }}
+          DEV_VERSION: ${{ steps.build.outputs.version }}
+          DEV_SEQ: ${{ steps.build.outputs.seq }}
         run: |
           # actions/checkout leaves the token in git config, so a push is the reliable way to
           # bootstrap the feed branch. Another ref may have created it since the check.

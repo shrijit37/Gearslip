@@ -33,17 +33,20 @@ jobs:
           languages: ${{ matrix.language }}
           build-mode: ${{ matrix.build-mode }}
 
+      # Only the manual build needs a JDK and Gradle, and they share the publishing workflows'
+      # setup action. No signing key: the scan only needs compiled Kotlin, not an installable APK,
+      # and init has already seen the checkout, so the action must not check out again.
       - if: matrix.build-mode == 'manual'
-        uses: actions/setup-java@v4
+        uses: ./.github/actions/gearslip-build
         with:
-          distribution: temurin
-          java-version: "21"
+          checkout: false
+          signing: none
+          build: false
 
+      # CodeQL scans Kotlin as it compiles. R8 runs after that and produces no source facts,
+      # so skipping it here shortens the scan without changing what is published.
       - if: matrix.build-mode == 'manual'
-        uses: gradle/actions/setup-gradle@v4
-
-      - if: matrix.build-mode == 'manual'
-        run: ./gradlew :gearslip:assembleDebug --no-daemon
+        run: ./gradlew :gearslip:assembleDebug --no-daemon -PnoR8
 
       - uses: github/codeql-action/analyze@v4
         with:

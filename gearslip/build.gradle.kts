@@ -1,4 +1,5 @@
 import java.util.Properties
+import com.android.build.api.dsl.ApplicationBuildType
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import org.jetbrains.kotlin.gradle.tasks.KotlinJvmCompile
 
@@ -98,6 +99,16 @@ android {
         buildConfigField("String", "STATS_URL", "\"${project.findProperty("gearslipStatsUrl") ?: ""}\"")
     }
 
+    // Release and debug are shrunk identically so a debug install behaves like what ships (a
+    // keep rule missing for release shows up in debug first). One definition instead of two
+    // copies that can drift; -PnoR8 opts out for a quicker local build.
+    val defaultProguardRules = getDefaultProguardFile("proguard-android-optimize.txt")
+    fun ApplicationBuildType.shrinkWithR8() {
+        isMinifyEnabled = true
+        isShrinkResources = true
+        proguardFiles(defaultProguardRules, "proguard-rules.pro")
+    }
+
     signingConfigs {
         // Declared only when the properties file is present, so a clone without the key still
         // builds debug; assembleRelease then falls back to unsigned rather than failing here.
@@ -114,9 +125,7 @@ android {
     buildTypes {
         release {
             signingConfig = signingConfigs.findByName("release")
-            isMinifyEnabled = true
-            isShrinkResources = true
-            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            shrinkWithR8()
         }
         // Its own package, so a debug build installs beside the release one instead of over it.
         // Signed with the release key when it's here: both builds declare the car template
@@ -125,16 +134,12 @@ android {
             applicationIdSuffix = ".dev"
             signingConfigs.findByName("release")?.let { signingConfig = it }
             manifestPlaceholders["appLabel"] = "Gearslip Debug"
-            // English (XA) and Arabic (XB) under the phone's languages: stretched, accented and
-            // right-to-left text, which shows what's still hardcoded and what doesn't fit.
-            isPseudoLocalesEnabled = true
-            // Shrunk with R8 like a release, so a debug install behaves like what ships (a keep
-            // rule missing for release shows up here first). -PnoR8 skips it for a quicker build.
-            if (!project.hasProperty("noR8")) {
-                isMinifyEnabled = true
-                isShrinkResources = true
-                proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            }
+            // English (XA) and Arabic (XB) pseudo-locales show what's hardcoded and what doesn't
+            // fit. They are a manual inspection aid, not something a published APK uses, so
+            // generating them is opt-in: -PpseudoLocales for a layout-checking build.
+            isPseudoLocalesEnabled = project.hasProperty("pseudoLocales")
+            // Shrunk with R8 like a release; -PnoR8 skips it for a quicker build.
+            if (!project.hasProperty("noR8")) shrinkWithR8()
         }
     }
 
@@ -177,14 +182,22 @@ android {
 // fact rather than fighting AGP's variant-output API across versions - simpler and doesn't break
 // when that API moves again. A copy, not a move: AGP packages incrementally into the APK it left
 // last time, and with that file gone a build came out holding nothing but classes.dex.
+// Resolve paths during configuration: the task action then closes over plain Files instead of a
+// Project, which the configuration cache cannot serialize.
+val rootBuildDir = rootProject.layout.buildDirectory.get().asFile
+val apkOutputDir = layout.buildDirectory.dir("outputs/apk").get().asFile
+
 tasks.register("renameApk") {
+    // Copy into task-local vals: referencing the script-level ones from doLast would capture the
+    // script object itself, which the configuration cache refuses to serialize.
+    val root = rootBuildDir
+    val outputs = apkOutputDir
     doLast {
-        val rootBuildDir = rootProject.layout.buildDirectory.get().asFile
         // Drop copies from an earlier build, so a local run can't leave a now-unused ABI (or a
         // pre-split universal named Gearslip-debug.apk) in the set CI uploads.
-        rootBuildDir.listFiles { file -> file.name.startsWith("Gearslip-") && file.extension == "apk" }
+        root.listFiles { file -> file.name.startsWith("Gearslip-") && file.extension == "apk" }
             ?.forEach { it.delete() }
-        layout.buildDirectory.dir("outputs/apk").get().asFile.walkTopDown()
+        outputs.walkTopDown()
             .filter { it.extension == "apk" }
             .toList()
             .forEach { apk ->
@@ -197,7 +210,7 @@ tasks.register("renameApk") {
                     .removeSuffix("-$variant")
                     .takeIf { it.isNotBlank() && it != variant }
                 val name = if (abi == null) "Gearslip-$variant.apk" else "Gearslip-$abi-$variant.apk"
-                apk.copyTo(File(rootBuildDir, name), overwrite = true)
+                apk.copyTo(File(root, name), overwrite = true)
             }
     }
 }
@@ -226,8 +239,9 @@ dependencies {
     // Keyless Google Directions traffic client (see traffic/VelaTrafficSource.kt).
     implementation(libs.okhttp)
     testImplementation(libs.junit)
+    // The one androidTest only uses AndroidJUnit4 and assertions; Espresso is not referenced,
+    // so pulling it into every build is dead weight. Keep runner: AndroidJUnit4 needs it.
     androidTestImplementation(libs.androidx.junit)
-    androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation("androidx.test:runner:1.6.2")
 }
 

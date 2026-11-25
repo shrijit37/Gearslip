@@ -28,6 +28,10 @@ Gradle writes one APK per ABI to `build/` (`Gearslip-arm64-v8a-debug.apk`,
 `Gearslip-universal-debug.apk` with every ABI. Install the one matching your phone, or the
 universal one. It installs as Gearslip Dev, next to the regular app.
 
+For a quick local iteration, add `-PnoR8` to skip shrinking; published builds are always shrunk.
+Add `-PpseudoLocales` when you want the stretched and right-to-left inspection locales. Build
+caching is on by default, so a repeat build only redoes what actually changed.
+
 ## Pull requests
 
 Work happens on the `experimental` branch, which merges into `main` at each release. Base your
