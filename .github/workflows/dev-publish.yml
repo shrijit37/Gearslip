@@ -25,14 +25,20 @@ jobs:
     if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     steps:
-      # The shared action checks out the PR's head (not its merge with main), sets up the
-      # toolchain and stable key, builds the dev APKs and verifies they exist. The SHA and
-      # version code it outputs are compiled into the APK and written to the manifest, so the
-      # feed can never advertise a different build than the one it points at.
+      # Check out first: a local action cannot be loaded from an empty runner. Build the PR's
+      # head (not its merge with main), so the ref the driver picks is the commit that shipped.
+      # Full history gives gitVersion a name for the build.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+
+      # The shared action sets up the toolchain and stable key, builds the dev APKs and verifies
+      # they exist. The SHA and version code it outputs are compiled into the APK and written
+      # to the manifest, so the feed can't advertise a different build than it points at.
       - uses: ./.github/actions/gearslip-build
         id: build
         with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           signing: required
           keystore-b64: ${{ secrets.UPDATE_KEYSTORE_B64 }}
           store-password: ${{ secrets.UPDATE_STORE_PASSWORD }}

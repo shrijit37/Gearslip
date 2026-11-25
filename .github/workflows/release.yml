@@ -12,9 +12,15 @@ jobs:
     permissions:
       contents: write
     steps:
-      # Checkout, JDK, Gradle cache and (when the secrets exist) the stable signing key all live
-      # in one action shared with the dev and promotion workflows. A fork without the secrets
-      # gets a throwaway signature here and a warning; publishing still works from the UI.
+      # A local action has to exist on disk before GitHub can load it, so every caller checks
+      # out first. Full history gives gitVersion its hand-written version tags.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # JDK, Gradle cache and (when the secrets exist) the stable signing key all live in one
+      # action shared with the dev and promotion workflows. A fork without the secrets gets a
+      # throwaway signature here and a warning; publishing still works from the UI.
       - uses: ./.github/actions/gearslip-build
         with:
           signing: optional

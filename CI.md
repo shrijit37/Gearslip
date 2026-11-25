@@ -7,16 +7,18 @@ You can also run that workflow manually from the Actions tab.
 ## Shared build pipeline
 
 All three publishing workflows (`release.yml`, `dev-publish.yml` and `promote.yml`) call
-`.github/actions/gearslip-build`. It is the single place for checkout, JDK 21, Gradle setup,
-the stable signing key, the build identity (SHA, version name, version code) and the
-`assembleDebug` build. `release.yml` tolerates a missing key — a fork gets a throwaway
-signature and a warning — while the dev and promotion workflows require it, because their
-APKs have to install over an app a driver already has.
+`.github/actions/gearslip-build`. Each one checks out first — GitHub has to load a local
+action from disk before it can run any of its steps — with full history so `gitVersion` can
+name the build. The action is the single place for JDK 21, Gradle setup, the stable signing
+key, the build identity (SHA, version name, version code) and the `assembleDebug` build.
+`release.yml` tolerates a missing key — a fork gets a throwaway signature and a warning —
+while the dev and promotion workflows require it, because their APKs have to install over an
+app a driver already has.
 
 The action's outputs are what the workflows publish: the dev feed writes the same SHA and
 sequence that were compiled into its APK, and the stable release body records the same
-sequence. The APK check (one file per ABI plus the universal fallback) also lives there, so
-a release can't ship an empty build if the naming ever changes.
+sequence. The action also checks that the APK glob is non-empty, so a build that produces no
+APK files cannot be published; it does not check that every ABI split is present.
 
 `gradle.properties` enables the Gradle build cache and parallel task execution.
 `gradle/actions/setup-gradle` restores the Gradle user home in every workflow, so task outputs

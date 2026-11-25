@@ -34,12 +34,10 @@ jobs:
           build-mode: ${{ matrix.build-mode }}
 
       # Only the manual build needs a JDK and Gradle, and they share the publishing workflows'
-      # setup action. No signing key: the scan only needs compiled Kotlin, not an installable APK,
-      # and init has already seen the checkout, so the action must not check out again.
+      # setup action. No signing key: the scan needs compiled Kotlin, not an installable APK.
       - if: matrix.build-mode == 'manual'
         uses: ./.github/actions/gearslip-build
         with:
-          checkout: false
           signing: none
           build: false
 

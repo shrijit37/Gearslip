@@ -15,6 +15,12 @@ jobs:
     permissions:
       contents: write
     steps:
+      # Checkout before the local action so GitHub can load its definition from disk, and keep
+      # the tag history gitVersion needs to name this build.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
       - uses: ./.github/actions/gearslip-build
         id: build
         with:
