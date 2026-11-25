@@ -80,13 +80,14 @@ val buildSha = project.findProperty("gearslipBuildSha")?.toString()
 // configuration cache its value would be baked into a cached entry and reused by a later build,
 // giving two different APKs the same version code. Reading the clock through a ValueSource makes
 // it a configuration input, so Gradle re-reads it every build and invalidates the entry when it
-// changes. Minute granularity keeps that to at most once a minute, not on every invocation.
+// changes. Return minutes from obtain(), not milliseconds converted afterwards: Gradle tracks the
+// ValueSource's own result, so dividing outside it would invalidate the entry on every build.
 abstract class BuildClockValueSource : ValueSource<Long, ValueSourceParameters.None> {
-    override fun obtain(): Long = System.currentTimeMillis()
+    override fun obtain(): Long = System.currentTimeMillis() / 60_000L
 }
 
 val buildSequence = project.findProperty("gearslipBuildSeq")?.toString()?.toIntOrNull()
-    ?: (providers.of(BuildClockValueSource::class) { }.get() / 60_000L).toInt()
+    ?: providers.of(BuildClockValueSource::class) { }.get().toInt()
 
 // Keeps build output out of the module folder: <root>/build/gearslip/... instead of
 // <root>/gearslip/build/..., so everything this project produces lands under one
