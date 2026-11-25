@@ -14,6 +14,7 @@ import app.seb3thehacker.gearslip.car.CarKeys
 import app.seb3thehacker.gearslip.car.CarSensors
 import app.seb3thehacker.gearslip.car.CarServices
 import app.seb3thehacker.gearslip.car.CarSettings
+import kotlinx.coroutines.runBlocking
 import java.io.IOException
 import app.seb3thehacker.gearslip.protocol.InputProtocol
 import app.seb3thehacker.gearslip.surface.FrameOutput
@@ -90,6 +91,8 @@ class GearslipRunner(
     val waitingForVersion: Boolean get() = running && state == State.WAIT_VERSION
     @Volatile private var lastProgress = System.currentTimeMillis()
     @Volatile private var running = true
+    /** Package scans can be slow: hosted apps are bound off the protocol thread, once per session. */
+    @Volatile private var autostartThread: Thread? = null
 
     @Volatile private var videoChannelId: Int = -1
     private var videoConfigs: List<ServiceDiscovery.VideoConfig> = emptyList()
@@ -1105,6 +1108,23 @@ class GearslipRunner(
         if (CarSettings.pipesNow) {
             log.i("audio: asking for capture as the car's screen comes up")
             CarAudio.request()
+        }
+        // The deleted car home screen bound the map and the media app once it knew the frame
+        // geometry. With no UI that never happens: the car's keys have nothing to control and
+        // no track metadata reaches the session. Bind them here, off the protocol thread, and
+        // once per session even if focus is granted again.
+        if (autostartThread == null) {
+            val frame = CarEnvironment.frame.value
+            autostartThread = Thread({
+                runCatching { runBlocking { CarServices.autostart(frame) } }
+                    .onFailure { log.w("hosted app autostart failed: ${it.message}") }
+                // The car may have left while the app scan was running. The activity has
+                // already shut the services down, so close anything opened after that.
+                if (!running || stopped) {
+                    CarServices.shutdown()
+                    log.i("hosted app autostart finished after the session ended - closed it again")
+                }
+            }, "gearslip-autostart").apply { isDaemon = true; start() }
         }
 
         val start = Protobuf.varintField(1, SESSION_ID.toLong()) +

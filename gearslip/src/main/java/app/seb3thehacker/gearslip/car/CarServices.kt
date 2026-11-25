@@ -42,7 +42,12 @@ object CarServices {
         CarMedia(requireNotNull(context)).also { m ->
             // Remembered only once it connects: an app that refuses (NewPipe without Notification
             // access) must not replace the one the driver was listening to on the next drive.
-            m.onReady = { app -> CarSettings.setLastMedia(app.component.flattenToString()) }
+            m.onReady = { app ->
+                CarSettings.setLastMedia(app.component.flattenToString())
+                // The deleted car home screen started a pending autoplay when the app became
+                // ready. With no UI, do it here so a last-used app asked to autoplay really plays.
+                autoplayIfDue()
+            }
         }
     }
 
