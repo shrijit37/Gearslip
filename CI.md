@@ -20,18 +20,28 @@ sequence that were compiled into its APK, and the stable release body records th
 sequence. The action also checks that the APK glob is non-empty, so a build that produces no
 APK files cannot be published; it does not check that every ABI split is present.
 
-`gradle.properties` enables the Gradle build cache and parallel task execution.
+`gradle.properties` enables the Gradle build cache, parallel task execution and the configuration
+cache (`org.gradle.configuration-cache=true`, plus parallel entry storage). On a repeat invocation
+Gradle reuses the cached task graph instead of re-evaluating the build scripts; pass
+`--no-configuration-cache` to bypass it for one command. The git reads are `providers.exec`, which
+Gradle tracks as configuration inputs, so a new commit or tag invalidates the entry instead of
+being reused stale. The monotonic version-code clock is read through `BuildClockValueSource` for
+the same reason: a plain `System.currentTimeMillis()` at configuration time would be baked into a
+cached entry and give later builds the same version code.
+
 `gradle/actions/setup-gradle` restores the Gradle user home in every workflow, so task outputs
-Gradle has already produced are reused instead of rebuilt. The configuration cache is left
-opt-in (`--configuration-cache`): the build reads the git HEAD through `providers.exec`, and
-reusing a stale entry could give a build the wrong commit identity.
+Gradle has already produced are reused instead of rebuilt. Configuration-cache entries are saved
+and restored only when the `GRADLE_ENCRYPTION_KEY` secret is passed through the shared action;
+generate one with `openssl rand -base64 16`. Ephemeral runners still miss more often than not, so
+on CI the cache is mainly regression prevention: a plugin or build-script change that breaks it
+fails CI before it reaches a developer's machine.
 
 A publish still gets a fresh version code (minutes since the epoch), and AGP writes that code
 into `BuildConfig`, so a new publish recompiles Kotlin and reruns R8 even when the sources are
 unchanged. That is the price of the monotonic version code the updater relies on. For local
-iteration, `-PnoR8` skips shrinking entirely and `-PpseudoLocales` generates the stretched
-and right-to-left inspection locales. CodeQL uses `-PnoR8` too: it needs the Kotlin compile,
-not the shrinker's output.
+iteration, `-PnoR8` skips shrinking entirely, `-PgearslipAbi=arm64-v8a` builds only that ABI with
+no universal fallback, and `-PpseudoLocales` generates the stretched and right-to-left inspection
+locales. CodeQL uses `-PnoR8` too: it needs the Kotlin compile, not the shrinker's output.
 
 ## Update channels
 
