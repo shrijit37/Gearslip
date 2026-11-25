@@ -8,7 +8,6 @@ import android.content.pm.PackageManager
 object AppSettings {
 
     private const val PREFS = "gearslip_settings"
-    private const val KEY_STARTUP_URL = "startup_url"
     private const val KEY_SKIPPED_CERT_SETUP = "skipped_cert_setup"
     private const val KEY_SEEN_PERMISSIONS_SETUP = "seen_permissions_setup"
     private const val KEY_GEARSLIP_ENABLED = "gearslip_enabled"
@@ -21,14 +20,6 @@ object AppSettings {
 
     fun putString(context: Context, key: String, value: String) {
         prefs(context).edit().putString(key, value).apply()
-    }
-
-    /** Blank means "use the built-in test page". */
-    fun startupUrl(context: Context): String =
-        prefs(context).getString(KEY_STARTUP_URL, "").orEmpty()
-
-    fun setStartupUrl(context: Context, value: String) {
-        prefs(context).edit().putString(KEY_STARTUP_URL, value.trim()).apply()
     }
 
     /** Whether the certificate setup screen has been deliberately skipped. */

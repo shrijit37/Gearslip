@@ -1,6 +1,5 @@
 package app.seb3thehacker.gearslip.protocol
 
-import app.seb3thehacker.gearslip.TouchPoint
 import app.seb3thehacker.gearslip.Wire
 
 /** Decodes the touch coordinates and pointer index carried by an InputReport. */

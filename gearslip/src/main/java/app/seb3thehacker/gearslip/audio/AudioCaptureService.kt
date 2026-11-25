@@ -24,8 +24,8 @@ import kotlin.math.abs
  * Hears one app's audio so it can be played on the car.
  *
  * Playback capture is the one public route to another app's sound, and it hangs off a
- * MediaProjection - so, as with [app.seb3thehacker.gearslip.mirror.MirrorService], the consent
- * result is carried into a foreground service of type mediaProjection before it can be redeemed.
+ * MediaProjection - so the consent result is carried into a foreground service of type
+ * mediaProjection before it can be redeemed.
  * Capture is scoped to media playback: notification pings, calls and alarms stay on the phone.
  * The grant lasts as long as this service does, which is as long as the car is connected, so the
  * driver answers the consent dialog once per drive rather than once per app.

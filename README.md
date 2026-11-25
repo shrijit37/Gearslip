@@ -1,37 +1,41 @@
 [![Build APK and release](https://github.com/shrijit37/Gearslip/actions/workflows/release.yml/badge.svg)](https://github.com/shrijit37/Gearslip/actions/workflows/release.yml)
 
-# Gearslip — Nothing OS car UI
+# Gearslip — Android Auto Protocol core
 
-A standalone, Nothing OS-styled replacement for the Android Auto car interface. It speaks
-the Android Auto protocol directly to a car over USB or wireless, with no Google software in
-the path, and draws its own monochrome car shell on top.
+Gearslip speaks the Android Auto Protocol (AAP) directly to a car over USB or wireless, with no
+Google software in the path. This branch is the headless protocol core: connection and TLS,
+certificates, service discovery and message framing, the audio, media, call and notification
+channels, and a host for templated car apps.
+
+The video channel currently sends a placeholder test-card frame — colour bars with a marker that
+advances each second — so the car sees a live, unmistakably ours picture while the session and
+framing are exercised. **No headunit UI is bundled.** The plug-in headunit surface architecture is
+coming next: the protocol core is being kept independent of whatever draws on the car screen so a
+surface can be added later without changing the session.
 
 > [!IMPORTANT]
-> This is a standalone build, not a fork of upstream Gearslip in look or feature set. It keeps
-> the car connection protocol and hosts third-party car apps, but the interface is a fixed
-> Nothing OS-inspired skin: a left app rail, a stage, and a compact player. It is not
-> affiliated with Nothing Technology Limited or Twink Software LLC. The protocol work began in
-> [twinksoftware/Gearslip](https://github.com/twinksoftware/Gearslip).
+> This is an independent implementation of the protocol, not affiliated with Google. The
+> protocol work began in [twinksoftware/Gearslip](https://github.com/twinksoftware/Gearslip).
 
 > [!WARNING]
-> This is alpha software. It can drop the connection, freeze the car screen, or fail to start.
-> Set it up while parked and keep another way to navigate.
+> This is alpha software. It can drop the connection or fail to start. Set it up while parked and
+> keep another way to navigate.
 
 ## What it does
 
-| | |
-|---|---|
-| **Cars** | Most cars over USB or wireless. Some cars from about 2020 need a certificate of your own. [CARS.md](CARS.md) lists confirmed cars. |
-| **Maps** | Third-party car navigation apps (Organic Maps, Vela, OsmAnd, Waze and others) render on the car stage. Place search is built in with an offline demo index and saved places; Google Maps can be mirrored from the phone. |
-| **Music** | First-party Browse, full player with synced lyrics and queue, plus any car-ready media app as an option. |
-| **Weather** | Current conditions, hourly and weekly forecast, with a dashboard showing the day ahead. |
-| **Vehicle data** | Supported car sensor readings, shown raw. |
-| **Controls** | Touch, steering-wheel buttons, control knobs and D-pads. |
-| **Screensaver** | Rests on the dot-matrix clock, next turn, playback state and car readings. |
+- **Connection.** USB accessory mode and wireless AAP, with TLS, a certificate you supply or
+  download, service discovery and protobuf framing. [CARS.md](CARS.md) lists cars that have
+  reached the screen at least once; some cars from about 2020 need a certificate of your own.
+- **Channels.** Phone audio, the car's microphone, media browsing and playback, calls,
+  notifications and messaging, plus input and vehicle data. These talk to apps installed on the
+  phone; Gearslip carries the protocol, it does not bundle a car interface.
+- **Hosted car apps.** Installed apps built with the Android for Cars App Library can run as
+  templated car apps over the session. See [docs/BUILDING_APPS.md](docs/BUILDING_APPS.md) for the
+  app-side contract.
+- **Video.** A placeholder test-card frame, as described above. There is no map, player, dock, or
+  other screen drawing in this build.
 
-The shell is deliberately narrow: Nothing Red is the only accent, surfaces are pure black,
-borders are 1px, and display text uses the bundled Doto font. See [design.md](design.md) for
-the tokens and the [mockup](carplay-nothing-final.html) for the intended layout.
+The phone app is still there for setup, certificates, logs, settings and updates.
 
 ## Install
 
@@ -42,16 +46,17 @@ the tokens and the [mockup](carplay-nothing-final.html) for the intended layout.
    wirelessly**, and pick the car.
 4. Later releases can be installed from the app: **Settings → Updates → Check for updates**. It
    downloads the build for your phone's processor (~20 MB instead of the 35 MB universal APK),
-   checks it against the checksum GitHub publishes, and hands it to Android's installer. Nothing
+   checks it against the checksum GitHub publishes and reads the version code from the downloaded
+   file before handing it to Android's installer. A lower version code is never installed. Nothing
    happens in the background, and the install waits while a car is connected.
 
    **Updates** has two channels. Stable offers only releases promoted from a `v*` version tag;
    main-branch test builds stay on the Releases page and are not offered. Dev installs the head of
-   a branch or `pr-<number>` from this repository, pinned to that commit. Both replace the same
-   app with the same signing key, so car apps keep working with either — but a dev build can break
-   the install, and fork PRs are not published. A build older than the one installed is never
-   offered; returning to a stable release promoted before your dev build needs a manual uninstall.
-   See [CI.md](CI.md).
+   a branch or `pr-<number>` from this repository, pinned to that commit and shown on the update
+   card. Both replace the same app with the same signing key, so car apps keep working with either
+   — but a dev build can break the install, and fork PRs are not published. A build older than the
+   one installed is never offered; returning to a stable release promoted before your dev build
+   needs a manual uninstall. See [CI.md](CI.md).
 
 Releases are **debug builds**. Unless the signing secrets below are configured, each one is
 signed by that runner's throwaway debug key, so a new release may need an uninstall first. There
@@ -85,6 +90,16 @@ change, so existing installs need to be uninstalled once.
 (`Gearslip-arm64-v8a-debug.apk`, `Gearslip-armeabi-v7a-debug.apk`, `Gearslip-x86-debug.apk`,
 `Gearslip-x86_64-debug.apk`) plus `Gearslip-universal-debug.apk` as a fallback. CI builds, checks
 and publishes them all for each tagged commit. A local Android SDK with platform 37 is required.
+
+## Privacy
+
+Gearslip keeps connection data on the phone. [PRIVACY.md](PRIVACY.md) lists the services it
+contacts and what each one receives.
+
+## Contributing
+
+Bug reports from real cars are the most useful contribution. See
+[CONTRIBUTING.md](CONTRIBUTING.md) for reporting, building and pull requests.
 
 ## License
 

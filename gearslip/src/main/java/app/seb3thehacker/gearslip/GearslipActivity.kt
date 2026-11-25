@@ -6,14 +6,11 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.hardware.usb.UsbAccessory
 import android.hardware.usb.UsbManager
-import android.media.projection.MediaProjection
 import android.media.projection.MediaProjectionManager
 import android.net.Uri
 import android.os.Bundle
 import android.os.ParcelFileDescriptor
 import android.provider.Settings
-import android.view.MotionEvent
-import android.view.Surface
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.runtime.collectAsState
@@ -23,12 +20,9 @@ import androidx.activity.result.contract.ActivityResultContracts.StartActivityFo
 import android.content.res.Configuration
 import app.seb3thehacker.gearslip.audio.AudioCaptureService
 import app.seb3thehacker.gearslip.audio.CarAudio
-import app.seb3thehacker.gearslip.mirror.MirrorService
-import app.seb3thehacker.gearslip.mirror.PhoneMirror
-import app.seb3thehacker.gearslip.mirror.TouchRelayService
 import app.seb3thehacker.gearslip.car.CarEnvironment
+import app.seb3thehacker.gearslip.car.CarServices
 import app.seb3thehacker.gearslip.car.CarSettings
-import app.seb3thehacker.gearslip.car.CarUi
 import app.seb3thehacker.gearslip.car.Prefetch
 import app.seb3thehacker.gearslip.ui.GearslipApp
 import app.seb3thehacker.gearslip.ui.GearslipTheme
@@ -36,41 +30,20 @@ import java.io.FileInputStream
 import java.io.FileOutputStream
 
 /**
- * Hosts the phone UI and, for now, the car session itself.
+ * Hosts the phone UI and the car session itself.
  *
  * Launched by the system when the head unit switches the phone into accessory mode. The
  * session lives in this activity, so [android:configChanges] in the manifest keeps a
- * rotation or theme change from recreating it and dropping the connection.
+ * rotation or theme change from recreating it and dropping the connection. The AAP core
+ * owns no UI: this activity only wires the session into phone-side permissions and state.
  */
-class GearslipActivity : ComponentActivity(), Projection {
-    private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
-
+class GearslipActivity : ComponentActivity() {
 
     private var descriptor: ParcelFileDescriptor? = null
     /** The wireless session's socket, when the car came over Wi-Fi instead of USB. */
     private var wirelessSocket: java.net.Socket? = null
     private var runner: GearslipRunner? = null
-    private var screenProjector: ScreenProjector? = null
     private var worker: Thread? = null
-
-    /** The encoder's input Surface, kept so the car's picture can be switched to the mirror. */
-    private var surface: Surface? = null
-    private var frameWidth = 0
-    private var frameHeight = 0
-    private var frameDensity = 0
-
-    /**
-     * Screen capture always begins with a consent dialog, which only an activity can show -
-     * so the car UI asks, and the request surfaces here on the phone.
-     */
-    private val captureConsent = registerForActivityResult(StartActivityForResult()) { result ->
-        val data = result.data
-        if (result.resultCode == RESULT_OK && data != null) {
-            MirrorService.start(this, result.resultCode, data)
-        } else {
-            GearslipLog.w("screen capture consent declined")
-        }
-    }
 
     /** Media audio needs the microphone permission (a platform rule for playback capture) first. */
     private val audioPermission = registerForActivityResult(
@@ -118,9 +91,6 @@ class GearslipActivity : ComponentActivity(), Projection {
     /** Android's one-time "Allow" for a car to connect by itself; see [WirelessAuto]. */
     private var approvingCar: String? = null
 
-    /** Whether the phone showed Gearslip when the car's intent arrived; see [stepAside]. */
-    private var shownOnPhone = false
-    private var stepAsideOnVideo = false
     private val carApproval = registerForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.StartIntentSenderForResult(),
     ) { result ->
@@ -202,9 +172,6 @@ class GearslipActivity : ComponentActivity(), Projection {
             }
         }
 
-        PhoneMirror.onStartRequested = { runOnUiThread { requestCapture() } }
-        PhoneMirror.onTokenReady = { token -> runOnUiThread { showMirror(token) } }
-        PhoneMirror.onEnded = { runOnUiThread { showCarUi() } }
         CarAudio.onConsentRequested = { runOnUiThread { requestAudioCapture() } }
 
         registerReceiver(detachReceiver, IntentFilter(UsbManager.ACTION_USB_ACCESSORY_DETACHED), RECEIVER_NOT_EXPORTED)
@@ -230,15 +197,9 @@ class GearslipActivity : ComponentActivity(), Projection {
 
     override fun onResume() {
         super.onResume()
-        shownOnPhone = true
         // Back from the system page where the driver allowed installs from Gearslip: finish the
         // update that was waiting rather than leaving the downloaded APK on the card.
         app.seb3thehacker.gearslip.update.UpdateChecker.onAppResumed(this)
-    }
-
-    override fun onStop() {
-        super.onStop()
-        shownOnPhone = false
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -252,12 +213,8 @@ class GearslipActivity : ComponentActivity(), Projection {
         app.seb3thehacker.gearslip.wireless.WirelessLink.sessionWaiting = null
         app.seb3thehacker.gearslip.wireless.WirelessAuto.showApproval = null
         runCatching { unregisterReceiver(detachReceiver) }
-        PhoneMirror.onStartRequested = null
-        PhoneMirror.onTokenReady = null
-        PhoneMirror.onEnded = null
         CarAudio.onConsentRequested = null
         CarAudio.release()
-        PhoneMirror.requestStop()
         closeAccessory()
         GearslipLog.flush()
     }
@@ -294,56 +251,10 @@ class GearslipActivity : ComponentActivity(), Projection {
             }
     }
 
-    // --- Phone mirroring ----------------------------------------------------------------
-
-    private fun requestCapture() {
-        val manager = getSystemService(MediaProjectionManager::class.java)
-        runCatching { captureConsent.launch(manager.createScreenCaptureIntent()) }
-            .onFailure { GearslipLog.e("could not ask for screen capture", it) }
-    }
-
-    /** A Surface has a single producer, so our own display must go before the mirror arrives. */
-    private fun showMirror(token: MediaProjection) {
-        val target = surface ?: return
-        screenProjector?.stop()
-        screenProjector = null
-        PhoneMirror.begin(token, target, frameWidth, frameHeight, frameDensity)
-        if (PhoneMirror.active.value) PhoneMirror.launchPending(this) else showCarUi()
-    }
-
-    private fun showCarUi() {
-        val target = surface ?: return
-        if (screenProjector != null) return
-        val projector = ScreenProjector(this).also { screenProjector = it }
-        // The frame's density, not frameDensity: that stays the car's own, for the phone mirror.
-        projector.start(target, frameWidth, frameHeight, CarEnvironment.frame.value.densityDpi) { CarUi() }
-    }
-
-    /**
-     * Sends a head-unit touch to the phone. Anything landing on the mirror's letterbox padding
-     * maps to nothing on the phone and is dropped rather than clamped onto a screen edge.
-     */
-    private fun relayTouch(action: Int, x: Float, y: Float) {
-        val point = PhoneMirror.mapToPhone(this, x, y)
-        if (point == null) {
-            // The letterbox bars belong to no window, which makes them a safe way back: a tap
-            // on the padding leaves the mirror and returns the car to Gearslip's own UI.
-            if (action == MotionEvent.ACTION_UP) PhoneMirror.requestStop()
-            return
-        }
-        val relay = TouchRelayService.instance ?: return
-        when (action) {
-            MotionEvent.ACTION_DOWN -> relay.down(point.x, point.y)
-            MotionEvent.ACTION_MOVE -> relay.move(point.x, point.y)
-            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> relay.up(point.x, point.y)
-        }
-    }
-
     private fun handleIntent(intent: Intent?) {
         // Debug builds only: opens the audio choice for a look, without turning down a real prompt.
         if (BuildConfig.DEBUG && intent?.getBooleanExtra("show_audio_choice", false) == true) offerBluetooth.value = true
         if (intent?.action == app.seb3thehacker.gearslip.wireless.WirelessAuto.ACTION_CAR_NEARBY) {
-            stepAsideOnVideo = !shownOnPhone
             connectToNearbyCar(intent.getStringExtra(app.seb3thehacker.gearslip.wireless.WirelessAuto.EXTRA_ADDRESS))
             return
         }
@@ -361,7 +272,6 @@ class GearslipActivity : ComponentActivity(), Projection {
             return
         }
         GearslipLog.i("accessory attached by the system - permission is implicit on this path")
-        stepAsideOnVideo = !shownOnPhone
         start(accessory)
     }
 
@@ -421,11 +331,12 @@ class GearslipActivity : ComponentActivity(), Projection {
             input = FileInputStream(pfd.fileDescriptor),
             output = FileOutputStream(pfd.fileDescriptor),
             identityProvider = { CertProvider.load(this) },
-            projection = this,
             vehicleProfileFor = { info -> VehicleProfiles.find(VehicleProfiles.load(this), info) },
             phoneIcons = { PhoneIcons.pngs(this) },
         )
         this.runner = runner
+        CarServices.init(applicationContext)
+        CarEnvironment.start(this)
         worker = Thread { runner.run() }.apply { name = "gearslip"; start() }
         holdLocation()
     }
@@ -444,12 +355,13 @@ class GearslipActivity : ComponentActivity(), Projection {
             input = socket.getInputStream(),
             output = socket.getOutputStream(),
             identityProvider = { CertProvider.load(this) },
-            projection = this,
             vehicleProfileFor = { info -> VehicleProfiles.find(VehicleProfiles.load(this), info) },
             wireless = true,
             phoneIcons = { PhoneIcons.pngs(this) },
         )
         this.runner = runner
+        CarServices.init(applicationContext)
+        CarEnvironment.start(this)
         worker = Thread { runner.run() }.apply { name = "gearslip"; start() }
         holdLocation()
     }
@@ -478,6 +390,8 @@ class GearslipActivity : ComponentActivity(), Projection {
     /** Ends the session, wired or wireless. [stopWireless] also drops the car's Bluetooth and Wi-Fi. */
     private fun closeAccessory(stopWireless: Boolean) {
         runner?.stop()
+        CarServices.shutdown()
+        CarEnvironment.stop()
         SessionReport.print()
         runCatching { descriptor?.close() }
         descriptor = null
@@ -491,61 +405,4 @@ class GearslipActivity : ComponentActivity(), Projection {
         }
     }
 
-    // --- Projection ---------------------------------------------------------------------
-
-    /**
-     * The car opens Gearslip on the phone, since Android hands a USB car only to an activity and
-     * auto-connect has to start one too. Once the car's screen is up, go back to whatever the
-     * phone showed, as Home would; the session carries on as it does with the phone locked. A
-     * question for the driver keeps Gearslip in front, and so does the phone already showing it.
-     */
-    private fun stepAside() {
-        stepAsideOnVideo = false
-        if (offerBluetooth.value || micBlockedNotice.value || approvingCar != null) return
-        GearslipLog.i("the car's screen is up - moving Gearslip off the phone's screen")
-        moveTaskToBack(true)
-    }
-
-    override fun onSurfaceReady(surface: Surface, width: Int, height: Int, densityDpi: Int) {
-        runOnUiThread {
-            this.surface = surface
-            frameWidth = width
-            frameHeight = height
-            frameDensity = densityDpi
-            CarEnvironment.setDisplay(width, height, densityDpi)
-            CarEnvironment.start(this)
-            showCarUi()
-            if (stepAsideOnVideo) stepAside()
-            app.seb3thehacker.gearslip.car.CarKeys.focusSink = { code, down ->
-                runOnUiThread { screenProjector?.dispatchKey(code, down) }
-            }
-        }
-    }
-
-    override fun onTouch(action: Int, actionIndex: Int, points: List<TouchPoint>) {
-        // To the front of the main thread's queue: a touch waiting behind other work is lag the
-        // driver feels, while the work it jumps ahead of can wait a frame.
-        mainHandler.postAtFrontOfQueue {
-            // Mirroring drives one phone touch at a time, so it follows the first finger only.
-            if (PhoneMirror.active.value) points.firstOrNull()?.let { relayTouch(action, it.x, it.y) }
-            else screenProjector?.dispatchTouch(action, actionIndex, points)
-        }
-    }
-
-    override fun onStill() {
-        screenProjector?.redraw()
-    }
-
-    override fun onProjectionStopped() {
-        // Before the car UI goes, while the media connection is still up.
-        app.seb3thehacker.gearslip.car.CarServices.pausePhoneMedia()
-        runOnUiThread {
-            PhoneMirror.requestStop()
-            app.seb3thehacker.gearslip.car.CarKeys.focusSink = null
-            screenProjector?.stop()
-            screenProjector = null
-            surface = null
-            CarEnvironment.stop()
-        }
-    }
 }

@@ -2,22 +2,21 @@ package app.seb3thehacker.gearslip.ui
 
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import app.seb3thehacker.gearslip.car.theme.nothingColorScheme
-import app.seb3thehacker.gearslip.car.theme.nothingTypography
 
 /**
- * Nothing OS is the only look: the phone and the car share its fixed palette and type. The car's
- * App theme setting still decides whether that palette is light or dark, so the two stay in step.
+ * Phone-app theme. The car's own look lives in whichever head-unit surface is attached; the
+ * phone follows the driver's App theme choice so its controls stay legible when parked.
  */
 @Composable
 fun GearslipTheme(content: @Composable () -> Unit) {
     val dark = gearslipDark()
     MaterialTheme(
-        colorScheme = nothingColorScheme(dark),
-        typography = nothingTypography(),
+        colorScheme = if (dark) darkColorScheme() else lightColorScheme(),
         content = content,
     )
 }

@@ -10,7 +10,6 @@ import app.seb3thehacker.gearslip.car.LocationCheck
 import app.seb3thehacker.gearslip.car.CarBluetooth
 import app.seb3thehacker.gearslip.car.CarEnvironment
 import app.seb3thehacker.gearslip.car.CarKeys
-import app.seb3thehacker.gearslip.car.ScreenFit
 import app.seb3thehacker.gearslip.car.CarSensors
 import app.seb3thehacker.gearslip.car.CarServices
 import app.seb3thehacker.gearslip.car.CarSettings
@@ -41,7 +40,6 @@ class GearslipRunner(
     private val input: InputStream,
     private val output: OutputStream,
     private val identityProvider: () -> CertProvider.Identity,
-    private val projection: Projection? = null,
     private val vehicleProfileFor: (ServiceDiscovery.HeadUnitInfo) -> VehicleProfile? = { null },
     /** Over Wi-Fi rather than USB: the video is sent smaller so the link keeps up. */
     private val wireless: Boolean = false,
@@ -87,12 +85,6 @@ class GearslipRunner(
     /** The car's screen has been asked for once, so asking again is in order. */
     @Volatile private var focusAsked = false
     private var videoSource: VideoSource? = null
-
-    /** Between the car UI and the encoder when the car squashes the frame (see [screenShape]). */
-    private var stretcher: FrameStretcher? = null
-
-    /** What the car UI draws at when [stretcher] is on; touches are scaled into it. */
-    @Volatile private var drawSize: Pair<Int, Int>? = null
     @Volatile private var inFlight = 0
     /** Guards [inFlight]: the encoder thread waits on it for the head unit's acks. */
     private val ackLock = Object()
@@ -194,8 +186,6 @@ class GearslipRunner(
         synchronized(ackLock) { ackLock.notifyAll() } // free an encoder waiting on an ack
         videoSource?.stop()
         videoSource = null
-        stretcher?.release()
-        stretcher = null
         CarAudio.openSink = null
         audioLink?.close()
         audioLink = null
@@ -212,7 +202,7 @@ class GearslipRunner(
         phoneStatus = null
         lastSensorNight = null
         CarEnvironment.setSensorNight(null) // back to the clock until a car says otherwise
-        projection?.onProjectionStopped()
+        CarServices.pausePhoneMedia()
         SessionStatus.disconnected()
     }
 
@@ -894,23 +884,7 @@ class GearslipRunner(
             log.w("the car said it took its screen back but still sends touches - showing ours again")
             onVideoFocus(VIDEO_FOCUS_PROJECTED)
         }
-        val config = videoConfigs.getOrNull(selectedConfigIndex ?: 0)
-        // The car crops its margin off the frame and measures taps from the corner of what it
-        // shows, so they come in short by half the margin: the 2024 VW (margin 240) sent y=6,
-        // inside the cropped band, and the Uconnect's never passed 351 on a 480-high frame with a
-        // 130 margin. Without this every tap landed 120 px too high.
-        val shift = config?.let(::marginsFor) ?: Insets.NONE
-        val size = config?.pixelSize()
-        // A stretched frame (see [screenShape]): the car's tap is on the frame, the UI is drawn smaller.
-        val drawn = drawSize
-        val stretched = drawn != null && size != null
-        val (action, actionIndex, raw) =
-            (if (stretched) InputProtocol.touch(touch, size) else InputProtocol.touch(touch, size, shift.left, shift.top)) ?: return
-        val points = if (drawn != null && size != null) {
-            raw.map { TouchPoint(it.id, it.x * drawn.first / size.first, it.y * drawn.second / size.second) }
-        } else {
-            raw
-        }
+        val (action, actionIndex, points) = InputProtocol.touch(touch, null) ?: return
         if (points.size > 1 && touchesSeen < 3) {
             log.i("multi-touch: ${points.size} pointers, action=$action index=$actionIndex")
         }
@@ -922,7 +896,6 @@ class GearslipRunner(
         }
         // Time the next frame against this tap: see [reportTouchLatency].
         if (action == ACTION_DOWN || action == ACTION_UP) touchAtUs = System.nanoTime() / 1000
-        projection?.onTouch(action, actionIndex, points)
     }
 
     /**
@@ -968,8 +941,7 @@ class GearslipRunner(
             val keycode = Wire.varint(fields, 1)?.toInt() ?: continue
             // int32, so a turn the other way arrives as a 64-bit two's complement varint.
             val delta = Wire.varint(fields, 2)?.toInt() ?: continue
-            log.i("<- relative event: keycode=$keycode delta=$delta")
-            CarKeys.onRotate(delta)
+            log.i("<- relative event: keycode=$keycode delta=$delta (no UI attached)")
         }
     }
 
@@ -1083,37 +1055,6 @@ class GearslipRunner(
         return wide.minByOrNull(::pixels) ?: known.maxByOrNull(::pixels)
     }
 
-    /**
-     * The part of a [frameWidth] x [frameHeight] frame shaped like the screen size set in
-     * Settings, centred and in even pixels; null when none is set or it is the frame's own shape.
-     * Some head units report the wrong size, then crop or squash the frame onto their real screen.
-     */
-    private fun screenShape(frameWidth: Int, frameHeight: Int): Pair<Int, Int>? {
-        val screen = CarSettings.screenSize.value ?: return null
-        val wider = screen.width.toLong() * frameHeight >= screen.height.toLong() * frameWidth
-        val shape = if (wider) {
-            frameWidth to (frameWidth.toLong() * screen.height / screen.width).toInt()
-        } else {
-            (frameHeight.toLong() * screen.width / screen.height).toInt() to frameHeight
-        }
-        val even = (shape.first / 2 * 2).coerceAtLeast(2) to (shape.second / 2 * 2).coerceAtLeast(2)
-        return even.takeIf { it != (frameWidth to frameHeight) }
-    }
-
-    /**
-     * The strips of the frame the car doesn't show: the head unit's own margins, or, when a screen
-     * size is set to crop, whatever lies outside [screenShape]. The UI keeps out of them and taps
-     * are measured from inside them.
-     */
-    private fun marginsFor(config: ServiceDiscovery.VideoConfig): Insets {
-        val (width, height) = config.pixelSize() ?: return config.marginInsets()
-        if (CarSettings.screenFit.value != ScreenFit.CROP) return config.marginInsets()
-        val (w, h) = screenShape(width, height) ?: return config.marginInsets()
-        val sideX = width - w
-        val sideY = height - h
-        return Insets(top = sideY / 2, bottom = sideY - sideY / 2, left = sideX / 2, right = sideX - sideX / 2)
-    }
-
     private fun startVideoSource() {
         lastKeyframeSentAt = System.currentTimeMillis() // frame #1 is always a keyframe
         val index = selectedConfigIndex ?: 0
@@ -1127,33 +1068,14 @@ class GearslipRunner(
             return
         }
         config.visibleSize()?.let { (w, h) -> SessionReport.carScreen("${w}x$h", config.density) }
+        // The frame is shared with hosted car apps: they need its real geometry and density,
+        // whether or not anything on the phone is drawing the screen.
+        CarEnvironment.setDisplay(width, height, config.density)
 
         val start = Protobuf.varintField(1, SESSION_ID.toLong()) +
             Protobuf.varintField(2, index.toLong())
         send(MSG_MEDIA_START, start, encrypted = true, channel = videoChannelId)
         log.i("-> Start(session_id=$SESSION_ID, configuration_index=$index -> $config)")
-        // The car crops its margins off the frame, so keep the UI out of them unless a vehicle
-        // profile has its own tuned insets.
-        stretcher?.release()
-        stretcher = null
-        drawSize = null
-        val shape = screenShape(width, height)
-        val squash = shape != null && CarSettings.screenFit.value == ScreenFit.SQUASH
-        if (shape != null) {
-            log.i(
-                "screen size set to ${CarSettings.screenSize.value} in Settings: " +
-                    "${if (squash) "drawing" else "cropping to"} ${shape.first}x${shape.second} of the ${width}x$height frame",
-            )
-        }
-        if (squash) {
-            CarEnvironment.setInsets(Insets.NONE)
-        } else if (vehicleProfile?.insets.let { it == null || it == Insets.NONE }) {
-            val insets = marginsFor(config)
-            CarEnvironment.setInsets(insets)
-            if (insets != Insets.NONE) log.i("keeping the UI clear of the car's margins: $insets")
-        }
-
-        val useProjection = projection != null
         // 60fps only over a cable: over Wi-Fi it doubles the data for little the driver sees.
         videoFrameRate = if (config.frameRate == 1 && !wireless) 60 else 30
         smoothWindows = 0
@@ -1165,7 +1087,6 @@ class GearslipRunner(
             width = width,
             height = height,
             frameRate = videoFrameRate,
-            mode = if (useProjection) VideoSource.Mode.SURFACE else VideoSource.Mode.TEST_CARD,
             wireless = wireless,
             onCodecConfig = { csd ->
                 lastCodecConfig = csd
@@ -1176,26 +1097,12 @@ class GearslipRunner(
             onFrame = { data, presentationTimeUs, keyFrame ->
                 sendVideoFrame(data, presentationTimeUs, keyFrame)
             },
-            onStill = { projection?.onStill() },
         ).also { source ->
             runCatching {
                 source.start()
-                val surface = source.inputSurface
-                if (projection != null && surface != null) {
-                    val stretch = shape?.takeIf { squash }?.let { (w, h) ->
-                        FrameStretcher(surface, w, h, width, height).takeIf { it.start() }
-                    }
-                    stretcher = stretch
-                    if (stretch != null) {
-                        drawSize = stretch.width to stretch.height
-                        projection.onSurfaceReady(stretch.input, stretch.width, stretch.height, config.density)
-                    } else {
-                        projection.onSurfaceReady(surface, width, height, config.density)
-                    }
-                    SessionStatus.projecting()
-                    BluetoothAudioCheck.onProjecting()
-                    LocationCheck.onProjecting()
-                }
+                SessionStatus.projecting()
+                BluetoothAudioCheck.onProjecting()
+                LocationCheck.onProjecting()
             }.onFailure { e -> log.e("encoder start failed", e) }
         }
     }

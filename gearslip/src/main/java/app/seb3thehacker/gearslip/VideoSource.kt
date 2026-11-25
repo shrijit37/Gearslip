@@ -5,16 +5,14 @@ import android.media.MediaCodecInfo
 import android.media.MediaFormat
 import android.os.Bundle
 import android.media.Image
-import android.view.Surface
 
 /**
- * Encodes a generated test card to H.264 Baseline and hands the bitstream to a callback.
+ * Encodes a placeholder frame to H.264 Baseline and hands the bitstream to a callback.
  *
- * Feeds the encoder YUV420 buffers via getInputImage() rather than a Surface: a MediaCodec
- * input Surface requires an EGL/OpenGL context to render into (Surface.lockCanvas is not
- * supported on it), and for a static test card that is a lot of machinery for no benefit.
- * Byte-buffer input keeps the spike dependency-free and fully deterministic. Phase C swaps
- * this for a real Surface + GL path when the source becomes a live WebView.
+ * Feeds the encoder YUV420 buffers via getInputImage() rather than a Surface: no drawing
+ * surface or GL context is needed to keep the AAP video channel alive, so the protocol core
+ * stays independent of whatever draws on the head unit. A future UI can replace the frame
+ * source without touching the session.
  *
  * The head unit negotiated MEDIA_CODEC_VIDEO_H264_BP, so the profile is pinned to Baseline.
  */
@@ -22,30 +20,12 @@ class VideoSource(
     private val width: Int,
     private val height: Int,
     private val frameRate: Int,
-    private val mode: Mode = Mode.TEST_CARD,
     /** Over Wi-Fi: a fraction of the cable bitrate, so the link keeps up and sound isn't starved. */
     private val wireless: Boolean = false,
     private val onCodecConfig: (ByteArray) -> Unit,
     private val onFrame: (data: ByteArray, presentationTimeUs: Long, keyFrame: Boolean) -> Unit,
-    /**
-     * SURFACE mode, nothing encoded for [STILL_MS]. The repeat setting below should cover a still
-     * screen, but on a Pixel 10 it didn't: a LuChi box got 11 frames, then none, and stayed black
-     * (issue #58). Whoever draws the screen can draw it again, and that is a frame.
-     */
-    private val onStill: () -> Unit = {},
 ) {
     private val log = GearslipLog.tagged("VIDEO")
-
-    /**
-     * TEST_CARD feeds generated YUV buffers; SURFACE exposes a MediaCodec input Surface for
-     * something else to render into (Phase C drives it from a VirtualDisplay + Presentation,
-     * which is how Android screen mirroring works and avoids hand-written EGL entirely).
-     */
-    enum class Mode { TEST_CARD, SURFACE }
-
-    /** Non-null in SURFACE mode once [start] has run. */
-    var inputSurface: Surface? = null
-        private set
 
     private var codec: MediaCodec? = null
 
@@ -68,32 +48,12 @@ class VideoSource(
         fullBitRate = bitRate
         this.bitRate = bitRate
         fun format(tuned: Boolean) = MediaFormat.createVideoFormat(MIME, width, height).apply {
-            setInteger(
-                MediaFormat.KEY_COLOR_FORMAT,
-                if (mode == Mode.SURFACE) {
-                    MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface
-                } else {
-                    MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420Flexible
-                },
-            )
+            setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420Flexible)
             setInteger(MediaFormat.KEY_BIT_RATE, bitRate)
             setInteger(MediaFormat.KEY_FRAME_RATE, frameRate)
             // Drops already ask for a fresh keyframe, so a long interval costs nothing in recovery
             // and spares the link a big frame every second.
             setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, I_FRAME_INTERVAL_S)
-            if (mode == Mode.SURFACE) {
-                // A surface encoder only makes a frame when the screen changes, and many decoders
-                // show a frame only once the next one arrives. So the last change before the
-                // screen goes still (a menu closing) sat in the car's decoder until something
-                // else moved. Repeating the last frame after a short pause pushes it through;
-                // a repeat of an unchanged screen costs a few bytes. scrcpy does the same.
-                setLong(MediaFormat.KEY_REPEAT_PREVIOUS_FRAME_AFTER, REPEAT_AFTER_US)
-                // An app that draws nonstop (a moving map) renders at the phone's refresh rate,
-                // faster than the car acks. Every extra frame queued inside the encoder, and the
-                // car's screen fell 25 seconds behind. Capping the input drops the extras before
-                // they're encoded, so the car always gets the newest frame.
-                setFloat(MediaFormat.KEY_MAX_FPS_TO_ENCODER, frameRate.toFloat())
-            }
             setInteger(MediaFormat.KEY_PROFILE, MediaCodecInfo.CodecProfileLevel.AVCProfileBaseline)
             setInteger(MediaFormat.KEY_LEVEL, level.codecLevel)
             if (tuned) {
@@ -114,12 +74,11 @@ class VideoSource(
             encoder = MediaCodec.createEncoderByType(MIME)
             encoder.configure(format(tuned = false), null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
         }
-        if (mode == Mode.SURFACE) inputSurface = encoder.createInputSurface()
         encoder.start()
         codec = encoder
         running = true
 
-        log.i("encoder started: ${width}x$height @ ${frameRate}fps, ${bitRate / 1000} kbps${if (wireless) " (wireless)" else ""}, H.264 Baseline level ${level.label}, mode=$mode")
+        log.i("encoder started: ${width}x$height @ ${frameRate}fps, ${bitRate / 1000} kbps${if (wireless) " (wireless)" else ""}, H.264 Baseline level ${level.label}")
 
         worker = Thread {
             runCatching { pump(encoder) }
@@ -166,8 +125,6 @@ class VideoSource(
         } catch (e: InterruptedException) {
             Thread.currentThread().interrupt()
         }
-        runCatching { inputSurface?.release() }
-        inputSurface = null
         runCatching { codec?.stop() }
         runCatching { codec?.release() }
         codec = null
@@ -176,12 +133,9 @@ class VideoSource(
     private fun pump(encoder: MediaCodec) {
         val info = MediaCodec.BufferInfo()
         val frameIntervalUs = 1_000_000L / frameRate
-        var lastOutputAt = 0L
-        var lastNudgeAt = 0L
 
         while (running) {
-            // SURFACE mode has no input buffers to fill - frames arrive from the display.
-            val inIndex = if (mode == Mode.SURFACE) -1 else encoder.dequeueInputBuffer(TIMEOUT_US)
+            val inIndex = encoder.dequeueInputBuffer(TIMEOUT_US)
             if (inIndex >= 0) {
                 val image = encoder.getInputImage(inIndex)
                 if (image != null) {
@@ -195,10 +149,7 @@ class VideoSource(
                 frameIndex++
             }
 
-            // A surface-fed encoder has nothing to do between frames, so block until one is ready
-            // instead of sleeping a fixed time: less delay on screen, fewer wakeups for the CPU.
-            val wait = if (mode == Mode.SURFACE) SURFACE_TIMEOUT_US else TIMEOUT_US
-            var outIndex = encoder.dequeueOutputBuffer(info, wait)
+            var outIndex = encoder.dequeueOutputBuffer(info, TIMEOUT_US)
             while (outIndex >= 0) {
                 val buffer = encoder.getOutputBuffer(outIndex)
                 if (buffer != null && info.size > 0) {
@@ -216,18 +167,9 @@ class VideoSource(
                     }
                 }
                 encoder.releaseOutputBuffer(outIndex, false)
-                lastOutputAt = System.currentTimeMillis()
                 outIndex = encoder.dequeueOutputBuffer(info, 0)
             }
-            if (mode == Mode.SURFACE && lastOutputAt > 0) {
-                val now = System.currentTimeMillis()
-                if (now - lastOutputAt > STILL_MS && now - lastNudgeAt > STILL_MS) {
-                    lastNudgeAt = now
-                    onStill()
-                }
-            }
-
-            if (mode != Mode.SURFACE) Thread.sleep(maxOf(1L, frameIntervalUs / 2000))
+            Thread.sleep(maxOf(1L, frameIntervalUs / 2000))
         }
     }
 
@@ -271,8 +213,6 @@ class VideoSource(
     private companion object {
         const val MIME = MediaFormat.MIMETYPE_VIDEO_AVC
         const val TIMEOUT_US = 10_000L
-        const val SURFACE_TIMEOUT_US = 100_000L
-        private const val STILL_MS = 1_000L
 
         /**
          * 800x480 at 30fps gets 8 Mbps: about the most that size can show, enough that a moving
@@ -317,7 +257,6 @@ class VideoSource(
         const val WIRELESS_SHARE = 0.35
         const val WIRELESS_MAX_BIT_RATE = 8_000_000
         const val I_FRAME_INTERVAL_S = 5
-        private const val REPEAT_AFTER_US = 100_000L
 
         /** (Y, Cb, Cr) - white, yellow, cyan, green, magenta, red, blue. */
         val BAR_COLOURS = listOf(

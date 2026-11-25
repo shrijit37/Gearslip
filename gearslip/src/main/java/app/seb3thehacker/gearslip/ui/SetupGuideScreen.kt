@@ -186,16 +186,6 @@ private fun pages(context: Context, onRequestCallScreening: () -> Unit): List<Gu
             ),
         )
     }
-    if (!granted(context, arrayOf(Manifest.permission.READ_CALENDAR))) {
-        add(
-            GuidePage(
-                title = context.getString(R.string.guide_calendar_title),
-                explanation = context.getString(R.string.guide_calendar_body),
-                icon = glyph(Icons.Filled.DateRange),
-                permissions = arrayOf(Manifest.permission.READ_CALENDAR),
-            ),
-        )
-    }
     val callPermissions = arrayOf(
         Manifest.permission.READ_PHONE_STATE,
         Manifest.permission.READ_CALL_LOG,
@@ -324,22 +314,13 @@ private fun pages(context: Context, onRequestCallScreening: () -> Unit): List<Gu
         )
     }
 
-    // --- At the end, every time: apps worth installing, how the car's buttons look, and last
-    // the usage notes. On a replay, the switch shows what was chosen before.
+    // --- At the end, every time: apps worth installing.
     add(
         GuidePage(
             title = context.getString(R.string.guide_apps_title),
             explanation = context.getString(R.string.recommended_intro),
             icon = { StarIcon(it) },
             content = { RecommendedAppsList() },
-        ),
-    )
-    add(
-        GuidePage(
-            title = context.getString(R.string.guide_buttons_title),
-            explanation = context.getString(R.string.guide_buttons_body),
-            icon = { ButtonsIcon(it) },
-            content = { ThemePicker(it.c, it.cq, it.cqSp, key = "guide-buttons") },
         ),
     )
 }
