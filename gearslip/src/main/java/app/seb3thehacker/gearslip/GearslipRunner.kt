@@ -1099,6 +1099,13 @@ class GearslipRunner(
         // The frame is shared with hosted car apps: they need its real geometry and density,
         // whether or not anything on the phone is drawing the screen.
         CarEnvironment.setDisplay(width, height, config.density)
+        // Ask for the phone's sound as the screen comes up, not only when a media app opens:
+        // the map needs it too. The deleted car UI used to do this on composition; with no UI
+        // there is nothing else to ask, and the driver would hear nothing on the car.
+        if (CarSettings.pipesNow) {
+            log.i("audio: asking for capture as the car's screen comes up")
+            CarAudio.request()
+        }
 
         val start = Protobuf.varintField(1, SESSION_ID.toLong()) +
             Protobuf.varintField(2, index.toLong())

@@ -339,8 +339,28 @@ class GearslipActivity : ComponentActivity() {
         this.runner = runner
         CarServices.init(applicationContext)
         CarEnvironment.start(this)
-        worker = Thread { runner.run() }.apply { name = "gearslip"; start() }
+        startSessionThread(runner)
         holdLocation()
+    }
+
+    /**
+     * Runs the protocol read loop and tears the session down when it ends on its own.
+     *
+     * A rejected handshake or a car that hangs up never reaches the disconnect button: without
+     * this the services started above (GPS, audio checks, hosted apps) and the held location
+     * keep running until the activity dies. The identity check stops a late exit from closing
+     * a newer session that has already replaced this runner.
+     */
+    private fun startSessionThread(runner: GearslipRunner) {
+        worker = Thread {
+            try {
+                runner.run()
+            } finally {
+                runOnUiThread {
+                    if (this.runner === runner) closeAccessory()
+                }
+            }
+        }.apply { name = "gearslip"; start() }
     }
 
     /** A wireless session: the same runner, on the socket [WirelessLink] opened to the car. */
@@ -365,7 +385,7 @@ class GearslipActivity : ComponentActivity() {
         this.runner = runner
         CarServices.init(applicationContext)
         CarEnvironment.start(this)
-        worker = Thread { runner.run() }.apply { name = "gearslip"; start() }
+        startSessionThread(runner)
         holdLocation()
     }
 

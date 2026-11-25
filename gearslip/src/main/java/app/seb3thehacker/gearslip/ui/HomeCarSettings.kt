@@ -225,17 +225,30 @@ private fun AppRows() {
         value = withContext(Dispatchers.IO) { CarAppCatalog.installed(context) }
     }
     val hidden by CarSettings.hiddenApps.collectAsState()
-    val custom by CustomCarApps.state.collectAsState()
+    val customState by CustomCarApps.state.collectAsState()
+    // Reading the settings once here too, so a package added by hand has a row even before
+    // anything else in the app has asked for the custom list.
+    val custom = customState ?: CustomCarApps.all(context)
     var adding by remember { mutableStateOf(false) }
 
     val rows = apps.orEmpty().map { it.component.flattenToString() to it }
-    if (rows.isEmpty()) {
+    val listed = rows.map { (_, app) -> app.component.packageName }.toSet()
+    // An added app without a CarAppService can't be discovered, but it still has to be
+    // visible here: otherwise it can be added and never seen, checked or removed again.
+    val addedOnly = custom.filter { it.packageName !in listed }.map { entry ->
+        val label = runCatching {
+            context.packageManager.getApplicationInfo(entry.packageName, 0)
+                .loadLabel(context.packageManager).toString()
+        }.getOrDefault(entry.packageName)
+        entry to label
+    }
+    if (rows.isEmpty() && addedOnly.isEmpty()) {
         SettingsRow(stringResource(if (apps == null) R.string.car_apps_finding else R.string.car_apps_none))
     }
     rows.forEachIndexed { i, (id, app) ->
         val shown = id !in hidden
         val pkg = app.component.packageName
-        val added = custom.orEmpty().any { it.packageName == pkg }
+        val added = custom.any { it.packageName == pkg }
         if (i > 0) SettingsDivider()
         SettingsRow(
             app.label,
@@ -253,6 +266,20 @@ private fun AppRows() {
             },
         )
     }
+    addedOnly.forEachIndexed { i, (entry, label) ->
+        if (rows.isNotEmpty() || i > 0) SettingsDivider()
+        SettingsRow(
+            label,
+            subtitle = stringResource(
+                if (entry.kind == CustomCarApps.Kind.MEDIA) R.string.car_apps_as_media else R.string.car_apps_as_messaging,
+            ),
+            trailing = {
+                IconButton({ CustomCarApps.remove(context, entry.packageName) }) {
+                    Icon(Icons.Filled.Delete, stringResource(R.string.car_apps_remove, label))
+                }
+            },
+        )
+    }
     if (apps != null) {
         SettingsDivider()
         SettingsRow(
@@ -264,7 +291,7 @@ private fun AppRows() {
     }
     if (adding) {
         AddCarAppDialog(
-            listed = rows.map { (_, app) -> app.component.packageName }.toSet(),
+            listed = listed + custom.map { it.packageName },
             onDismiss = { adding = false },
         ) { pkg, kind ->
             CustomCarApps.add(context, pkg, kind)
