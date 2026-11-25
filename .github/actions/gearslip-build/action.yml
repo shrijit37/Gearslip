@@ -1,0 +1,154 @@
+name: Gearslip build
+description: >-
+  One place for JDK/Gradle setup, stable signing key, build identity and APK build shared by
+  every publishing workflow. Callers check out first: GitHub must load this local action from
+  disk before any of its steps run. The four signing inputs are secrets; passing them here keeps
+  the keystore handling (and its escaping rules) from being copied into three workflows.
+
+inputs:
+  signing:
+    description: "optional warns and keeps the throwaway key, required fails without one, none skips signing"
+    required: false
+    default: optional
+  keystore-b64:
+    description: Base64 PKCS#12/JKS keystore (UPDATE_KEYSTORE_B64)
+    required: false
+    default: ''
+  store-password:
+    description: Keystore password
+    required: false
+    default: ''
+  key-alias:
+    description: Signing key alias
+    required: false
+    default: ''
+  key-password:
+    description: Signing key password
+    required: false
+    default: ''
+  channel:
+    description: Update channel baked into the APK (stable or dev)
+    required: false
+    default: stable
+  version-name:
+    description: >-
+      Optional override for the APK's version name. Empty uses the tag-derived name from
+      gitVersion, except on the dev channel where the described commit is used.
+    required: false
+    default: ''
+  build:
+    description: Set to false to only prepare the environment (CodeQL instruments its own build).
+    required: false
+    default: 'true'
+
+outputs:
+  sha7:
+    description: Short HEAD SHA the APK was built from
+    value: ${{ steps.identity.outputs.sha7 }}
+  version:
+    description: Tag-derived version name, stripped of the leading v
+    value: ${{ steps.identity.outputs.version }}
+  seq:
+    description: Minutes since the epoch, used as the APK version code
+    value: ${{ steps.identity.outputs.seq }}
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-java@v4
+      with:
+        distribution: temurin
+        java-version: "21"
+
+    # Caches the Gradle user home (distribution, dependencies and - with org.gradle.caching=true
+    # in gradle.properties - task outputs). Non-default branches restore but do not write, so a
+    # feature branch cannot evict main's cache.
+    - uses: gradle/actions/setup-gradle@v4
+
+    # A stable signature is what lets an installed Gearslip accept the next build. Without it
+    # each runner's throwaway debug key makes Android refuse the update. Forks of release.yml
+    # have no secrets and keep building with that key, with a warning; the two publishing
+    # workflows require a real key and fail here instead of shipping an un-installable APK.
+    - name: Restore stable signing key
+      if: ${{ inputs.signing != 'none' }}
+      shell: bash
+      env:
+        KEYSTORE_B64: ${{ inputs.keystore-b64 }}
+        STORE_PASSWORD: ${{ inputs.store-password }}
+        KEY_ALIAS: ${{ inputs.key-alias }}
+        KEY_PASSWORD: ${{ inputs.key-password }}
+        SIGNING_MODE: ${{ inputs.signing }}
+      run: |
+        if [ -z "$KEYSTORE_B64" ]; then
+          if [ "$SIGNING_MODE" = required ]; then
+            echo "::error::UPDATE_KEYSTORE_B64 is not set; this build cannot update an installed Gearslip."
+            exit 1
+          fi
+          echo "::warning::UPDATE_KEYSTORE_B64 is not set. This APK has a throwaway signature and in-app updates will need a manual reinstall."
+          exit 0
+        fi
+        echo "$KEYSTORE_B64" | base64 --decode > gearslip-release.jks
+        python3 - <<'PY'
+        import os
+
+        def escape(value):
+            return (value.replace('\\', '\\\\').replace(':', '\\:')
+                         .replace('=', '\\=').replace('\n', '\\n'))
+
+        # Gradle Properties keys are case-sensitive: build.gradle.kts reads the same camelCase
+        # names that Android's signingConfig DSL uses.
+        props = {
+            'STORE_PASSWORD': 'storePassword',
+            'KEY_ALIAS': 'keyAlias',
+            'KEY_PASSWORD': 'keyPassword',
+        }
+        with open('keystore.properties', 'w') as out:
+            out.write('storeFile=gearslip-release.jks\n')
+            for env, prop in props.items():
+                out.write('%s=%s\n' % (prop, escape(os.environ[env])))
+        PY
+
+    # The same identity for the APK, the release body and the dev manifest. A single calculation
+    # keeps the version code published with a release identical to the one compiled into it.
+    - name: Identify build
+      id: identity
+      shell: bash
+      run: |
+        sha=$(git rev-parse --short=7 HEAD)
+        seq=$(($(date +%s) / 60))
+        described=$(git describe --tags --match 'v*' --exclude '*-g*' --abbrev=7 2>/dev/null \
+          || echo "v0.0.0-$(git rev-parse --short=7 HEAD)")
+        echo "sha7=$sha" >> "$GITHUB_OUTPUT"
+        echo "seq=$seq" >> "$GITHUB_OUTPUT"
+        echo "version=${described#v}" >> "$GITHUB_OUTPUT"
+
+    - name: Build debug APKs
+      if: ${{ inputs.build == 'true' }}
+      shell: bash
+      env:
+        CHANNEL: ${{ inputs.channel }}
+        SHA: ${{ steps.identity.outputs.sha7 }}
+        SEQ: ${{ steps.identity.outputs.seq }}
+        VERSION_NAME: ${{ inputs.version-name }}
+        DESCRIBED_VERSION: ${{ steps.identity.outputs.version }}
+      run: |
+        args=(-PgearslipChannel="$CHANNEL" -PgearslipBuildSha="$SHA" -PgearslipBuildSeq="$SEQ")
+        # Dev builds are pinned by commit identity, so their version name carries the described
+        # SHA. Stable builds keep the tag-derived name Gradle computes on its own.
+        if [ -n "$VERSION_NAME" ]; then
+          args+=(-PgearslipVersionName="$VERSION_NAME")
+        elif [ "$CHANNEL" = dev ]; then
+          args+=(-PgearslipVersionName="$DESCRIBED_VERSION")
+        fi
+        ./gradlew :gearslip:assembleDebug --no-daemon "${args[@]}"
+
+        # ABI splits produce one APK per ABI plus a universal fallback, all copied into build/
+        # by Gradle's renameApk task. Fail early if the naming changes so no release ships empty.
+        shopt -s nullglob
+        apks=(build/Gearslip-*-debug.apk)
+        if [ ${#apks[@]} -eq 0 ]; then
+          echo "no split APKs in build/"
+          ls -R build | head -50
+          exit 1
+        fi
+        ls -lh "${apks[@]}"

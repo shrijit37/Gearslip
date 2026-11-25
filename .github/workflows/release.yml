@@ -12,70 +12,22 @@ jobs:
     permissions:
       contents: write
     steps:
+      # A local action has to exist on disk before GitHub can load it, so every caller checks
+      # out first. Full history gives gitVersion its hand-written version tags.
       - uses: actions/checkout@v4
         with:
-          # The build names itself after the newest tag, which a shallow clone doesn't have.
           fetch-depth: 0
 
-      - uses: actions/setup-java@v4
+      # JDK, Gradle cache and (when the secrets exist) the stable signing key all live in one
+      # action shared with the dev and promotion workflows. A fork without the secrets gets a
+      # throwaway signature here and a warning; publishing still works from the UI.
+      - uses: ./.github/actions/gearslip-build
         with:
-          distribution: temurin
-          java-version: "21"
-
-      # ubuntu-latest ships the Android SDK (incl. compileSdk 37) and Gradle picks it up
-      # from ANDROID_HOME; upstream's release job relies on this too.
-      - uses: gradle/actions/setup-gradle@v4
-
-      # A stable signature is what lets an installed Gearslip accept the next one. Without it
-      # each runner's throwaway debug key makes Android refuse the update, and the in-app updater
-      # can only send the driver to the releases page. Set these four secrets in the repo to
-      # enable it; see README's "Stable signing for in-app updates" section.
-      - name: Write stable signing config
-        env:
-          UPDATE_KEYSTORE_B64: ${{ secrets.UPDATE_KEYSTORE_B64 }}
-          UPDATE_STORE_PASSWORD: ${{ secrets.UPDATE_STORE_PASSWORD }}
-          UPDATE_KEY_ALIAS: ${{ secrets.UPDATE_KEY_ALIAS }}
-          UPDATE_KEY_PASSWORD: ${{ secrets.UPDATE_KEY_PASSWORD }}
-        run: |
-          # Secrets can't be used in a step's if:, so decide here. Forks without the secrets
-          # keep building with the runner's debug key and the warning tells them why updates
-          # will need a manual reinstall.
-          if [ -z "$UPDATE_KEYSTORE_B64" ]; then
-            echo "::warning::UPDATE_KEYSTORE_B64 is not set. This APK has a throwaway signature and in-app updates will need a manual reinstall."
-            exit 0
-          fi
-          echo "$UPDATE_KEYSTORE_B64" | base64 --decode > gearslip-release.jks
-          python3 - <<'PY'
-          import os
-
-          def escape(value):
-              return (value.replace('\\', '\\\\').replace(':', '\\:')
-                           .replace('=', '\\=').replace('\n', '\\n'))
-
-          # Gradle's Properties keys are case-sensitive: build.gradle.kts reads the same
-          # camelCase names that Android's signingConfig DSL uses.
-          props = {
-              'STORE_PASSWORD': 'storePassword',
-              'KEY_ALIAS': 'keyAlias',
-              'KEY_PASSWORD': 'keyPassword',
-          }
-          with open('keystore.properties', 'w') as out:
-              out.write('storeFile=gearslip-release.jks\n')
-              for env, prop in props.items():
-                  out.write('%s=%s\n' % (prop, escape(os.environ['UPDATE_' + env])))
-          PY
-
-      - name: Build debug APK
-        # Debug needs no signing secrets, so this works in a fork out of the box.
-        run: ./gradlew :gearslip:assembleDebug --no-daemon
-
-      - name: Locate APKs
-        id: apk
-        run: |
-          # ABI splits produce one APK per ABI plus a universal fallback, all copied into build/
-          # by Gradle's renameApk task. Fail early if the naming changes so no release ships empty.
-          compgen -G 'build/Gearslip-*-debug.apk' > /dev/null || { echo "no split APKs in build/"; ls -R build | head -50; exit 1; }
-          ls -lh build/Gearslip-*-debug.apk
+          signing: optional
+          keystore-b64: ${{ secrets.UPDATE_KEYSTORE_B64 }}
+          store-password: ${{ secrets.UPDATE_STORE_PASSWORD }}
+          key-alias: ${{ secrets.UPDATE_KEY_ALIAS }}
+          key-password: ${{ secrets.UPDATE_KEY_PASSWORD }}
 
       - name: Compute release tag
         id: version
