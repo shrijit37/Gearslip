@@ -1,13 +1,40 @@
+version: 2
+kodusConfigFileOverridesWebPreferences: true
+automatedReviewActive: true
+showStatusFeedback: true
+reviewCadence:
+  type: automatic
+reviewMode: heavy
+runOnDraft: false
+isRequestChangesActive: true
+enableCommittableSuggestions: true
+crossFileDependenciesAnalysis: true
+reviewOptions:
+  bug: true
+  performance: true
+  security: true
+  business_logic: true
+  cross_file: true
+  repoInstructionsEnabled: true
+suggestionControl:
+  groupingMode: full
+  applyFiltersToKodyRules: true
+  limitationType: pr
+  maxSuggestions: 100
+  severityLevelFilter: low
+  severityLimits:
+    low: 0
+    medium: 0
+    high: 0
+    critical: 0
 summary:
+  generatePRSummary: false
   behaviourForNewCommits: concatenate
   behaviourForExistingDescription: concatenate
-suggestionControl:
-  severityLevelFilter: low
-  applyFiltersToKodyRules: true
-isRequestChangesActive: true
+  customInstructions: ''
+ignorePaths:
+  - build/**
+  - '**/*.html'
+  - '**/*.lock'
 repoInstructionsEnabled: true
-pullRequestApprovalActive: true
-customMessages:
-  globalSettings:
-    hideComments: true
-    suggestionCopyPrompt: false
+riskAssessmentActive: false
