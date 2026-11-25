@@ -143,7 +143,14 @@ class GearslipActivity : ComponentActivity() {
 
         setContent {
             GearslipTheme {
-                GearslipApp(onDisconnect = { closeAccessory() }, onRequestCallScreening = ::requestCallScreeningRole)
+                GearslipApp(
+                    onDisconnect = {
+                        closeAccessory()
+                        // The driver ended the drive on purpose: no reconnect grace window.
+                        CarAudio.release()
+                    },
+                    onRequestCallScreening = ::requestCallScreeningRole,
+                )
                 val offer by offerBluetooth.collectAsState()
                 if (offer) {
                     fun close() {
@@ -410,7 +417,13 @@ class GearslipActivity : ComponentActivity() {
 
     private fun closeAccessory() = closeAccessory(stopWireless = true)
 
-    /** Ends the session, wired or wireless. [stopWireless] also drops the car's Bluetooth and Wi-Fi. */
+    /**
+     * Ends the session, wired or wireless. [stopWireless] also drops the car's Bluetooth and Wi-Fi.
+     *
+     * This does not release audio capture: a natural worker exit or the cleanup before a new
+     * connection must leave the grace window from [CarAudio.detach] intact so a brief disconnect
+     * does not force another consent dialog. Explicit teardown calls [CarAudio.release] itself.
+     */
     private fun closeAccessory(stopWireless: Boolean) {
         runner?.stop()
         CarServices.shutdown()

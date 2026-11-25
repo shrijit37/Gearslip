@@ -348,7 +348,12 @@ object CarServices {
         runCatching { nav.disconnect() }
         runCatching { media.disconnect() }
         runCatching { browse.disconnect() }
-        CarAudio.release()
+        // Audio capture is deliberately left alone here. CarAudio.detach() opens a grace window
+        // so a cable that slips or a wireless link that drops briefly can reconnect without the
+        // driver being asked to share the screen again. Releasing it on every session teardown
+        // (including a natural worker exit or the cleanup before a replacement session) cancels
+        // that window. Only an explicit teardown - the disconnect button or the activity being
+        // destroyed - calls CarAudio.release(), and the grace timer releases it if no car returns.
         _mediaApp.value = null
         navStopped = false
     }
