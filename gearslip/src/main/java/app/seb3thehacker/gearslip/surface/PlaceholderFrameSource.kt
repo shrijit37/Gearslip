@@ -1,46 +1,46 @@
-package app.seb3thehacker.gearslip
+package app.seb3thehacker.gearslip.surface
 
 import android.media.MediaCodec
 import android.media.MediaCodecInfo
 import android.media.MediaFormat
 import android.os.Bundle
 import android.media.Image
+import app.seb3thehacker.gearslip.GearslipLog
 
 /**
- * Encodes a placeholder frame to H.264 Baseline and hands the bitstream to a callback.
+ * The default [FrameSource]: a generated placeholder encoded to H.264 Baseline.
  *
- * Feeds the encoder YUV420 buffers via getInputImage() rather than a Surface: no drawing
- * surface or GL context is needed to keep the AAP video channel alive, so the protocol core
- * stays independent of whatever draws on the head unit. A future UI can replace the frame
- * source without touching the session.
+ * It feeds the encoder YUV420 buffers instead of a Surface, so no drawing surface or GL context
+ * is needed to keep the AAP video channel alive. A head-unit surface that provides its own
+ * [FrameSource] replaces it without changing the session.
  *
  * The head unit negotiated MEDIA_CODEC_VIDEO_H264_BP, so the profile is pinned to Baseline.
  */
-class VideoSource(
+class PlaceholderFrameSource(
     private val width: Int,
     private val height: Int,
     private val frameRate: Int,
     /** Over Wi-Fi: a fraction of the cable bitrate, so the link keeps up and sound isn't starved. */
     private val wireless: Boolean = false,
-    private val onCodecConfig: (ByteArray) -> Unit,
-    private val onFrame: (data: ByteArray, presentationTimeUs: Long, keyFrame: Boolean) -> Unit,
-) {
+) : FrameSource {
     private val log = GearslipLog.tagged("VIDEO")
 
+    private var output: FrameOutput? = null
     private var codec: MediaCodec? = null
 
     /** The bitrate the encoder started at, the most [setBitRate] ever goes back up to. */
-    var fullBitRate = 0
+    override var fullBitRate = 0
         private set
 
     /** What the encoder is asked for right now. */
-    @Volatile var bitRate = 0
+    @Volatile override var bitRate = 0
         private set
     private var worker: Thread? = null
     @Volatile private var running = false
     private var frameIndex = 0L
 
-    fun start() {
+    override fun start(output: FrameOutput) {
+        this.output = output
         val level = levelFor(width, height, frameRate)
         val bitRate = defaultBitRate(width, height, frameRate, level).let {
             if (wireless) (it * WIRELESS_SHARE).toInt().coerceAtMost(WIRELESS_MAX_BIT_RATE) else it
@@ -95,7 +95,7 @@ class VideoSource(
      * forever - visually, exactly the smeared/ghosted look of a partial e-ink refresh,
      * because nothing ever forces a clean full-frame redraw.
      */
-    fun requestSyncFrame() {
+    override fun requestSyncFrame() {
         runCatching {
             codec?.setParameters(Bundle().apply {
                 putInt(MediaCodec.PARAMETER_KEY_REQUEST_SYNC_FRAME, 0)
@@ -107,7 +107,7 @@ class VideoSource(
      * Changes the bitrate while streaming, without a new keyframe or a restart. Used to back off
      * when the car (or the Wi-Fi to it) can't keep up, and to climb back once it can.
      */
-    fun setBitRate(bps: Int) {
+    override fun applyBitRate(bps: Int) {
         val target = bps.coerceIn(fullBitRate / 4, fullBitRate)
         if (target == bitRate) return
         runCatching {
@@ -116,7 +116,7 @@ class VideoSource(
         }.onFailure { log.w("setBitRate failed: ${it.message}") }
     }
 
-    fun stop() {
+    override fun stop() {
         running = false
         // Stop is called from threads that are themselves being shut down. An interrupt here
         // used to escape as an uncaught exception and take the whole app down with the session.
@@ -128,6 +128,7 @@ class VideoSource(
         runCatching { codec?.stop() }
         runCatching { codec?.release() }
         codec = null
+        output = null
     }
 
     private fun pump(encoder: MediaCodec) {
@@ -157,9 +158,9 @@ class VideoSource(
                     buffer.position(info.offset)
                     buffer.get(data)
                     if (info.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG != 0) {
-                        onCodecConfig(data)
+                        output?.onCodecConfig(data)
                     } else {
-                        onFrame(
+                        output?.onFrame(
                             data,
                             info.presentationTimeUs,
                             info.flags and MediaCodec.BUFFER_FLAG_KEY_FRAME != 0,

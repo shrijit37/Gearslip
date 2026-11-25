@@ -9,9 +9,9 @@ channels, and a host for templated car apps.
 
 The video channel currently sends a placeholder test-card frame — colour bars with a marker that
 advances each second — so the car sees a live, unmistakably ours picture while the session and
-framing are exercised. **No headunit UI is bundled.** The plug-in headunit surface architecture is
-coming next: the protocol core is being kept independent of whatever draws on the car screen so a
-surface can be added later without changing the session.
+framing are exercised. **No headunit UI is bundled.** The core is UI-agnostic: a head-unit renderer
+is a plug-in surface that receives session state and input through a small contract, so adding one
+never changes the protocol. See [docs/HEADUNIT_SURFACES.md](docs/HEADUNIT_SURFACES.md).
 
 > [!IMPORTANT]
 > This is an independent implementation of the protocol, not affiliated with Google. The
