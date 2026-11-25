@@ -1,0 +1,50 @@
+# Evidence-grounded PR review with Codex Maintainer.
+#
+# Uses the forked action pinned to a commit SHA. The fork adds a configurable
+# Responses API base URL, reasoning effort, and explicit PR number for manual runs.
+# The model and credentials are the same ones previously used by OpenCodeReview.
+#
+# Required (Settings -> Secrets and variables -> Actions):
+#   secret    OCR_LLM_AUTH_TOKEN   LLM auth token
+#   variable  OCR_LLM_MODEL        model name (hy4-flash-free)
+#
+# Fork PRs cannot receive repository secrets under pull_request, so the action
+# skips them rather than exposing credentials. It rejects pull_request_target.
+
+name: Codex Maintainer review
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, ready_for_review]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: Pull request number to review
+        required: true
+        type: number
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: codex-maintainer-${{ github.event.pull_request.number || inputs.pr_number }}
+  cancel-in-progress: true
+
+jobs:
+  recommend:
+    if: ${{ github.event_name == 'workflow_dispatch' || !github.event.pull_request.draft }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Review changed lines
+        id: maintainer
+        uses: shrijit37/codex-maintainer@2801885558b5e42af5d80fe1550e2a0d91d0ce8d
+        with:
+          openai-api-key: ${{ secrets.OCR_LLM_AUTH_TOKEN }}
+          github-token: ${{ github.token }}
+          model: ${{ vars.OCR_LLM_MODEL }}
+          pr-number: ${{ inputs.pr_number || '' }}
+          base-url: https://llm.shrijit.tech/v1
+          reasoning-effort: high
+          comment: 'true'

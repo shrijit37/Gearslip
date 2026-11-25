@@ -4,6 +4,10 @@ Every push to `main` builds the debug APK and publishes it as a prerelease in Re
 
 You can also run that workflow manually from the Actions tab.
 
+## Pull request review
+
+Pull requests are reviewed by [Codex Maintainer](https://github.com/snakyvine/codex-maintainer) via `.github/workflows/codex-maintainer-review.yml`. It posts one evidence-grounded recommendation comment: every finding must cite a changed line, and it never edits code or approves a PR. It uses `hy4-flash-free` with high reasoning through the existing `OCR_LLM_AUTH_TOKEN` secret and `OCR_LLM_MODEL` variable.
+
 ## Shared build pipeline
 
 All three publishing workflows (`release.yml`, `dev-publish.yml` and `promote.yml`) call
