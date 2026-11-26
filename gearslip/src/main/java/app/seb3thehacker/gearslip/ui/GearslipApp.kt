@@ -64,7 +64,6 @@ fun GearslipApp(onDisconnect: () -> Unit, onRequestCallScreening: () -> Unit) {
         }
     }
     var screen by rememberSaveable { mutableStateOf(start) }
-    // What's new and Connection help open from Home and from Settings; back returns to whichever.
     // Which of the car's setting groups Home opened.
     var carGroup by rememberSaveable { mutableStateOf(CarGroup.SCREEN) }
     BackHandler(enabled = screen != Screen.HOME) {
@@ -154,8 +153,5 @@ fun GearslipApp(onDisconnect: () -> Unit, onRequestCallScreening: () -> Unit) {
                 )
             }
         }
-        // A car keyboard is open: offer the phone's own, for a passenger. In the car preview it is
-        // the only keyboard, since the preview draws none of its own.
-        PhoneTypingBar()
     }
 }

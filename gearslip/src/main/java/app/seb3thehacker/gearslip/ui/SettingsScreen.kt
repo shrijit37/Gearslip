@@ -8,7 +8,6 @@ import androidx.compose.material.icons.filled.Create
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.res.vectorResource
 import app.seb3thehacker.gearslip.R
-import app.seb3thehacker.gearslip.car.LauncherMode
 import androidx.compose.runtime.withFrameNanos
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -340,7 +339,7 @@ private fun CarAudioSetting() {
     SettingsRow(
         stringResource(R.string.car_audio),
         subtitle = if (through) stringResource(R.string.home_audio_usb_warning) else null,
-        icon = app.seb3thehacker.gearslip.car.MediaIcons.MusicNote,
+        icon = Icons.Filled.PlayArrow,
     )
     androidx.compose.foundation.layout.Row(
         Modifier.fillMaxWidth().padding(start = 56.dp, end = 16.dp, bottom = 12.dp),
