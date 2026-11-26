@@ -3,24 +3,23 @@
 Gearslip belongs to Twink Software LLC ("we"). This policy says what Gearslip sends off your
 phone, to whom, and why. Most of what Gearslip does stays on the phone.
 
-Last updated: November 21, 2026
+Last updated: November 25, 2026
 
 ## What stays on your phone
 
-- **Your voice.** Speech turns into text on the phone. Gearslip never records or sends what
-  you say.
+- **Your voice.** During a voice session, audio from the car's microphone is passed to the
+  phone's voice input or to the hosted app handling the call. Gearslip does not record it or
+  send it to us; the app that handles it has its own privacy policy.
 - **Messages, calls, and contacts.** Gearslip reads them to show and speak them in the car,
   and it never sends them anywhere.
 - **The certificate.** It stays on your phone. Gearslip never uploads, backs up, or logs it.
 - **Logs.** Gearslip writes a log of each connection to the phone. It leaves the phone only
   when you share it yourself, for example by attaching it to a GitHub issue.
-- **Your location.** Gearslip uses it only while a car is connected, so the car's map and
-  weather work, and with Allow all the time, so the map keeps working with the phone locked.
-  When you ask the car for a route, the route's start and destination go to the routing and
-  traffic services listed below; otherwise your location is not sent to anyone except the
-  weather service.
-- **What your car reports.** Speed, fuel, location, and the like go only to the apps on
-  your phone that ask for them.
+- **Your location.** Gearslip shares it with hosted navigation apps while a car is connected,
+  and with Allow all the time so they keep working with the phone locked. Gearslip does not send
+  your location to us; a hosted app that uses it has its own privacy policy.
+- **What your car reports.** Speed, fuel, location, and the like go only to the hosted car apps
+  on your phone that ask for them.
 
 ## Usage notes
 
@@ -54,23 +53,17 @@ Each of these gets only what it needs, and each has its own privacy policy.
 
 | Service | When | What it receives |
 |---|---|---|
-| [Open-Meteo](https://open-meteo.com/en/terms) | When the car's dashboard shows the weather | Your phone's location |
 | BetterLyrics (lyrics-api.boidu.dev), [LRCLIB](https://lrclib.net), and KuGou | While the lyrics panel is open, for each song that plays | The song's title, artist, album, and length |
 | [GitHub](https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement) | Once a day, to check for an update, unless you turn checks off | A request for the latest release |
+| GitHub | When the Dev update channel checks for a build | A request for the dev manifest and the APK for your phone |
 | GitHub | In setup, if you choose to download the certificate | A request for the certificate file |
-| [Hugging Face](https://huggingface.co/privacy) | When you download a speech model | A request for the model file |
-| [OpenFreeMap](https://openfreemap.org) | When an app in the car shows a list of places on a map | Requests for the map tiles of the area shown |
-| [OpenStreetMap OSRM](https://routing.openstreetmap.de) | When a route is requested in the car, unless the result is still cached | The route's start and destination, used to fetch the road geometry drawn as dots. There is no account, API key or shared credential, and no request goes through a Gearslip server |
-| Google (public web endpoints) | When a route with live traffic is requested in the car | The route's start and destination and the area around the route, sent from a per-install logged-out browser session. There is no account, API key or shared credential, and no request goes through a Gearslip server |
-| [EasyList](https://easylist.to) | About once a week on Wi-Fi, while the browser's ad blocker is on | A request for the filter lists |
-| Any address you give | When you download a certificate from a link, or add your own filter list | A request for that file |
+| Any address you give | When you download a certificate from a link | A request for that file |
 
 Every request also carries your IP address, as any connection to the internet does.
 
-The web browser in the car searches with the engine you pick (DuckDuckGo unless you change
-it) and opens whatever sites you visit, like any browser. A bookmark's icon comes from that
-site itself. The map, music, and messaging apps you use through Gearslip are other
-companies' apps, with their own policies.
+The map, music, messaging and other car apps you use through Gearslip are other companies'
+apps, with their own policies. Gearslip does not fetch their maps, web pages or filter lists
+for them.
 
 ## Your rights
 
