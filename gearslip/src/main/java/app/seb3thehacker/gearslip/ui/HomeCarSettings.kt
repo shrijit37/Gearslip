@@ -146,7 +146,7 @@ private fun musicSourceChoices() = listOf(
 @Composable
 private fun openChoices(): List<Pair<String, String>> {
     val context = LocalContext.current
-    val apps = remember(context) { CarApps.shown(LauncherMode.enabled(context), LauncherMode.canCall(context)) }
+    val apps = remember(context) { CarApps.shown(false, LauncherMode.canCall(context)) }
     return listOf(CarSettings.HOME to stringResource(R.string.choice_open_home)) + apps.map { it.id to stringResource(it.labelRes) }
 }
 

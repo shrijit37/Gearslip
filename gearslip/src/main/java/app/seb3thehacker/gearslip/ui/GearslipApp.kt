@@ -45,7 +45,7 @@ import app.seb3thehacker.gearslip.CertProvider
 import app.seb3thehacker.gearslip.SessionStatus
 import app.seb3thehacker.gearslip.update.UpdateChecker
 
-private enum class Screen { HOME, SETTINGS, CAR_PREVIEW, CERT_SETUP, SETUP_GUIDE, RECOMMENDED_APPS, CAR_GROUP, SAVED_PLACES }
+private enum class Screen { HOME, SETTINGS, CERT_SETUP, SETUP_GUIDE, RECOMMENDED_APPS, CAR_GROUP, SAVED_PLACES }
 
 /** Three screens and a back stack of depth one: no navigation library needed. */
 @Composable
@@ -65,25 +65,19 @@ fun GearslipApp(onDisconnect: () -> Unit, onRequestCallScreening: () -> Unit) {
     }
     var screen by rememberSaveable { mutableStateOf(start) }
     // What's new and Connection help open from Home and from Settings; back returns to whichever.
-    var backTo by rememberSaveable { mutableStateOf(Screen.SETTINGS) }
     // Which of the car's setting groups Home opened.
     var carGroup by rememberSaveable { mutableStateOf(CarGroup.SCREEN) }
     BackHandler(enabled = screen != Screen.HOME) {
         screen = when (screen) {
             Screen.RECOMMENDED_APPS -> Screen.SETTINGS
-            // The same place their own back arrows go: Home or Settings, whichever opened them.
-            Screen.CAR_PREVIEW -> backTo
             else -> Screen.HOME
         }
     }
 
-    // Home stays upright; the car preview fills the screen in landscape; the rest turn with the
-    // phone. A portrait car frame occupies only the top fifth of a tall phone and leaves the rest
-    // blank, so this screen is locked rather than left to the phone's rotation.
+    // Home stays upright; the rest turn with the phone.
     LaunchedEffect(screen) {
         (context as? Activity)?.requestedOrientation = when (screen) {
             Screen.HOME -> ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
-            Screen.CAR_PREVIEW -> ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
             else -> ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
         }
     }
@@ -132,7 +126,6 @@ fun GearslipApp(onDisconnect: () -> Unit, onRequestCallScreening: () -> Unit) {
             when (screen) {
                 Screen.HOME -> HomeScreen(
                     onOpenSettings = { screen = Screen.SETTINGS },
-                    onOpenCarPreview = { backTo = Screen.HOME; screen = Screen.CAR_PREVIEW },
                     onDisconnect = onDisconnect,
                     onOpenCarGroup = {
                         if (it == CarGroup.PLACES) {
@@ -150,7 +143,6 @@ fun GearslipApp(onDisconnect: () -> Unit, onRequestCallScreening: () -> Unit) {
                 )
                 Screen.RECOMMENDED_APPS -> RecommendedAppsScreen(onBack = { screen = Screen.SETTINGS })
                 Screen.SAVED_PLACES -> SavedPlacesScreen(onBack = { screen = Screen.HOME })
-                Screen.CAR_PREVIEW -> CarPreviewScreen(onBack = { screen = backTo })
                 Screen.CERT_SETUP -> CertSetupScreen(
                     onDone = {
                         screen = if (AppSettings.hasSeenPermissionsSetup(context)) Screen.HOME else Screen.SETUP_GUIDE
