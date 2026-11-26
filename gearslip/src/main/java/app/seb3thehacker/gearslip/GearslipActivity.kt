@@ -24,6 +24,7 @@ import app.seb3thehacker.gearslip.car.CarEnvironment
 import app.seb3thehacker.gearslip.car.CarServices
 import app.seb3thehacker.gearslip.car.CarSettings
 import app.seb3thehacker.gearslip.car.Prefetch
+import app.seb3thehacker.gearslip.protocol.TouchPoint
 import app.seb3thehacker.gearslip.surface.HeadunitSurfaces
 import app.seb3thehacker.gearslip.ui.GearslipApp
 import app.seb3thehacker.gearslip.ui.GearslipTheme
@@ -129,8 +130,14 @@ class GearslipActivity : ComponentActivity() {
             }
         }
         CarSettings.init(this)
-        // Before any car connects: CarServices only starts once the car shows Gearslip's screen,
-        // and a car that waits to know the phone before it shows it would never hear (issue #43).
+        // The runner now binds the map and media apps itself on service discovery. Initialise the
+        // services here, before any car connects: CarUi() is no longer composed on a real session,
+        // so waiting for the deleted car screen to do it would leave autostart() with no context
+        // and nothing would bind. CarBluetooth still needs an early init for issue #43.
+        // CarEnvironment used to start in onSurfaceReady(), which no longer has a caller. Start it
+        // here too so night mode, battery and appContext are ready before the first app binds.
+        CarEnvironment.start(this)
+        CarServices.init(this)
         app.seb3thehacker.gearslip.car.CarBluetooth.init(this)
         AppSettings.applyGearslipEnabled(this)
         // A capture that died without tidying up would leave notifications exposed to every
@@ -146,7 +153,9 @@ class GearslipActivity : ComponentActivity() {
                 GearslipApp(
                     onDisconnect = {
                         closeAccessory()
-                        // The driver ended the drive on purpose: no reconnect grace window.
+                        // An explicit disconnect is not a cable slip: runner.stop() closes the
+                        // audio link, which starts a 30s grace timer. End the capture now so the
+                        // phone's speaker and screen sharing come back at once.
                         CarAudio.release()
                     },
                     onRequestCallScreening = ::requestCallScreeningRole,
@@ -224,6 +233,8 @@ class GearslipActivity : ComponentActivity() {
         CarAudio.onConsentRequested = null
         CarAudio.release()
         closeAccessory()
+        CarServices.shutdown()
+        CarEnvironment.stop()
         GearslipLog.flush()
     }
 
@@ -426,7 +437,9 @@ class GearslipActivity : ComponentActivity() {
      */
     private fun closeAccessory(stopWireless: Boolean) {
         runner?.stop()
-        CarServices.shutdown()
+        // The car UI is no longer composed on a real session, so its disposal no longer shuts
+        // the hosted apps down. Unbind them here while the old session is still identifiable.
+        CarServices.disconnectHosts()
         CarEnvironment.stop()
         SessionReport.print()
         runCatching { descriptor?.close() }

@@ -87,7 +87,8 @@ object CarServices {
 
     fun init(appContext: Context) {
         context = appContext.applicationContext
-        app.seb3thehacker.gearslip.notify.CarMotion.start(appContext)
+        // GPS fixes are only useful while a car is connected: autostart() starts CarMotion per
+        // session and disconnectHosts() stops it, so no 2-second subscription runs between drives.
         app.seb3thehacker.gearslip.call.CarCalls.start(appContext)
         CarBluetooth.init(appContext)
         BluetoothAudioCheck.init(appContext)
@@ -211,6 +212,7 @@ object CarServices {
     /** Brings back whatever was in use last time. Safe to call repeatedly. */
     suspend fun autostart(frame: CarEnvironment.Frame) {
         val ctx = context ?: return
+        app.seb3thehacker.gearslip.notify.CarMotion.start(ctx)
 
         if (!navStopped && nav.status.value.phase == CarAppConnection.Phase.IDLE) {
             val navApps = withContext(Dispatchers.IO) { CarAppCatalog.installed(ctx) }
@@ -341,20 +343,29 @@ object CarServices {
         return playing
     }
 
-    /** The car went away: nothing should keep running for a screen that no longer exists. */
-    fun shutdown() {
+    /**
+     * The session ended: unbind the hosted apps and drop their location keep-alive holds. Safe on
+     * every session exit, including a car-initiated drop where no UI teardown runs.
+     *
+     * Audio capture is deliberately left alone here. CarAudio.detach() opens a grace window so a
+     * cable that slips or a wireless link that drops briefly can reconnect without the driver
+     * being asked to share the screen again. Releasing it on every session teardown cancels that
+     * window. Only an explicit teardown - the disconnect button or the activity being destroyed -
+     * calls CarAudio.release(), and the grace timer releases it if no car returns.
+     */
+    fun disconnectHosts() {
         context?.let { app.seb3thehacker.gearslip.notify.CarMotion.stop(it) }
-        app.seb3thehacker.gearslip.call.CarCalls.stop()
         runCatching { nav.disconnect() }
         runCatching { media.disconnect() }
         runCatching { browse.disconnect() }
-        // Audio capture is deliberately left alone here. CarAudio.detach() opens a grace window
-        // so a cable that slips or a wireless link that drops briefly can reconnect without the
-        // driver being asked to share the screen again. Releasing it on every session teardown
-        // (including a natural worker exit or the cleanup before a replacement session) cancels
-        // that window. Only an explicit teardown - the disconnect button or the activity being
-        // destroyed - calls CarAudio.release(), and the grace timer releases it if no car returns.
         _mediaApp.value = null
+        autoplayPending = false
         navStopped = false
+    }
+
+    /** The app is going away: stop the app-wide listeners as well as the hosted services. */
+    fun shutdown() {
+        app.seb3thehacker.gearslip.call.CarCalls.stop()
+        disconnectHosts()
     }
 }

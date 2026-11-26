@@ -20,9 +20,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import java.io.IOException
 import app.seb3thehacker.gearslip.protocol.InputProtocol
+import app.seb3thehacker.gearslip.protocol.TouchPoint
 import app.seb3thehacker.gearslip.surface.FrameOutput
 import app.seb3thehacker.gearslip.surface.FrameSources
 import app.seb3thehacker.gearslip.surface.FrameSource
@@ -103,13 +105,17 @@ class GearslipRunner(
      */
     @Volatile private var autostartScope: CoroutineScope? = null
     @Volatile private var autostartJob: Job? = null
+    /** Serializes scope creation with cancellation: stop() can run on the UI thread mid-startup. */
+    private val autostartLock = Any()
 
     /** Cancel before the activity shuts the services down: no new app may bind after that. */
     private fun cancelAutostart() {
-        autostartJob?.cancel()
-        autostartScope?.cancel()
-        autostartJob = null
-        autostartScope = null
+        synchronized(autostartLock) {
+            autostartJob?.cancel()
+            autostartScope?.cancel()
+            autostartJob = null
+            autostartScope = null
+        }
     }
 
     @Volatile private var videoChannelId: Int = -1
@@ -120,6 +126,20 @@ class GearslipRunner(
     /** The car's screen has been asked for once, so asking again is in order. */
     @Volatile private var focusAsked = false
     private var frameSource: FrameSource? = null
+    @Volatile private var surfaceDetached = false
+    private val surfaceLock = Any()
+    /** Session-owned render resources; safe to call from stop() and the transport-exit finally. */
+    private fun releaseSurface() {
+        synchronized(surfaceLock) {
+            frameSource?.stop()
+            frameSource = null
+            if (!surfaceDetached) {
+                surfaceDetached = true
+                surface?.detach()
+            }
+        }
+    }
+
     @Volatile private var inFlight = 0
     /** Guards [inFlight]: the encoder thread waits on it for the head unit's acks. */
     private val ackLock = Object()
@@ -202,10 +222,19 @@ class GearslipRunner(
             if (!stopped && state == State.WAIT_SDR) ServiceDiscoveryQuirks.droppedAfter(tls.headUnitKey, plainDiscovery)
             running = false
             cancelAutostart()
+            // As in stop(), free an encoder waiting on an ack before asking it to stop: EOF is
+            // just as likely to land while the frame window is full.
+            synchronized(ackLock) { ackLock.notifyAll() }
+            // EOF and transport failures never reach stop(); release the encoder and surface here.
+            releaseSurface()
             // The car is gone, but nothing calls stop() when a wireless session drops: it waits
             // for the next one. Close the music channel now, so the audio capture behind it,
             // and the screen sharing Android shows for it, stop too (issue #43).
             if (!stopped) audioLink?.close()
+            // A car-initiated drop never reaches closeAccessory(), so nobody else would unbind
+            // the hosted apps and release their location keep-alive hold. An explicit stop() is
+            // handled there synchronously; doing it here too could tear down a newer session.
+            if (!stopped) app.seb3thehacker.gearslip.car.CarServices.disconnectHosts()
             writer.shutdown()
             if (drainWriterOnExit) writer.awaitTermination(2, TimeUnit.SECONDS)
             writer.shutdownNow()
@@ -221,9 +250,7 @@ class GearslipRunner(
         CarFocus.request = null
         CarFocus.set(true)
         synchronized(ackLock) { ackLock.notifyAll() } // free an encoder waiting on an ack
-        frameSource?.stop()
-        frameSource = null
-        surface?.detach()
+        releaseSurface()
         CarAudio.openSink = null
         audioLink?.close()
         audioLink = null
@@ -1107,6 +1134,7 @@ class GearslipRunner(
     }
 
     private fun startVideoSource() {
+        if (stopped) return
         lastKeyframeSentAt = System.currentTimeMillis() // frame #1 is always a keyframe
         val index = selectedConfigIndex ?: 0
         val config = videoConfigs.getOrNull(index)
@@ -1134,7 +1162,10 @@ class GearslipRunner(
         // no track metadata reaches the session. Bind them here, on the main Looper that
         // MediaBrowser needs, once per session even if focus is granted again. The package
         // scans inside autostart run on IO, so the protocol read loop is never blocked.
-        if (autostartJob == null) {
+        // stop() can land between the null check and the assignment on the UI thread; hold the
+        // same lock it uses and re-check stopped, so no app binds after disconnect cleanup.
+        synchronized(autostartLock) {
+            if (stopped || autostartJob != null) return@synchronized
             val frame = CarEnvironment.frame.value
             val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
             autostartScope = scope
@@ -1145,6 +1176,14 @@ class GearslipRunner(
                     throw e // the session ended; let the cancelled job stay cancelled
                 } catch (e: Throwable) {
                     log.w("hosted app autostart failed: ${e.message}")
+                }
+            }
+            // The deleted car home screen pushed configuration changes to the map from a
+            // LaunchedEffect. With no UI, follow night here; cancelling autostart on session exit
+            // cancels this observer too, so it cannot reach a newer session's app.
+            scope.launch {
+                CarEnvironment.darkOutside.collect {
+                    CarServices.nav.pushConfiguration()
                 }
             }
         }
@@ -1181,17 +1220,22 @@ class GearslipRunner(
         }
         // A surface is attached for every session; only one that declares PROVIDES_FRAMES may
         // replace the encoder's source. Everything else keeps the generated placeholder.
-        val source = FrameSources.choose(
-            surface, surfaceContext(), spec,
-            PlaceholderFrameSource(width, height, videoFrameRate, wireless),
-        )
-        frameSource = source
-        runCatching {
-            source.start(output)
-            SessionStatus.projecting()
-            BluetoothAudioCheck.onProjecting()
-            LocationCheck.onProjecting()
-        }.onFailure { e -> log.e("encoder start failed", e) }
+        // stop() can land after the entry guard: attach and start under the same lock releaseSurface
+        // uses, re-checking stopped so nothing is attached after the surface was torn down.
+        synchronized(surfaceLock) {
+            if (stopped || surfaceDetached) return@synchronized
+            val source = FrameSources.choose(
+                surface, surfaceContext(), spec,
+                PlaceholderFrameSource(width, height, videoFrameRate, wireless),
+            )
+            frameSource = source
+            runCatching {
+                source.start(output)
+                SessionStatus.projecting()
+                BluetoothAudioCheck.onProjecting()
+                LocationCheck.onProjecting()
+            }.onFailure { e -> log.e("encoder start failed", e) }
+        }
     }
 
     /** A stable, read-only view of session state for whichever head-unit surface is attached. */
