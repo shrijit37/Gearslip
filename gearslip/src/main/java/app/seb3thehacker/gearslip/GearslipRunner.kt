@@ -16,6 +16,7 @@ import app.seb3thehacker.gearslip.car.CarServices
 import app.seb3thehacker.gearslip.car.CarSettings
 import java.io.IOException
 import app.seb3thehacker.gearslip.protocol.InputProtocol
+import app.seb3thehacker.gearslip.protocol.TouchPoint
 import java.io.InputStream
 import java.io.OutputStream
 import java.util.concurrent.Executors
