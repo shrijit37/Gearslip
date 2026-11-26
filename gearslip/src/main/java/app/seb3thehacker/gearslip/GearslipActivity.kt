@@ -45,7 +45,7 @@ import java.io.FileOutputStream
  * session lives in this activity, so [android:configChanges] in the manifest keeps a
  * rotation or theme change from recreating it and dropping the connection.
  */
-class GearslipActivity : ComponentActivity(), Projection {
+class GearslipActivity : ComponentActivity() {
     private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
 
 
@@ -529,7 +529,7 @@ class GearslipActivity : ComponentActivity(), Projection {
         moveTaskToBack(true)
     }
 
-    override fun onSurfaceReady(surface: Surface, width: Int, height: Int, densityDpi: Int) {
+    private fun onSurfaceReady(surface: Surface, width: Int, height: Int, densityDpi: Int) {
         runOnUiThread {
             this.surface = surface
             frameWidth = width
@@ -545,7 +545,7 @@ class GearslipActivity : ComponentActivity(), Projection {
         }
     }
 
-    override fun onTouch(action: Int, actionIndex: Int, points: List<TouchPoint>) {
+    private fun onTouch(action: Int, actionIndex: Int, points: List<TouchPoint>) {
         // To the front of the main thread's queue: a touch waiting behind other work is lag the
         // driver feels, while the work it jumps ahead of can wait a frame.
         mainHandler.postAtFrontOfQueue {
@@ -555,11 +555,11 @@ class GearslipActivity : ComponentActivity(), Projection {
         }
     }
 
-    override fun onStill() {
+    private fun onStill() {
         screenProjector?.redraw()
     }
 
-    override fun onProjectionStopped() {
+    private fun onProjectionStopped() {
         // Before the car UI goes, while the media connection is still up.
         app.seb3thehacker.gearslip.car.CarServices.pausePhoneMedia()
         runOnUiThread {
