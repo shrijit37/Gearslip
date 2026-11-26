@@ -440,7 +440,6 @@ class GearslipActivity : ComponentActivity(), Projection {
             input = FileInputStream(pfd.fileDescriptor),
             output = FileOutputStream(pfd.fileDescriptor),
             identityProvider = { CertProvider.load(this) },
-            projection = this,
             vehicleProfileFor = { info -> VehicleProfiles.find(VehicleProfiles.load(this), info) },
             phoneIcons = { PhoneIcons.pngs(this) },
         )
@@ -463,7 +462,6 @@ class GearslipActivity : ComponentActivity(), Projection {
             input = socket.getInputStream(),
             output = socket.getOutputStream(),
             identityProvider = { CertProvider.load(this) },
-            projection = this,
             vehicleProfileFor = { info -> VehicleProfiles.find(VehicleProfiles.load(this), info) },
             wireless = true,
             phoneIcons = { PhoneIcons.pngs(this) },
