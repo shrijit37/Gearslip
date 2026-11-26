@@ -62,8 +62,8 @@ internal object CarAlerts {
 
     /** The driver tapped one of its buttons: the app gets the tap, and the alert goes. */
     fun tapped(shown: Shown, action: Action) {
-        action.onClickDelegate.click("alert button")
         if (current.value !== shown) return
+        action.onClickDelegate.click("alert button")
         cancelTimeout()
         current.value = null
         shown.alert.callbackDelegate.dismissed()
