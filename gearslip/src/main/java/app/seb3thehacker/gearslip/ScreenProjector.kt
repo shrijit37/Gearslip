@@ -28,6 +28,7 @@ import androidx.savedstate.SavedStateRegistry
 import androidx.savedstate.SavedStateRegistryController
 import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
+import app.seb3thehacker.gearslip.protocol.TouchPoint
 
 /**
  * Renders the car UI into the encoder's input Surface.

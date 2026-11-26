@@ -1,0 +1,295 @@
+package app.seb3thehacker.gearslip.surface
+
+import android.media.MediaCodec
+import android.media.MediaCodecInfo
+import android.media.MediaFormat
+import android.os.Bundle
+import android.media.Image
+import app.seb3thehacker.gearslip.GearslipLog
+
+/**
+ * The default [FrameSource]: a generated placeholder encoded to H.264 Baseline.
+ *
+ * It feeds the encoder YUV420 buffers instead of a Surface, so no drawing surface or GL context
+ * is needed to keep the AAP video channel alive. A head-unit surface that provides its own
+ * [FrameSource] replaces it without changing the session.
+ *
+ * The head unit negotiated MEDIA_CODEC_VIDEO_H264_BP, so the profile is pinned to Baseline.
+ */
+class PlaceholderFrameSource(
+    private val width: Int,
+    private val height: Int,
+    private val frameRate: Int,
+    /** Over Wi-Fi: a fraction of the cable bitrate, so the link keeps up and sound isn't starved. */
+    private val wireless: Boolean = false,
+) : FrameSource {
+    private val log = GearslipLog.tagged("VIDEO")
+
+    private var output: FrameOutput? = null
+    private var codec: MediaCodec? = null
+
+    /** The bitrate the encoder started at, the most [setBitRate] ever goes back up to. */
+    override var fullBitRate = 0
+        private set
+
+    /** What the encoder is asked for right now. */
+    @Volatile override var bitRate = 0
+        private set
+    private var worker: Thread? = null
+    @Volatile private var running = false
+    private var frameIndex = 0L
+
+    override fun start(output: FrameOutput) {
+        this.output = output
+        val level = levelFor(width, height, frameRate)
+        val bitRate = defaultBitRate(width, height, frameRate, level).let {
+            if (wireless) (it * WIRELESS_SHARE).toInt().coerceAtMost(WIRELESS_MAX_BIT_RATE) else it
+        }
+        fullBitRate = bitRate
+        this.bitRate = bitRate
+        fun format(tuned: Boolean) = MediaFormat.createVideoFormat(MIME, width, height).apply {
+            setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420Flexible)
+            setInteger(MediaFormat.KEY_BIT_RATE, bitRate)
+            setInteger(MediaFormat.KEY_FRAME_RATE, frameRate)
+            // Drops already ask for a fresh keyframe, so a long interval costs nothing in recovery
+            // and spares the link a big frame every second.
+            setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, I_FRAME_INTERVAL_S)
+            setInteger(MediaFormat.KEY_PROFILE, MediaCodecInfo.CodecProfileLevel.AVCProfileBaseline)
+            setInteger(MediaFormat.KEY_LEVEL, level.codecLevel)
+            if (tuned) {
+                // Hints only: a car screen wants each frame now, not the best frame a moment later.
+                setInteger(MediaFormat.KEY_BITRATE_MODE, MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_VBR)
+                setInteger(MediaFormat.KEY_PRIORITY, 0)
+                setInteger(MediaFormat.KEY_LATENCY, 1)
+            }
+        }
+
+        var encoder = MediaCodec.createEncoderByType(MIME)
+        try {
+            encoder.configure(format(tuned = true), null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
+        } catch (e: Exception) {
+            // Some encoders refuse a hint they don't know. The plain format is what always worked.
+            log.w("encoder refused the tuned format (${e.message}) - using the plain one")
+            encoder.release()
+            encoder = MediaCodec.createEncoderByType(MIME)
+            encoder.configure(format(tuned = false), null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
+        }
+        encoder.start()
+        codec = encoder
+        running = true
+
+        log.i("encoder started: ${width}x$height @ ${frameRate}fps, ${bitRate / 1000} kbps${if (wireless) " (wireless)" else ""}, H.264 Baseline level ${level.label}")
+
+        worker = Thread {
+            runCatching { pump(encoder) }
+                .onFailure { if (running) log.e("encoder loop failed", it) }
+        }.apply { name = "gearslip-encoder"; start() }
+    }
+
+    /**
+     * Forces the next encoded frame to be a full keyframe (IDR) rather than a P-frame.
+     *
+     * Needed whenever a frame gets dropped between us and the head unit: every frame after
+     * the drop is a P-frame that assumes the decoder still has the reference picture we
+     * never delivered. Without a resync, the decoder free-runs on a corrupted reference
+     * forever - visually, exactly the smeared/ghosted look of a partial e-ink refresh,
+     * because nothing ever forces a clean full-frame redraw.
+     */
+    override fun requestSyncFrame() {
+        runCatching {
+            codec?.setParameters(Bundle().apply {
+                putInt(MediaCodec.PARAMETER_KEY_REQUEST_SYNC_FRAME, 0)
+            })
+        }.onFailure { log.w("requestSyncFrame failed: ${it.message}") }
+    }
+
+    /**
+     * Changes the bitrate while streaming, without a new keyframe or a restart. Used to back off
+     * when the car (or the Wi-Fi to it) can't keep up, and to climb back once it can.
+     */
+    override fun applyBitRate(bps: Int) {
+        val target = bps.coerceIn(fullBitRate / 4, fullBitRate)
+        if (target == bitRate) return
+        runCatching {
+            codec?.setParameters(Bundle().apply { putInt(MediaCodec.PARAMETER_KEY_VIDEO_BITRATE, target) })
+            bitRate = target
+        }.onFailure { log.w("setBitRate failed: ${it.message}") }
+    }
+
+    override fun stop() {
+        running = false
+        // Stop is called from threads that are themselves being shut down. An interrupt here
+        // used to escape as an uncaught exception and take the whole app down with the session.
+        try {
+            worker?.join(1_000)
+        } catch (e: InterruptedException) {
+            Thread.currentThread().interrupt()
+        }
+        runCatching { codec?.stop() }
+        runCatching { codec?.release() }
+        codec = null
+        output = null
+    }
+
+    private fun pump(encoder: MediaCodec) {
+        val info = MediaCodec.BufferInfo()
+        val frameIntervalUs = 1_000_000L / frameRate
+        val frameIntervalNs = 1_000_000_000L / frameRate
+        var nextFrameAtNs = System.nanoTime()
+
+        while (running) {
+            val inIndex = encoder.dequeueInputBuffer(TIMEOUT_US)
+            if (inIndex >= 0) {
+                // Space submissions by wall time, not by how fast the codec calls return:
+                // PTS runs from frameIndex, so submitting ahead of the clock builds latency.
+                if (!awaitFrameDeadline(nextFrameAtNs) || !running) break
+                val image = encoder.getInputImage(inIndex)
+                if (image != null) {
+                    drawTestCard(image, frameIndex)
+                    encoder.queueInputBuffer(
+                        inIndex, 0, width * height * 3 / 2, frameIndex * frameIntervalUs, 0,
+                    )
+                } else {
+                    encoder.queueInputBuffer(inIndex, 0, 0, frameIndex * frameIntervalUs, 0)
+                }
+                frameIndex++
+                // Advance from the previous deadline, not from now, so an iteration that ran
+                // slightly long doesn't slow the stream. If it ran very long, resume from now
+                // rather than bursting to catch up.
+                nextFrameAtNs = maxOf(nextFrameAtNs + frameIntervalNs, System.nanoTime())
+            }
+
+            var outIndex = encoder.dequeueOutputBuffer(info, TIMEOUT_US)
+            while (outIndex >= 0) {
+                val buffer = encoder.getOutputBuffer(outIndex)
+                if (buffer != null && info.size > 0) {
+                    val data = ByteArray(info.size)
+                    buffer.position(info.offset)
+                    buffer.get(data)
+                    if (info.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG != 0) {
+                        output?.onCodecConfig(data)
+                    } else {
+                        output?.onFrame(
+                            data,
+                            info.presentationTimeUs,
+                            info.flags and MediaCodec.BUFFER_FLAG_KEY_FRAME != 0,
+                        )
+                    }
+                }
+                encoder.releaseOutputBuffer(outIndex, false)
+                outIndex = encoder.dequeueOutputBuffer(info, 0)
+            }
+        }
+    }
+
+    /** Waits until [deadlineNs] on the monotonic clock; false if the thread was interrupted. */
+    private fun awaitFrameDeadline(deadlineNs: Long): Boolean {
+        while (true) {
+            val remaining = deadlineNs - System.nanoTime()
+            if (remaining <= 0) return true
+            try {
+                Thread.sleep(remaining / 1_000_000L, (remaining % 1_000_000L).toInt())
+            } catch (e: InterruptedException) {
+                Thread.currentThread().interrupt()
+                return false
+            }
+        }
+    }
+
+    /**
+     * Colour bars with a bar that advances each second, so the car screen shows something
+     * unmistakably ours and obviously live rather than a frozen or stale frame.
+     */
+    private fun drawTestCard(image: Image, frame: Long) {
+        val yPlane = image.planes[0]
+        val uPlane = image.planes[1]
+        val vPlane = image.planes[2]
+
+        val bars = BAR_COLOURS.size
+        val barHeight = maxOf(1, height / bars)
+        val marker = ((frame / frameRate) % bars).toInt()
+
+        val yBuf = yPlane.buffer
+        val yStride = yPlane.rowStride
+        for (row in 0 until height) {
+            val bar = minOf(bars - 1, row / barHeight)
+            val (luma, _, _) = BAR_COLOURS[bar]
+            val value = if (bar == marker) 235 else luma
+            val base = row * yStride
+            for (col in 0 until width) {
+                yBuf.put(base + col, value.toByte())
+            }
+        }
+
+        val uBuf = uPlane.buffer
+        val vBuf = vPlane.buffer
+        for (row in 0 until height / 2) {
+            val bar = minOf(bars - 1, (row * 2) / barHeight)
+            val (_, cb, cr) = BAR_COLOURS[bar]
+            for (col in 0 until width / 2) {
+                uBuf.put(row * uPlane.rowStride + col * uPlane.pixelStride, cb.toByte())
+                vBuf.put(row * vPlane.rowStride + col * vPlane.pixelStride, cr.toByte())
+            }
+        }
+    }
+
+    private companion object {
+        const val MIME = MediaFormat.MIMETYPE_VIDEO_AVC
+        const val TIMEOUT_US = 10_000L
+
+        /**
+         * 800x480 at 30fps gets 8 Mbps: about the most that size can show, enough that a moving
+         * video in the browser stays sharp. Bigger screens get more, but less than in proportion,
+         * since large frames compress better: bitrate grows with pixels^0.75. 60fps gets 1.5x,
+         * because frames that close together are mostly alike.
+         */
+        const val BASE_BIT_RATE = 8_000_000.0
+        const val BASE_PIXELS = 800.0 * 480
+        /** No car's decoder is asked for more than this, whatever its level allows. */
+        const val MAX_BIT_RATE = 25_000_000
+
+        /**
+         * The H.264 levels a car screen can need, smallest first: macroblocks a second each
+         * decodes, and the Baseline bitrate it must handle. The encoder declares the smallest
+         * that fits, and the bitrate stays within it, so a car decoder isn't asked for more than
+         * the level it was told about.
+         */
+        enum class Level(val label: String, val codecLevel: Int, val macroblocksPerSecond: Int, val maxBitRate: Int) {
+            L31("3.1", MediaCodecInfo.CodecProfileLevel.AVCLevel31, 108_000, 14_000_000),
+            L32("3.2", MediaCodecInfo.CodecProfileLevel.AVCLevel32, 216_000, 20_000_000),
+            L4("4", MediaCodecInfo.CodecProfileLevel.AVCLevel4, 245_760, 20_000_000),
+            L42("4.2", MediaCodecInfo.CodecProfileLevel.AVCLevel42, 522_240, 50_000_000),
+        }
+
+        fun levelFor(width: Int, height: Int, frameRate: Int): Level {
+            val perSecond = ((width + 15) / 16) * ((height + 15) / 16) * frameRate
+            return Level.entries.firstOrNull { perSecond <= it.macroblocksPerSecond } ?: Level.L42
+        }
+
+        fun defaultBitRate(width: Int, height: Int, frameRate: Int, level: Level): Int {
+            val size = Math.pow(width.toDouble() * height / BASE_PIXELS, 0.75)
+            val rate = if (frameRate > 30) 1.5 else 1.0
+            return (BASE_BIT_RATE * size * rate).toInt().coerceAtMost(minOf(level.maxBitRate, MAX_BIT_RATE))
+        }
+        /**
+         * A car's Wi-Fi is shared, noisy and far slower than its nominal rate, and the sound rides
+         * the same link behind the video. Real Android Auto sends a few Mbps wirelessly; at the
+         * cable rate (15-20 Mbps for 720p) a laptop hotspot fell seconds behind and the music
+         * cut in and out. 720p30 comes out near 5.4 Mbps.
+         */
+        const val WIRELESS_SHARE = 0.35
+        const val WIRELESS_MAX_BIT_RATE = 8_000_000
+        const val I_FRAME_INTERVAL_S = 5
+
+        /** (Y, Cb, Cr) - white, yellow, cyan, green, magenta, red, blue. */
+        val BAR_COLOURS = listOf(
+            Triple(180, 128, 128),
+            Triple(162, 44, 142),
+            Triple(131, 156, 44),
+            Triple(112, 72, 58),
+            Triple(84, 184, 198),
+            Triple(65, 100, 212),
+            Triple(35, 212, 114),
+        )
+    }
+}
