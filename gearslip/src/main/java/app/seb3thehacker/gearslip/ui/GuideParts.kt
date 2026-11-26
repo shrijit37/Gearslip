@@ -52,11 +52,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.runtime.CompositionLocalProvider
-import app.seb3thehacker.gearslip.car.theme.GsButton
-import app.seb3thehacker.gearslip.car.theme.GsIconButton
-import app.seb3thehacker.gearslip.car.theme.GsThemes
-import app.seb3thehacker.gearslip.car.theme.GsTone
-import app.seb3thehacker.gearslip.car.theme.LocalGsTheme
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.atan2
@@ -112,33 +107,6 @@ internal fun Modifier.pop(p: Float) = graphicsLayer {
     alpha = p.coerceAtMost(1f)
     scaleX = 0.5f + 0.5f * e
     scaleY = 0.5f + 0.5f * e
-}
-
-/**
- * Nothing is the only look now, so there is no choice to make here: a row of real car controls
- * drawn in the same skin the car uses.
- */
-@Composable
-internal fun ThemePicker(c: IntroColors, cq: (Float) -> Dp, cqSp: (Float) -> TextUnit, key: Any) {
-    Column(
-        Modifier.padding(top = cq(7f)).fillMaxWidth().up(entrance(key, 500, 700), cq(7f)),
-    ) {
-        CompositionLocalProvider(LocalGsTheme provides GsThemes.Nothing) {
-            Row(
-                Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(cq(3f)),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                GsIconButton(Icons.Filled.Search, "Search", onClick = {}, size = cq(15f), iconSize = cq(7f))
-                GsIconButton(Icons.Filled.PlayArrow, "Play", onClick = {}, tone = GsTone.Primary, size = cq(15f), iconSize = cq(8f))
-                GsButton(
-                    onClick = {},
-                    modifier = Modifier.weight(1f).height(cq(15f)),
-                    tone = GsTone.Tonal,
-                ) { Text("Navigate", style = TextStyle(fontSize = cqSp(4.6f), fontWeight = FontWeight.Bold)) }
-            }
-        }
-    }
 }
 
 /** Three keys of a keypad, pressing one after another. */
