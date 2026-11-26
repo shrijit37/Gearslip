@@ -27,13 +27,11 @@ val keystoreProperties = Properties().apply {
     ).firstOrNull { it.exists() }?.inputStream()?.use { load(it) }
 }
 
-// The version comes from the newest v* git tag, so a build can never disagree with its tag. A
-// build of the tagged commit is named after it ("0.4.0-beta"); anything later adds the commits
-// since and the commit ("0.4.0-beta+3.ba4374e"), so a test build can't pass for a release.
-// The version code is worked out from the numbers, ((major*100 + minor)*100 + patch)*10 + stage,
-// where stage is 1 for alpha, 2 for beta and 9 for a finished release. It only ever goes up as
-// long as minor and patch stay under 100. Changelog entries use the same number.
-class GitVersion(val name: String, val code: Int)
+// The human-readable version comes from the newest v* git tag, so a build can never disagree
+// with its tag. A build of the tagged commit is named after it ("0.4.0-beta"); anything later
+// adds the commits since and the commit ("0.4.0-beta+3.ba4374e"). The version *code* is a
+// separate monotonic sequence described below; it never comes from a tag.
+class GitVersion(val name: String)
 
 // providers.exec is ValueSource-backed: Gradle records the command's output as a configuration
 // input, re-runs it on later builds and invalidates the cache entry only when the value changes.
@@ -48,18 +46,9 @@ val gitVersion: GitVersion = run {
         }.standardOutput.asText.get().trim()
     }.getOrNull().orEmpty()
     val match = Regex("""^v((\d+)\.(\d+)\.(\d+)(?:-([A-Za-z]+))?)(?:-(\d+)-g([0-9a-f]+))?$""").find(described)
-        ?: return@run GitVersion("0.0.0-dev", 1) // no git or no tags, e.g. a source download
-    val (base, major, minor, patch, suffix, since, commit) = match.destructured
-    val stage = when (suffix.lowercase()) {
-        "" -> 9
-        "beta" -> 2
-        "alpha" -> 1
-        else -> 0
-    }
-    GitVersion(
-        name = if (since.isEmpty()) base else "$base+$since.$commit",
-        code = ((major.toInt() * 100 + minor.toInt()) * 100 + patch.toInt()) * 10 + stage,
-    )
+        ?: return@run GitVersion("0.0.0-dev") // no git or no tags, e.g. a source download
+    val (base, _, _, _, _, since, commit) = match.destructured
+    GitVersion(name = if (since.isEmpty()) base else "$base+$since.$commit")
 }
 
 // The update channel and the identity of this exact build. Stable and dev APKs share one
