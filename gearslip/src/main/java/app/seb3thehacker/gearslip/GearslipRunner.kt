@@ -222,6 +222,9 @@ class GearslipRunner(
             if (!stopped && state == State.WAIT_SDR) ServiceDiscoveryQuirks.droppedAfter(tls.headUnitKey, plainDiscovery)
             running = false
             cancelAutostart()
+            // As in stop(), free an encoder waiting on an ack before asking it to stop: EOF is
+            // just as likely to land while the frame window is full.
+            synchronized(ackLock) { ackLock.notifyAll() }
             // EOF and transport failures never reach stop(); release the encoder and surface here.
             releaseSurface()
             // The car is gone, but nothing calls stop() when a wireless session drops: it waits

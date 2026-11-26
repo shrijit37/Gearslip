@@ -27,12 +27,11 @@ val keystoreProperties = Properties().apply {
     ).firstOrNull { it.exists() }?.inputStream()?.use { load(it) }
 }
 
-// The version comes from the newest v* git tag, so a build can never disagree with its tag. A
-// build of the tagged commit is named after it ("0.4.0-beta"); anything later adds the commits
-// since and the commit ("0.4.0-beta+3.ba4374e"), so a test build can't pass for a release.
-// The version code is worked out from the numbers, ((major*100 + minor)*100 + patch)*10 + stage,
-// where stage is 1 for alpha, 2 for beta and 9 for a finished release. It only ever goes up as
-// long as minor and patch stay under 100. Changelog entries use the same number.
+// The human-readable version comes from the newest v* git tag, so a build can never disagree
+// with its tag. A build of the tagged commit is named after it ("0.4.0-beta"); anything later
+// adds the commits since and the commit ("0.4.0-beta+3.ba4374e"). The Android version *code* is
+// buildSequence below - one monotonic sequence shared by both channels, never tag-derived.
+// The tag-derived GitVersion.code is kept for compatibility but is not used as versionCode.
 class GitVersion(val name: String, val code: Int)
 
 // providers.exec is ValueSource-backed: Gradle records the command's output as a configuration
