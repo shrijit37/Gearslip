@@ -14,10 +14,8 @@ import kotlinx.coroutines.flow.SharedFlow
  * The car's own buttons: steering wheel, rotary knob, D-pad and the hard keys around the screen.
  *
  * The head unit sends Android keycodes as they are, so the numbers here are android.view.KeyEvent's.
- * Media and call keys act straight away. Keys that move around the car UI (back, home, the
- * knob) need a [CarNavigator], which only [CarUi] has, so they go out on [screenKeys]. Focus keys
- * (D-pad, knob turns, OK) become real key events on the car's display through [focusSink], where
- * Compose moves focus between buttons the same way it would with a keyboard.
+ * Media and call keys act straight away; screen keys are published for whichever head-unit UI is
+ * attached, so handling a key never depends on a particular UI being present.
  */
 object CarKeys {
 
@@ -26,32 +24,6 @@ object CarKeys {
 
     private val _screenKeys = MutableSharedFlow<ScreenKey>(extraBufferCapacity = 8)
     val screenKeys: SharedFlow<ScreenKey> = _screenKeys
-
-    private val _focusMoves = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
-
-    /** A knob turn or D-pad press, so controls that hide when left alone can come back. */
-    val focusMoves: SharedFlow<Unit> = _focusMoves
-
-    /** Delivers an Android key event to the car display; set while the car UI is showing. */
-    @Volatile var focusSink: ((keyCode: Int, down: Boolean) -> Unit)? = null
-
-    /** What a [KnobTaker] is offered: a turn of the knob, a focus key edge, or Back. */
-    sealed interface KnobEvent {
-        data class Turn(val steps: Int) : KnobEvent
-        data class Key(val keyCode: Int, val down: Boolean) : KnobEvent
-        data object Back : KnobEvent
-    }
-
-    /**
-     * Something on screen that wants the knob before focus moves: the full-screen map, which
-     * zooms and pans with it ([MapKnob]), and the app grid, which starts on the app opened last.
-     * Returns true for an event it kept. Called on the thread the keys arrive on, not the main one.
-     */
-    fun interface KnobTaker {
-        fun take(event: KnobEvent): Boolean
-    }
-
-    @Volatile var knobTaker: KnobTaker? = null
 
     private var appContext: Context? = null
     private val main = Handler(Looper.getMainLooper())
@@ -85,12 +57,8 @@ object CarKeys {
      * here knows, for the caller to log.
      */
     fun onKey(keyCode: Int, down: Boolean, longPress: Boolean): Boolean {
-        if (keyCode in FOCUS_KEYS) {
-            if (knobTaker?.take(KnobEvent.Key(keyCode, down)) == true) return true
-            _focusMoves.tryEmit(Unit)
-            focusSink?.invoke(keyCode, down)
-            return true
-        }
+        // Focus keys belong to the attached UI, if any; the core consumes them either way.
+        if (keyCode in FOCUS_KEYS) return true
         if (!down) return keyCode in WANTED
         // Null until the car shows Gearslip's screen. A 2020 Civic sends Play as soon as it hears
         // the phone's Bluetooth address, while still on its own screen, and reaching for media
@@ -108,7 +76,7 @@ object CarKeys {
             KeyEvent.KEYCODE_MEDIA_PREVIOUS -> media?.previous()
             KeyEvent.KEYCODE_CALL -> call()
             KeyEvent.KEYCODE_ENDCALL -> endCall()
-            KeyEvent.KEYCODE_BACK -> if (knobTaker?.take(KnobEvent.Back) != true) screen(ScreenKey.BACK)
+            KeyEvent.KEYCODE_BACK -> screen(ScreenKey.BACK)
             KeyEvent.KEYCODE_HOME -> screen(ScreenKey.HOME)
             KEYCODE_NAVIGATION -> screen(ScreenKey.MAP)
             KEYCODE_MEDIA -> screen(ScreenKey.MEDIA)
@@ -117,18 +85,6 @@ object CarKeys {
         }
         if (longPress) GearslipLog.i("keys: long press on $keyCode")
         return true
-    }
-
-    /** A turn of the rotary knob: each click moves focus one step, like Tab or Shift+Tab. */
-    fun onRotate(delta: Int) {
-        val sink = focusSink ?: return
-        if (knobTaker?.take(KnobEvent.Turn(delta)) == true) return
-        _focusMoves.tryEmit(Unit)
-        val code = if (delta > 0) KeyEvent.KEYCODE_TAB else KEYCODE_SHIFT_TAB
-        repeat(kotlin.math.abs(delta).coerceAtMost(MAX_ROTARY_STEPS)) {
-            sink(code, true)
-            sink(code, false)
-        }
     }
 
     /** Answers a ringing call; with nothing ringing, opens the phone screen. */
@@ -149,11 +105,6 @@ object CarKeys {
     const val KEYCODE_MEDIA = 65537
     const val KEYCODE_NAVIGATION = 65538
     const val KEYCODE_TEL = 65540
-
-    /** Stands in for Shift+Tab: the sink sends Tab with the shift meta state. */
-    const val KEYCODE_SHIFT_TAB = -KeyEvent.KEYCODE_TAB
-
-    private const val MAX_ROTARY_STEPS = 5
 
     private val FOCUS_KEYS = setOf(
         KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN, KeyEvent.KEYCODE_DPAD_LEFT,
