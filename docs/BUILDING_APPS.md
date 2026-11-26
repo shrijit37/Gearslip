@@ -495,16 +495,6 @@ string resource for it.
 
 The flag is a label. Gearslip finds and runs your app the same way with or without it.
 
-### In your README
-
-Add the badge:
-
-```markdown
-[![Works with Gearslip](https://raw.githubusercontent.com/twinksoftware/gearslip/main/docs/badge/works-with-gearslip.svg)](https://github.com/twinksoftware/gearslip)
-```
-
-It matches the flat badges most READMEs already show.
-
 ---
 
 ## Further reading
