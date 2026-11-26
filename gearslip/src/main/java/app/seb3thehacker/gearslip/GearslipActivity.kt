@@ -173,7 +173,16 @@ class GearslipActivity : ComponentActivity(), Projection {
 
         setContent {
             GearslipTheme {
-                GearslipApp(onDisconnect = { closeAccessory() }, onRequestCallScreening = ::requestCallScreeningRole)
+                GearslipApp(
+                    onDisconnect = {
+                        closeAccessory()
+                        // An explicit disconnect is not a cable slip: runner.stop() closes the
+                        // audio link, which starts a 30s grace timer. End the capture now so the
+                        // phone's speaker and screen sharing come back at once.
+                        CarAudio.release()
+                    },
+                    onRequestCallScreening = ::requestCallScreeningRole,
+                )
                 val offer by offerBluetooth.collectAsState()
                 if (offer) {
                     fun close() {
