@@ -126,6 +126,20 @@ class GearslipRunner(
     /** The car's screen has been asked for once, so asking again is in order. */
     @Volatile private var focusAsked = false
     private var frameSource: FrameSource? = null
+    @Volatile private var surfaceDetached = false
+    private val surfaceLock = Any()
+    /** Session-owned render resources; safe to call from stop() and the transport-exit finally. */
+    private fun releaseSurface() {
+        synchronized(surfaceLock) {
+            frameSource?.stop()
+            frameSource = null
+            if (!surfaceDetached) {
+                surfaceDetached = true
+                surface?.detach()
+            }
+        }
+    }
+
     @Volatile private var inFlight = 0
     /** Guards [inFlight]: the encoder thread waits on it for the head unit's acks. */
     private val ackLock = Object()
@@ -208,6 +222,8 @@ class GearslipRunner(
             if (!stopped && state == State.WAIT_SDR) ServiceDiscoveryQuirks.droppedAfter(tls.headUnitKey, plainDiscovery)
             running = false
             cancelAutostart()
+            // EOF and transport failures never reach stop(); release the encoder and surface here.
+            releaseSurface()
             // The car is gone, but nothing calls stop() when a wireless session drops: it waits
             // for the next one. Close the music channel now, so the audio capture behind it,
             // and the screen sharing Android shows for it, stop too (issue #43).
@@ -231,9 +247,7 @@ class GearslipRunner(
         CarFocus.request = null
         CarFocus.set(true)
         synchronized(ackLock) { ackLock.notifyAll() } // free an encoder waiting on an ack
-        frameSource?.stop()
-        frameSource = null
-        surface?.detach()
+        releaseSurface()
         CarAudio.openSink = null
         audioLink?.close()
         audioLink = null
