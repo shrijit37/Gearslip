@@ -27,6 +27,7 @@ import app.seb3thehacker.gearslip.mirror.MirrorService
 import app.seb3thehacker.gearslip.mirror.PhoneMirror
 import app.seb3thehacker.gearslip.mirror.TouchRelayService
 import app.seb3thehacker.gearslip.car.CarEnvironment
+import app.seb3thehacker.gearslip.car.CarServices
 import app.seb3thehacker.gearslip.car.CarSettings
 import app.seb3thehacker.gearslip.car.CarUi
 import app.seb3thehacker.gearslip.car.Prefetch
@@ -159,8 +160,11 @@ class GearslipActivity : ComponentActivity(), Projection {
             }
         }
         CarSettings.init(this)
-        // Before any car connects: CarServices only starts once the car shows Gearslip's screen,
-        // and a car that waits to know the phone before it shows it would never hear (issue #43).
+        // The runner now binds the map and media apps itself on service discovery. Initialise the
+        // services here, before any car connects: CarUi() is no longer composed on a real session,
+        // so waiting for the deleted car screen to do it would leave autostart() with no context
+        // and nothing would bind. CarBluetooth still needs an early init for issue #43.
+        CarServices.init(this)
         app.seb3thehacker.gearslip.car.CarBluetooth.init(this)
         AppSettings.applyGearslipEnabled(this)
         // A capture that died without tidying up would leave notifications exposed to every
