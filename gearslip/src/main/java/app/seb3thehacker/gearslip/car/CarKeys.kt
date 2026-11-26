@@ -14,10 +14,8 @@ import kotlinx.coroutines.flow.SharedFlow
  * The car's own buttons: steering wheel, rotary knob, D-pad and the hard keys around the screen.
  *
  * The head unit sends Android keycodes as they are, so the numbers here are android.view.KeyEvent's.
- * Media and call keys act straight away. Keys that move around the car UI (back, home, the
- * knob) need a [CarNavigator], which only [CarUi] has, so they go out on [screenKeys]. Focus keys
- * (D-pad, knob turns, OK) become real key events on the car's display through [focusSink], where
- * Compose moves focus between buttons the same way it would with a keyboard.
+ * Media and call keys act straight away; screen keys are published for whichever head-unit UI is
+ * attached, so handling a key never depends on a particular UI being present.
  */
 object CarKeys {
 
@@ -27,30 +25,21 @@ object CarKeys {
     private val _screenKeys = MutableSharedFlow<ScreenKey>(extraBufferCapacity = 8)
     val screenKeys: SharedFlow<ScreenKey> = _screenKeys
 
+    // Legacy car-UI input plumbing, retained until the screens that use it are removed in a
+    // later split. With no UI attached these stay null/empty and keys work as before.
     private val _focusMoves = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
-
-    /** A knob turn or D-pad press, so controls that hide when left alone can come back. */
     val focusMoves: SharedFlow<Unit> = _focusMoves
-
-    /** Delivers an Android key event to the car display; set while the car UI is showing. */
     @Volatile var focusSink: ((keyCode: Int, down: Boolean) -> Unit)? = null
 
-    /** What a [KnobTaker] is offered: a turn of the knob, a focus key edge, or Back. */
     sealed interface KnobEvent {
         data class Turn(val steps: Int) : KnobEvent
         data class Key(val keyCode: Int, val down: Boolean) : KnobEvent
         data object Back : KnobEvent
     }
 
-    /**
-     * Something on screen that wants the knob before focus moves: the full-screen map, which
-     * zooms and pans with it ([MapKnob]), and the app grid, which starts on the app opened last.
-     * Returns true for an event it kept. Called on the thread the keys arrive on, not the main one.
-     */
     fun interface KnobTaker {
         fun take(event: KnobEvent): Boolean
     }
-
     @Volatile var knobTaker: KnobTaker? = null
 
     private var appContext: Context? = null
@@ -149,7 +138,6 @@ object CarKeys {
     const val KEYCODE_MEDIA = 65537
     const val KEYCODE_NAVIGATION = 65538
     const val KEYCODE_TEL = 65540
-
     /** Stands in for Shift+Tab: the sink sends Tab with the shift meta state. */
     const val KEYCODE_SHIFT_TAB = -KeyEvent.KEYCODE_TAB
 

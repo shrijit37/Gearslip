@@ -1,9 +1,9 @@
 package app.seb3thehacker.gearslip.car
 
-import app.seb3thehacker.gearslip.car.theme.DarkStyle
 import android.content.Context
 import app.seb3thehacker.gearslip.AppSettings
 import app.seb3thehacker.gearslip.audio.CarAudio
+import app.seb3thehacker.gearslip.car.theme.DarkStyle
 import app.seb3thehacker.gearslip.car.theme.GsTheme
 import app.seb3thehacker.gearslip.car.theme.GsThemes
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -55,7 +55,10 @@ object CarSettings {
     /** Which music app the car player drives: auto-detect, a fixed choice, or whatever played last. */
     enum class MusicSource { AUTO, VIVI, ECHO, LAST_USED }
 
-    /** Which layout the car's music screens use: the original player or the dot-matrix port. */
+    /**
+     * Legacy car-UI setting, kept until the car screens that read it are removed in a later split.
+     * The headless session does not use it.
+     */
     enum class MusicUi { CLASSIC, STITCH }
 
     private const val KEY_SCALE = "car_scale"
@@ -121,23 +124,20 @@ private const val KEY_CLUSTER_VIDEO = "cluster_video_enabled"
 
     /** Which external media app the car player drives; see [MusicSource]. */
     val musicSource: StateFlow<MusicSource> = musicSourceFlow
-    private val musicUiFlow = MutableStateFlow(MusicUi.CLASSIC)
 
-    /** Which layout the first-party music screens are drawn in. */
+    // Legacy car-UI settings, retained until the screens that read them are removed in a later split.
+    private val musicUiFlow = MutableStateFlow(MusicUi.CLASSIC)
     val musicUi: StateFlow<MusicUi> = musicUiFlow
+    private val darkStyleFlow = MutableStateFlow(DarkStyle.BLACK)
+    val darkStyle: StateFlow<DarkStyle> = darkStyleFlow
+    private val uiThemeFlow = MutableStateFlow(GsThemes.default.id)
+    val uiTheme: StateFlow<String> = uiThemeFlow
+
     private val playerTitleFlow = MutableStateFlow(false)
     private val playerLeftFlow = MutableStateFlow(false)
     private val navMicFlow = MutableStateFlow(true)
     private val themeFlow = MutableStateFlow(AppTheme.PHONE)
     val appTheme: StateFlow<AppTheme> = themeFlow
-    private val darkStyleFlow = MutableStateFlow(DarkStyle.BLACK)
-
-    /** How dark the car's dark mode goes; black until the driver picks another. */
-    val darkStyle: StateFlow<DarkStyle> = darkStyleFlow
-    private val uiThemeFlow = MutableStateFlow(GsThemes.default.id)
-
-    /** Id of the [GsTheme] controls are drawn in; an unknown id falls back to the default. */
-    val uiTheme: StateFlow<String> = uiThemeFlow
     private val pinnedFlow = MutableStateFlow<Set<String>>(emptySet())
     private val appOrderFlow = MutableStateFlow<List<String>>(emptyList())
     private val hiddenAppsFlow = MutableStateFlow<Set<String>>(emptySet())
@@ -238,6 +238,8 @@ private const val KEY_CLUSTER_VIDEO = "cluster_video_enabled"
     fun setUnits(units: Units) {
         unitsFlow.value = units
         AppSettings.putString(app, KEY_UNITS, units.name)
+        // Weather fetches in the current unit system and caches for 30 minutes; without a forced
+        // refresh the car screens keep showing the old units after this change.
         Weather.refresh(app, force = true)
     }
 
