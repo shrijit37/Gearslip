@@ -31,7 +31,7 @@ val keystoreProperties = Properties().apply {
 // with its tag. A build of the tagged commit is named after it ("0.4.0-beta"); anything later
 // adds the commits since and the commit ("0.4.0-beta+3.ba4374e"). The version *code* is a
 // separate monotonic sequence described below; it never comes from a tag.
-class GitVersion(val name: String)
+class GitVersion(val name: String, val code: Int)
 
 // providers.exec is ValueSource-backed: Gradle records the command's output as a configuration
 // input, re-runs it on later builds and invalidates the cache entry only when the value changes.
