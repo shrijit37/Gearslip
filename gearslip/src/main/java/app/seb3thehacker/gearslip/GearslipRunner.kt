@@ -105,13 +105,17 @@ class GearslipRunner(
      */
     @Volatile private var autostartScope: CoroutineScope? = null
     @Volatile private var autostartJob: Job? = null
+    /** Serializes scope creation with cancellation: stop() can run on the UI thread mid-startup. */
+    private val autostartLock = Any()
 
     /** Cancel before the activity shuts the services down: no new app may bind after that. */
     private fun cancelAutostart() {
-        autostartJob?.cancel()
-        autostartScope?.cancel()
-        autostartJob = null
-        autostartScope = null
+        synchronized(autostartLock) {
+            autostartJob?.cancel()
+            autostartScope?.cancel()
+            autostartJob = null
+            autostartScope = null
+        }
     }
 
     @Volatile private var videoChannelId: Int = -1
@@ -1113,6 +1117,7 @@ class GearslipRunner(
     }
 
     private fun startVideoSource() {
+        if (stopped) return
         lastKeyframeSentAt = System.currentTimeMillis() // frame #1 is always a keyframe
         val index = selectedConfigIndex ?: 0
         val config = videoConfigs.getOrNull(index)
@@ -1140,7 +1145,10 @@ class GearslipRunner(
         // no track metadata reaches the session. Bind them here, on the main Looper that
         // MediaBrowser needs, once per session even if focus is granted again. The package
         // scans inside autostart run on IO, so the protocol read loop is never blocked.
-        if (autostartJob == null) {
+        // stop() can land between the null check and the assignment on the UI thread; hold the
+        // same lock it uses and re-check stopped, so no app binds after disconnect cleanup.
+        synchronized(autostartLock) {
+            if (stopped || autostartJob != null) return@synchronized
             val frame = CarEnvironment.frame.value
             val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
             autostartScope = scope

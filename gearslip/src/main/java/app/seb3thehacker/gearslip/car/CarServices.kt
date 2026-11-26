@@ -87,7 +87,8 @@ object CarServices {
 
     fun init(appContext: Context) {
         context = appContext.applicationContext
-        app.seb3thehacker.gearslip.notify.CarMotion.start(appContext)
+        // GPS fixes are only useful while a car is connected: autostart() starts CarMotion per
+        // session and disconnectHosts() stops it, so no 2-second subscription runs between drives.
         app.seb3thehacker.gearslip.call.CarCalls.start(appContext)
         CarBluetooth.init(appContext)
         BluetoothAudioCheck.init(appContext)
@@ -211,6 +212,7 @@ object CarServices {
     /** Brings back whatever was in use last time. Safe to call repeatedly. */
     suspend fun autostart(frame: CarEnvironment.Frame) {
         val ctx = context ?: return
+        app.seb3thehacker.gearslip.notify.CarMotion.start(ctx)
 
         if (!navStopped && nav.status.value.phase == CarAppConnection.Phase.IDLE) {
             val navApps = withContext(Dispatchers.IO) { CarAppCatalog.installed(ctx) }
@@ -352,6 +354,7 @@ object CarServices {
      * calls CarAudio.release(), and the grace timer releases it if no car returns.
      */
     fun disconnectHosts() {
+        context?.let { app.seb3thehacker.gearslip.notify.CarMotion.stop(it) }
         runCatching { nav.disconnect() }
         runCatching { media.disconnect() }
         runCatching { browse.disconnect() }
@@ -362,7 +365,6 @@ object CarServices {
 
     /** The app is going away: stop the app-wide listeners as well as the hosted services. */
     fun shutdown() {
-        context?.let { app.seb3thehacker.gearslip.notify.CarMotion.stop(it) }
         app.seb3thehacker.gearslip.call.CarCalls.stop()
         disconnectHosts()
     }
