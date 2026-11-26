@@ -34,6 +34,13 @@ reconnect to a car. Treat the following as invariants.
 
 - Unit tests for selection/decision logic belong in `gearslip/src/test/.../update/` and must stay
   pure JVM tests (no Android stubs).
-- Before submitting updater or workflow changes, run
-  `./gradlew :gearslip:testDebugUnitTest --no-daemon` and `./gradlew :gearslip:assembleDebug --no-daemon`.
+- Before submitting updater or workflow changes, run both checks in **one** invocation:
+  `./gradlew :gearslip:testDebugUnitTest :gearslip:assembleDebug --no-daemon`. Same coverage as
+  two separate runs, but the build script is evaluated once instead of twice.
+- While iterating, use the daemon and skip work a final check still needs:
+  `./gradlew :gearslip:testDebugUnitTest -PnoR8 -PgearslipAbi=arm64-v8a -PgearslipVersionName=local -PgearslipBuildSha=local -PgearslipBuildSeq=$(( $(date +%s) / 60 ))`.
+  Pinning the version name skips `git describe`, pinning the SHA skips `git rev-parse`, and pinning
+  the sequence skips the clock, so repeat builds can reuse the configuration cache. Those pinned
+  values are for local iteration only — never publish a build made with them; always finish with
+  the full command above.
 - Release-process behaviour is documented in `CI.md`; keep it in sync with workflow changes.
