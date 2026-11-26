@@ -9,7 +9,6 @@ import android.os.Build
 import android.provider.Settings
 import android.view.Display
 import app.seb3thehacker.gearslip.GearslipLog
-import app.seb3thehacker.gearslip.LauncherActivity
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
@@ -27,29 +26,6 @@ object LauncherMode {
 
     internal fun setActive(on: Boolean) {
         _active.value = on
-    }
-
-    private fun component(context: Context) = ComponentName(context, LauncherActivity::class.java)
-
-    /** Whether Android may offer Gearslip as the home app. */
-    fun enabled(context: Context): Boolean =
-        context.packageManager.getComponentEnabledSetting(component(context)) ==
-            PackageManager.COMPONENT_ENABLED_STATE_ENABLED
-
-    fun setEnabled(context: Context, on: Boolean) {
-        context.packageManager.setComponentEnabledSetting(
-            component(context),
-            if (on) PackageManager.COMPONENT_ENABLED_STATE_ENABLED else PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
-            PackageManager.DONT_KILL_APP,
-        )
-        GearslipLog.i("launcher mode ${if (on) "on" else "off"}")
-    }
-
-    /** Android's own "Default home app" choice, where Gearslip is picked once it's offered. */
-    fun openHomeChoice(context: Context) {
-        runCatching {
-            context.startActivity(Intent(Settings.ACTION_HOME_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-        }.onFailure { GearslipLog.w("launcher mode: no home app settings on this device (${it.message})") }
     }
 
     /** Head units and most tablets have no phone of their own to call with. */
