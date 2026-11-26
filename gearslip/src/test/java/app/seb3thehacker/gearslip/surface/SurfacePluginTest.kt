@@ -139,6 +139,13 @@ class SurfacePluginTest {
         assertEquals(1, surface.detaches)
     }
 
+    @Test fun `a natural disconnect detaches the surface without an explicit stop`() {
+        val surface = FakeSurface(emptySet())
+        val runner = GearslipRunner(ByteArrayInputStream(byteArrayOf()), ByteArrayOutputStream(), ::identity, surface = surface)
+        runner.run() // EOF: the transport exits through finally, not through stop()
+        assertEquals(1, surface.detaches)
+    }
+
     @Test fun `input is dropped when the surface declares no input capabilities`() {
         val surface = FakeSurface(emptySet())
         val runner = GearslipRunner(ByteArrayInputStream(byteArrayOf()), ByteArrayOutputStream(), ::identity, surface = surface)
