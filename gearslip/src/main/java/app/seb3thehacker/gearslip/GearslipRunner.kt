@@ -20,6 +20,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import java.io.IOException
 import app.seb3thehacker.gearslip.protocol.InputProtocol
@@ -1150,6 +1151,14 @@ class GearslipRunner(
                     throw e // the session ended; let the cancelled job stay cancelled
                 } catch (e: Throwable) {
                     log.w("hosted app autostart failed: ${e.message}")
+                }
+            }
+            // The deleted car home screen pushed configuration changes to the map from a
+            // LaunchedEffect. With no UI, follow night here; cancelling autostart on session exit
+            // cancels this observer too, so it cannot reach a newer session's app.
+            scope.launch {
+                CarEnvironment.darkOutside.collect {
+                    CarServices.nav.pushConfiguration()
                 }
             }
         }

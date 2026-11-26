@@ -164,6 +164,9 @@ class GearslipActivity : ComponentActivity(), Projection {
         // services here, before any car connects: CarUi() is no longer composed on a real session,
         // so waiting for the deleted car screen to do it would leave autostart() with no context
         // and nothing would bind. CarBluetooth still needs an early init for issue #43.
+        // CarEnvironment used to start in onSurfaceReady(), which no longer has a caller. Start it
+        // here too so night mode, battery and appContext are ready before the first app binds.
+        CarEnvironment.start(this)
         CarServices.init(this)
         app.seb3thehacker.gearslip.car.CarBluetooth.init(this)
         AppSettings.applyGearslipEnabled(this)
@@ -274,6 +277,7 @@ class GearslipActivity : ComponentActivity(), Projection {
         PhoneMirror.requestStop()
         closeAccessory()
         CarServices.shutdown()
+        CarEnvironment.stop()
         GearslipLog.flush()
     }
 
