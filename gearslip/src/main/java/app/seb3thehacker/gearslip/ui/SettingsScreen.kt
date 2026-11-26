@@ -299,20 +299,6 @@ private fun ConnectionSection() {
             icon = Icons.Filled.Settings,
             trailing = { Switch(checked = enabled, onCheckedChange = null) },
         )
-        // For a head unit or a tablet on the dash: the car UI becomes the device's home screen.
-        var launcher by remember { mutableStateOf(LauncherMode.enabled(context)) }
-        SettingsRow(
-            stringResource(R.string.settings_use_as_launcher),
-            Modifier.toggleable(launcher, role = Role.Switch) {
-                launcher = it
-                LauncherMode.setEnabled(context, it)
-                // Android doesn't switch home apps by itself; this is where the driver picks Gearslip.
-                if (it) LauncherMode.openHomeChoice(context)
-            },
-            subtitle = stringResource(if (launcher) R.string.settings_use_as_launcher_on else R.string.settings_use_as_launcher_off),
-            icon = Icons.Filled.Home,
-            trailing = { Switch(checked = launcher, onCheckedChange = null) },
-        )
         CarAudioSetting()
         var address by remember { mutableStateOf(CarBluetooth.typedAddress(context)) }
         var editing by remember { mutableStateOf(false) }
