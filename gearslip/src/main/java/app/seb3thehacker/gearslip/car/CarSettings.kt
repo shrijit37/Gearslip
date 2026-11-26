@@ -238,6 +238,9 @@ private const val KEY_CLUSTER_VIDEO = "cluster_video_enabled"
     fun setUnits(units: Units) {
         unitsFlow.value = units
         AppSettings.putString(app, KEY_UNITS, units.name)
+        // Weather fetches in the current unit system and caches for 30 minutes; without a forced
+        // refresh the car screens keep showing the old units after this change.
+        Weather.refresh(app, force = true)
     }
 
     /** Flattened component names of the apps long-pressed onto the nav bar as shortcuts. */

@@ -355,6 +355,7 @@ object CarServices {
         // that window. Only an explicit teardown - the disconnect button or the activity being
         // destroyed - calls CarAudio.release(), and the grace timer releases it if no car returns.
         _mediaApp.value = null
+        autoplayPending = false
         navStopped = false
     }
 }
