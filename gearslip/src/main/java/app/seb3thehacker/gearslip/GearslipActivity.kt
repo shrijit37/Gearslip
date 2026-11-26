@@ -32,6 +32,7 @@ import app.seb3thehacker.gearslip.car.CarSettings
 import app.seb3thehacker.gearslip.car.CarUi
 import app.seb3thehacker.gearslip.car.Prefetch
 import app.seb3thehacker.gearslip.protocol.TouchPoint
+import app.seb3thehacker.gearslip.surface.HeadunitSurfaces
 import app.seb3thehacker.gearslip.ui.GearslipApp
 import app.seb3thehacker.gearslip.ui.GearslipTheme
 import java.io.FileInputStream
@@ -442,6 +443,7 @@ class GearslipActivity : ComponentActivity(), Projection {
             identityProvider = { CertProvider.load(this) },
             vehicleProfileFor = { info -> VehicleProfiles.find(VehicleProfiles.load(this), info) },
             phoneIcons = { PhoneIcons.pngs(this) },
+            surface = HeadunitSurfaces.create(this),
         )
         this.runner = runner
         worker = Thread { runner.run() }.apply { name = "gearslip"; start() }
@@ -465,6 +467,7 @@ class GearslipActivity : ComponentActivity(), Projection {
             vehicleProfileFor = { info -> VehicleProfiles.find(VehicleProfiles.load(this), info) },
             wireless = true,
             phoneIcons = { PhoneIcons.pngs(this) },
+            surface = HeadunitSurfaces.create(this),
         )
         this.runner = runner
         worker = Thread { runner.run() }.apply { name = "gearslip"; start() }
