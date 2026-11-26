@@ -44,7 +44,7 @@ internal object CarAlerts {
         // The deleted car UI overlay used to own this timer. Without a surface there is no
         // composable to run it, so the session has to tell the app its alert timed out.
         val duration = alert.durationMillis
-        if (duration in 1 until Alert.DURATION_SHOW_INDEFINITELY) {
+        if (duration > 0 && duration != Alert.DURATION_SHOW_INDEFINITELY.toLong()) {
             val r = Runnable { cancelled(shown, AlertCallback.REASON_TIMEOUT) }
             timeout = r
             handler.postDelayed(r, duration)
