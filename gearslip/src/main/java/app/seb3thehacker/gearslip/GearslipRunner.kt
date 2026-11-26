@@ -1217,17 +1217,22 @@ class GearslipRunner(
         }
         // A surface is attached for every session; only one that declares PROVIDES_FRAMES may
         // replace the encoder's source. Everything else keeps the generated placeholder.
-        val source = FrameSources.choose(
-            surface, surfaceContext(), spec,
-            PlaceholderFrameSource(width, height, videoFrameRate, wireless),
-        )
-        frameSource = source
-        runCatching {
-            source.start(output)
-            SessionStatus.projecting()
-            BluetoothAudioCheck.onProjecting()
-            LocationCheck.onProjecting()
-        }.onFailure { e -> log.e("encoder start failed", e) }
+        // stop() can land after the entry guard: attach and start under the same lock releaseSurface
+        // uses, re-checking stopped so nothing is attached after the surface was torn down.
+        synchronized(surfaceLock) {
+            if (stopped || surfaceDetached) return@synchronized
+            val source = FrameSources.choose(
+                surface, surfaceContext(), spec,
+                PlaceholderFrameSource(width, height, videoFrameRate, wireless),
+            )
+            frameSource = source
+            runCatching {
+                source.start(output)
+                SessionStatus.projecting()
+                BluetoothAudioCheck.onProjecting()
+                LocationCheck.onProjecting()
+            }.onFailure { e -> log.e("encoder start failed", e) }
+        }
     }
 
     /** A stable, read-only view of session state for whichever head-unit surface is attached. */
