@@ -15,6 +15,10 @@ import androidx.car.app.model.TabCallbackDelegate
 import androidx.car.app.OnDoneCallback
 import androidx.car.app.serialization.Bundleable
 import android.graphics.Bitmap
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.toArgb
 import androidx.core.graphics.drawable.toBitmap
 import app.seb3thehacker.gearslip.GearslipLog
 import java.util.concurrent.TimeUnit
@@ -76,13 +80,13 @@ private fun CharSequence.withSpansFilledIn(): String {
 private val iconCache = android.util.LruCache<String, Bitmap>(200)
 
 /**
- * Loads an icon the app described.
+ * Loads an icon the app described, as a plain [Bitmap] for a headless host.
  *
  * A [CarIcon] is either a standard type the host is expected to draw itself, or an IconCompat
  * pointing into the app's own resources - which is why this needs a Context that can see the
  * app, and why a failure here is a missing glyph rather than an error worth stopping for.
  */
-fun CarIcon?.image(context: Context): Bitmap? {
+fun CarIcon?.imageBitmap(context: Context): Bitmap? {
     val icon = this?.icon ?: return null
     val key = icon.cacheKey(context)
     key?.let { k -> iconCache.get(k)?.let { return it } }
@@ -107,6 +111,12 @@ fun CarIcon?.image(context: Context): Bitmap? {
     key?.let { iconCache.put(it, bitmap) }
     return bitmap
 }
+
+/**
+ * The legacy Compose-facing view of [imageBitmap], kept until the car screens that draw it are
+ * removed in a later split. The bitmap is cached once; wrapping it is cheap.
+ */
+fun CarIcon?.image(context: Context): ImageBitmap? = imageBitmap(context)?.asImageBitmap()
 
 /**
  * [describe], plus when the app was last installed for a resource icon. Resource ids are only
@@ -141,10 +151,11 @@ private fun androidx.core.graphics.drawable.IconCompat.describe(): String = when
 val CarIcon?.standardType: Int? get() = this?.takeIf { it.icon == null }?.type
 
 /**
- * Resolves a colour the app asked for. The named colours deliberately stay close to what a
- * driver expects them to mean rather than matching the app's brand.
+ * Resolves a colour the app asked for as an ARGB int, for a headless host. The named colours
+ * deliberately stay close to what a driver expects them to mean rather than matching the app's
+ * brand.
  */
-fun CarColor?.color(dark: Boolean, default: Int): Int = when (this?.type) {
+fun CarColor?.colorInt(dark: Boolean, default: Int): Int = when (this?.type) {
     null, CarColor.TYPE_DEFAULT -> default
     CarColor.TYPE_CUSTOM -> if (dark) colorDark else color
     CarColor.TYPE_RED -> android.graphics.Color.rgb(0xE5, 0x39, 0x35)
@@ -153,6 +164,9 @@ fun CarColor?.color(dark: Boolean, default: Int): Int = when (this?.type) {
     CarColor.TYPE_YELLOW -> android.graphics.Color.rgb(0xFD, 0xD8, 0x35)
     else -> default
 }
+
+/** The legacy Compose-facing view of [colorInt], kept until the car UI that draws it is removed. */
+fun CarColor?.color(dark: Boolean, default: Color): Color = Color(colorInt(dark, default.toArgb()))
 
 /**
  * "500 ft", "2.4 mi". The app picks the unit and its rounding; when that's the other system from

@@ -3,6 +3,9 @@ package app.seb3thehacker.gearslip.car
 import android.content.Context
 import app.seb3thehacker.gearslip.AppSettings
 import app.seb3thehacker.gearslip.audio.CarAudio
+import app.seb3thehacker.gearslip.car.theme.DarkStyle
+import app.seb3thehacker.gearslip.car.theme.GsTheme
+import app.seb3thehacker.gearslip.car.theme.GsThemes
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
@@ -52,6 +55,12 @@ object CarSettings {
     /** Which music app the car player drives: auto-detect, a fixed choice, or whatever played last. */
     enum class MusicSource { AUTO, VIVI, ECHO, LAST_USED }
 
+    /**
+     * Legacy car-UI setting, kept until the car screens that read it are removed in a later split.
+     * The headless session does not use it.
+     */
+    enum class MusicUi { CLASSIC, STITCH }
+
     private const val KEY_SCALE = "car_scale"
     private const val KEY_DENSITY = "car_density"
     private const val KEY_OPEN = "car_open_on_connect"
@@ -90,6 +99,7 @@ private const val KEY_CLUSTER_VIDEO = "cluster_video_enabled"
     private const val KEY_WHATS_NEW = "car_whats_new_after_updates"
     private const val KEY_WHATS_NEW_SEEN = "car_whats_new_seen_code"
     const val KEY_MUSIC_SOURCE = "car_music_source"
+    private const val KEY_MUSIC_UI = "car_music_ui"
 
     /** How many shortcuts the nav bar makes room for; a driver reaching for one needs it to
      * still be on the bar, not off the edge of a long list. */
@@ -114,6 +124,15 @@ private const val KEY_CLUSTER_VIDEO = "cluster_video_enabled"
 
     /** Which external media app the car player drives; see [MusicSource]. */
     val musicSource: StateFlow<MusicSource> = musicSourceFlow
+
+    // Legacy car-UI settings, retained until the screens that read them are removed in a later split.
+    private val musicUiFlow = MutableStateFlow(MusicUi.CLASSIC)
+    val musicUi: StateFlow<MusicUi> = musicUiFlow
+    private val darkStyleFlow = MutableStateFlow(DarkStyle.BLACK)
+    val darkStyle: StateFlow<DarkStyle> = darkStyleFlow
+    private val uiThemeFlow = MutableStateFlow(GsThemes.default.id)
+    val uiTheme: StateFlow<String> = uiThemeFlow
+
     private val playerTitleFlow = MutableStateFlow(false)
     private val playerLeftFlow = MutableStateFlow(false)
     private val navMicFlow = MutableStateFlow(true)
@@ -388,9 +407,16 @@ private const val KEY_CLUSTER_VIDEO = "cluster_video_enabled"
         musicSourceFlow.value = runCatching {
             MusicSource.valueOf(AppSettings.getString(app, KEY_MUSIC_SOURCE, "AUTO"))
         }.getOrDefault(MusicSource.AUTO)
+        musicUiFlow.value = runCatching {
+            MusicUi.valueOf(AppSettings.getString(app, KEY_MUSIC_UI, MusicUi.CLASSIC.name))
+        }.getOrDefault(MusicUi.CLASSIC)
         themeFlow.value = runCatching {
             AppTheme.valueOf(AppSettings.getString(app, KEY_THEME, AppTheme.PHONE.name))
         }.getOrDefault(AppTheme.PHONE)
+        darkStyleFlow.value = runCatching {
+            DarkStyle.valueOf(AppSettings.getString(app, KEY_DARK_STYLE, DarkStyle.BLACK.name))
+        }.getOrDefault(DarkStyle.BLACK)
+        uiThemeFlow.value = AppSettings.getString(app, KEY_UI_THEME, GsThemes.default.id)
         autoplayFlow.value = AppSettings.getString(app, KEY_AUTOPLAY, "false") == "true"
         playerTitleFlow.value = AppSettings.getString(app, KEY_PLAYER_TITLE, "false") == "true"
         playerLeftFlow.value = AppSettings.getString(app, KEY_PLAYER_LEFT, "false") == "true"
@@ -462,6 +488,16 @@ private const val KEY_CLUSTER_VIDEO = "cluster_video_enabled"
         AppSettings.putString(app, KEY_THEME, theme.name)
     }
 
+    fun setDarkStyle(style: DarkStyle) {
+        darkStyleFlow.value = style
+        AppSettings.putString(app, KEY_DARK_STYLE, style.name)
+    }
+
+    fun setUiTheme(id: String) {
+        uiThemeFlow.value = id
+        AppSettings.putString(app, KEY_UI_THEME, id)
+    }
+
     fun setPlayerTitle(on: Boolean) {
         playerTitleFlow.value = on
         AppSettings.putString(app, KEY_PLAYER_TITLE, on.toString())
@@ -485,6 +521,11 @@ private const val KEY_CLUSTER_VIDEO = "cluster_video_enabled"
     fun setMusicSource(source: MusicSource) {
         musicSourceFlow.value = source
         AppSettings.putString(app, KEY_MUSIC_SOURCE, source.name)
+    }
+
+    fun setMusicUi(ui: MusicUi) {
+        musicUiFlow.value = ui
+        AppSettings.putString(app, KEY_MUSIC_UI, ui.name)
     }
 
     /**

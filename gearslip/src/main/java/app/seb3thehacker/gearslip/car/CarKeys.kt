@@ -25,6 +25,23 @@ object CarKeys {
     private val _screenKeys = MutableSharedFlow<ScreenKey>(extraBufferCapacity = 8)
     val screenKeys: SharedFlow<ScreenKey> = _screenKeys
 
+    // Legacy car-UI input plumbing, retained until the screens that use it are removed in a
+    // later split. With no UI attached these stay null/empty and keys work as before.
+    private val _focusMoves = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    val focusMoves: SharedFlow<Unit> = _focusMoves
+    @Volatile var focusSink: ((keyCode: Int, down: Boolean) -> Unit)? = null
+
+    sealed interface KnobEvent {
+        data class Turn(val steps: Int) : KnobEvent
+        data class Key(val keyCode: Int, val down: Boolean) : KnobEvent
+        data object Back : KnobEvent
+    }
+
+    fun interface KnobTaker {
+        fun take(event: KnobEvent): Boolean
+    }
+    @Volatile var knobTaker: KnobTaker? = null
+
     private var appContext: Context? = null
     private val main = Handler(Looper.getMainLooper())
 
@@ -57,8 +74,12 @@ object CarKeys {
      * here knows, for the caller to log.
      */
     fun onKey(keyCode: Int, down: Boolean, longPress: Boolean): Boolean {
-        // Focus keys belong to the attached UI, if any; the core consumes them either way.
-        if (keyCode in FOCUS_KEYS) return true
+        if (keyCode in FOCUS_KEYS) {
+            if (knobTaker?.take(KnobEvent.Key(keyCode, down)) == true) return true
+            _focusMoves.tryEmit(Unit)
+            focusSink?.invoke(keyCode, down)
+            return true
+        }
         if (!down) return keyCode in WANTED
         // Null until the car shows Gearslip's screen. A 2020 Civic sends Play as soon as it hears
         // the phone's Bluetooth address, while still on its own screen, and reaching for media
@@ -76,7 +97,7 @@ object CarKeys {
             KeyEvent.KEYCODE_MEDIA_PREVIOUS -> media?.previous()
             KeyEvent.KEYCODE_CALL -> call()
             KeyEvent.KEYCODE_ENDCALL -> endCall()
-            KeyEvent.KEYCODE_BACK -> screen(ScreenKey.BACK)
+            KeyEvent.KEYCODE_BACK -> if (knobTaker?.take(KnobEvent.Back) != true) screen(ScreenKey.BACK)
             KeyEvent.KEYCODE_HOME -> screen(ScreenKey.HOME)
             KEYCODE_NAVIGATION -> screen(ScreenKey.MAP)
             KEYCODE_MEDIA -> screen(ScreenKey.MEDIA)
@@ -85,6 +106,18 @@ object CarKeys {
         }
         if (longPress) GearslipLog.i("keys: long press on $keyCode")
         return true
+    }
+
+    /** A turn of the rotary knob: each click moves focus one step, like Tab or Shift+Tab. */
+    fun onRotate(delta: Int) {
+        val sink = focusSink ?: return
+        if (knobTaker?.take(KnobEvent.Turn(delta)) == true) return
+        _focusMoves.tryEmit(Unit)
+        val code = if (delta > 0) KeyEvent.KEYCODE_TAB else KEYCODE_SHIFT_TAB
+        repeat(kotlin.math.abs(delta).coerceAtMost(MAX_ROTARY_STEPS)) {
+            sink(code, true)
+            sink(code, false)
+        }
     }
 
     /** Answers a ringing call; with nothing ringing, opens the phone screen. */
@@ -105,6 +138,10 @@ object CarKeys {
     const val KEYCODE_MEDIA = 65537
     const val KEYCODE_NAVIGATION = 65538
     const val KEYCODE_TEL = 65540
+    /** Stands in for Shift+Tab: the sink sends Tab with the shift meta state. */
+    const val KEYCODE_SHIFT_TAB = -KeyEvent.KEYCODE_TAB
+
+    private const val MAX_ROTARY_STEPS = 5
 
     private val FOCUS_KEYS = setOf(
         KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN, KeyEvent.KEYCODE_DPAD_LEFT,
