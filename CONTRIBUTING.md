@@ -35,7 +35,10 @@ Build and configuration caching are on by default, so a repeat build reuses both
 and the task graph; use `--no-configuration-cache` once if a build-logic change needs a fresh
 evaluation. The default version code comes from a clock that is a tracked configuration input,
 so the cached task graph is invalidated when the minute changes. For a run of local builds that
-should reuse it, pass a fixed `-PgearslipBuildSeq=<minutes since epoch>` (CI always does).
+should reuse it, pass a fixed `-PgearslipBuildSeq=<minutes since epoch>` (CI always does). Pin
+`-PgearslipVersionName` and `-PgearslipBuildSha` too: they skip the git reads that would otherwise
+invalidate the same entry on every commit. Those pins are local-only; published builds always use
+the real commit identity.
 
 ## Pull requests
 

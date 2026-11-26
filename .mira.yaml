@@ -1,0 +1,101 @@
+# Mira configuration for this repository.
+# Every supported top-level section except `llm` is represented here.
+# Model, token budget, provider credentials and thinking effort stay in the
+# deployment's mira.yaml / dashboard, not in a repository-controlled file.
+#
+# Values below are the built-in defaults (no behavior change). Uncomment or
+# edit a value to override the deployment default for this repository.
+
+filter:
+  confidence_threshold: 0.7
+  category_confidence_thresholds: {}  # e.g. {security: 0.85}
+  max_comments: 5
+  min_severity: nitpick
+  exclude_patterns:
+    - "*.lock"
+    - "*.lockb"
+    - "package-lock.json"
+    - "yarn.lock"
+    - "pnpm-lock.yaml"
+    - "Pipfile.lock"
+    - "poetry.lock"
+    - "go.sum"
+    - "*.min.js"
+    - "*.min.css"
+    - "*.map"
+    - "*.svg"
+    - "*.png"
+    - "*.jpg"
+    - "*.jpeg"
+    - "*.gif"
+    - "*.ico"
+    - "*.woff"
+    - "*.woff2"
+    - "*.ttf"
+    - "*.eot"
+    - "*.pdf"
+    - "*.zip"
+    - "*.tar.gz"
+  exclude_deleted: true
+  max_files: 50
+  allowed_authors: []            # empty = review all authors
+  blocked_authors: []            # always wins over allowed_authors
+  allowed_base_branches: []      # empty = review every base branch
+  allowed_base_branch_overrides: {}  # e.g. {owner/repo: [main, "release/*"]}
+
+commands:
+  # Deployment-controlled: Mira strips this section from untrusted per-repo
+  # overlays unless the CLI is run with --trust-execution-settings.
+  allowed_users: []
+  allow_repo_write_access: true
+  blocked_users: []
+  # Optional per-command overrides (review, review_rest, help, pause,
+  # resume, reject, ask) are left unset.
+
+review:
+  context_lines: 3
+  max_diff_size: 250000
+  max_file_size: 50000
+  max_chunks_per_review: 5
+  include_summary: true
+  show_unverified_findings: false
+  focus_only_on_problems: false
+  walkthrough: true
+  walkthrough_sequence_diagram: true
+  pr_summary: disable            # disable | append | replace
+  code_context: true
+  context_token_budget: 8000
+  max_concurrent_chunks: 5
+  ensemble_runs: 1
+  ensemble_temperature: 0.3
+  self_critique: true
+  security_pass: true
+  security_agentic: true
+  osv_scan: true
+  secrets_scan: true
+  agentic_tools: true
+  agentic_max_hops: 10
+  second_look: false
+  jit_java_go: true
+  blast_radius: true
+  dependency_overlap: true
+  auto_resolve_conversations: true
+  review_on_synchronize: true
+  overlap:
+    enabled: true
+    max_candidates: 20
+    confidence_floor: 0.6
+    title_similarity_threshold: 0.4
+
+index:
+  llm_concurrency: 8
+  max_file_size: 1048576
+
+provider:
+  # Left unset so the deployment's provider choice is not shadowed.
+  # type: github
+
+database:
+  # Left unset so DATABASE_URL and the generated admin password are honoured.
+  # url: ""
+  # admin_password: ""
