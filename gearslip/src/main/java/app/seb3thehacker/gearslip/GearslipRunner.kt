@@ -9,14 +9,30 @@ import app.seb3thehacker.gearslip.car.BluetoothAudioCheck
 import app.seb3thehacker.gearslip.car.LocationCheck
 import app.seb3thehacker.gearslip.car.CarBluetooth
 import app.seb3thehacker.gearslip.car.CarEnvironment
+import app.seb3thehacker.gearslip.car.CarData
 import app.seb3thehacker.gearslip.car.CarKeys
-import app.seb3thehacker.gearslip.car.ScreenFit
 import app.seb3thehacker.gearslip.car.CarSensors
 import app.seb3thehacker.gearslip.car.CarServices
 import app.seb3thehacker.gearslip.car.CarSettings
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.launch
 import java.io.IOException
 import app.seb3thehacker.gearslip.protocol.InputProtocol
 import app.seb3thehacker.gearslip.protocol.TouchPoint
+import app.seb3thehacker.gearslip.surface.FrameOutput
+import app.seb3thehacker.gearslip.surface.FrameSources
+import app.seb3thehacker.gearslip.surface.FrameSource
+import app.seb3thehacker.gearslip.surface.HeadunitSurface
+import app.seb3thehacker.gearslip.surface.PlaceholderFrameSource
+import app.seb3thehacker.gearslip.surface.SurfaceCapability
+import app.seb3thehacker.gearslip.surface.SurfaceContext
+import app.seb3thehacker.gearslip.surface.VideoSpec
 import java.io.InputStream
 import java.io.OutputStream
 import java.util.concurrent.Executors
@@ -42,12 +58,16 @@ class GearslipRunner(
     private val input: InputStream,
     private val output: OutputStream,
     private val identityProvider: () -> CertProvider.Identity,
-    private val projection: Projection? = null,
     private val vehicleProfileFor: (ServiceDiscovery.HeadUnitInfo) -> VehicleProfile? = { null },
     /** Over Wi-Fi rather than USB: the video is sent smaller so the link keeps up. */
     private val wireless: Boolean = false,
     /** Gearslip's icon as 32, 64 and 128 px PNGs, for the car's phone tile. See [PhoneIcons]. */
     private val phoneIcons: () -> List<ByteArray> = { emptyList() },
+    /**
+     * Optional head-unit surface. The session drives it through [HeadunitSurface] only: it never
+     * knows what, if anything, is drawing on the car screen.
+     */
+    private val surface: HeadunitSurface? = null,
 ) {
     private val log = GearslipLog.tagged("PROTO")
 
@@ -79,6 +99,24 @@ class GearslipRunner(
     val waitingForVersion: Boolean get() = running && state == State.WAIT_VERSION
     @Volatile private var lastProgress = System.currentTimeMillis()
     @Volatile private var running = true
+    /**
+     * Hosted apps are bound once per session. The connection setup needs the main Looper
+     * (MediaBrowser), while the package scans inside it already use Dispatchers.IO.
+     */
+    @Volatile private var autostartScope: CoroutineScope? = null
+    @Volatile private var autostartJob: Job? = null
+    /** Serializes scope creation with cancellation: stop() can run on the UI thread mid-startup. */
+    private val autostartLock = Any()
+
+    /** Cancel before the activity shuts the services down: no new app may bind after that. */
+    private fun cancelAutostart() {
+        synchronized(autostartLock) {
+            autostartJob?.cancel()
+            autostartScope?.cancel()
+            autostartJob = null
+            autostartScope = null
+        }
+    }
 
     @Volatile private var videoChannelId: Int = -1
     private var videoConfigs: List<ServiceDiscovery.VideoConfig> = emptyList()
@@ -87,13 +125,21 @@ class GearslipRunner(
     @Volatile private var videoStarted = false
     /** The car's screen has been asked for once, so asking again is in order. */
     @Volatile private var focusAsked = false
-    private var videoSource: VideoSource? = null
+    private var frameSource: FrameSource? = null
+    @Volatile private var surfaceDetached = false
+    private val surfaceLock = Any()
+    /** Session-owned render resources; safe to call from stop() and the transport-exit finally. */
+    private fun releaseSurface() {
+        synchronized(surfaceLock) {
+            frameSource?.stop()
+            frameSource = null
+            if (!surfaceDetached) {
+                surfaceDetached = true
+                surface?.detach()
+            }
+        }
+    }
 
-    /** Between the car UI and the encoder when the car squashes the frame (see [screenShape]). */
-    private var stretcher: FrameStretcher? = null
-
-    /** What the car UI draws at when [stretcher] is on; touches are scaled into it. */
-    @Volatile private var drawSize: Pair<Int, Int>? = null
     @Volatile private var inFlight = 0
     /** Guards [inFlight]: the encoder thread waits on it for the head unit's acks. */
     private val ackLock = Object()
@@ -175,10 +221,17 @@ class GearslipRunner(
             // other kind of request with this car next time (see [ServiceDiscoveryQuirks]).
             if (!stopped && state == State.WAIT_SDR) ServiceDiscoveryQuirks.droppedAfter(tls.headUnitKey, plainDiscovery)
             running = false
+            cancelAutostart()
+            // EOF and transport failures never reach stop(); release the encoder and surface here.
+            releaseSurface()
             // The car is gone, but nothing calls stop() when a wireless session drops: it waits
             // for the next one. Close the music channel now, so the audio capture behind it,
             // and the screen sharing Android shows for it, stop too (issue #43).
             if (!stopped) audioLink?.close()
+            // A car-initiated drop never reaches closeAccessory(), so nobody else would unbind
+            // the hosted apps and release their location keep-alive hold. An explicit stop() is
+            // handled there synchronously; doing it here too could tear down a newer session.
+            if (!stopped) app.seb3thehacker.gearslip.car.CarServices.disconnectHosts()
             writer.shutdown()
             if (drainWriterOnExit) writer.awaitTermination(2, TimeUnit.SECONDS)
             writer.shutdownNow()
@@ -189,14 +242,12 @@ class GearslipRunner(
     fun stop() {
         stopped = true
         running = false
+        cancelAutostart()
         writer.shutdownNow()
         CarFocus.request = null
         CarFocus.set(true)
         synchronized(ackLock) { ackLock.notifyAll() } // free an encoder waiting on an ack
-        videoSource?.stop()
-        videoSource = null
-        stretcher?.release()
-        stretcher = null
+        releaseSurface()
         CarAudio.openSink = null
         audioLink?.close()
         audioLink = null
@@ -213,7 +264,7 @@ class GearslipRunner(
         phoneStatus = null
         lastSensorNight = null
         CarEnvironment.setSensorNight(null) // back to the clock until a car says otherwise
-        projection?.onProjectionStopped()
+        CarServices.pausePhoneMedia()
         SessionStatus.disconnected()
     }
 
@@ -895,23 +946,13 @@ class GearslipRunner(
             log.w("the car said it took its screen back but still sends touches - showing ours again")
             onVideoFocus(VIDEO_FOCUS_PROJECTED)
         }
-        val config = videoConfigs.getOrNull(selectedConfigIndex ?: 0)
         // The car crops its margin off the frame and measures taps from the corner of what it
-        // shows, so they come in short by half the margin: the 2024 VW (margin 240) sent y=6,
-        // inside the cropped band, and the Uconnect's never passed 351 on a 480-high frame with a
-        // 130 margin. Without this every tap landed 120 px too high.
-        val shift = config?.let(::marginsFor) ?: Insets.NONE
+        // shows, so the same gesture arrives short by half the margin on each side.
+        val config = videoConfigs.getOrNull(selectedConfigIndex ?: 0)
+        val insets = config?.marginInsets() ?: Insets.NONE
         val size = config?.pixelSize()
-        // A stretched frame (see [screenShape]): the car's tap is on the frame, the UI is drawn smaller.
-        val drawn = drawSize
-        val stretched = drawn != null && size != null
-        val (action, actionIndex, raw) =
-            (if (stretched) InputProtocol.touch(touch, size) else InputProtocol.touch(touch, size, shift.left, shift.top)) ?: return
-        val points = if (drawn != null && size != null) {
-            raw.map { TouchPoint(it.id, it.x * drawn.first / size.first, it.y * drawn.second / size.second) }
-        } else {
-            raw
-        }
+        val (action, actionIndex, points) =
+            InputProtocol.touch(touch, size, insets.left, insets.top) ?: return
         if (points.size > 1 && touchesSeen < 3) {
             log.i("multi-touch: ${points.size} pointers, action=$action index=$actionIndex")
         }
@@ -923,7 +964,9 @@ class GearslipRunner(
         }
         // Time the next frame against this tap: see [reportTouchLatency].
         if (action == ACTION_DOWN || action == ACTION_UP) touchAtUs = System.nanoTime() / 1000
-        projection?.onTouch(action, actionIndex, points)
+        if (surface != null && SurfaceCapability.TOUCH in surface.capabilities) {
+            surface.onTouch(action, actionIndex, points)
+        }
     }
 
     /**
@@ -955,6 +998,9 @@ class GearslipRunner(
             val down = Wire.varint(fields, 2) == 1L
             val longPress = Wire.varint(fields, 4) == 1L
             log.i("<- key event: keycode=$keycode ${if (down) "down" else "up"}${if (longPress) " long" else ""}")
+            if (surface != null && SurfaceCapability.KEYS in surface.capabilities) {
+                surface.onKey(keycode, down, longPress)
+            }
             if (!CarKeys.onKey(keycode, down, longPress) && down) log.i("unhandled keycode=$keycode")
         }
     }
@@ -970,7 +1016,7 @@ class GearslipRunner(
             // int32, so a turn the other way arrives as a 64-bit two's complement varint.
             val delta = Wire.varint(fields, 2)?.toInt() ?: continue
             log.i("<- relative event: keycode=$keycode delta=$delta")
-            CarKeys.onRotate(delta)
+            if (surface != null && SurfaceCapability.KEYS in surface.capabilities) surface.onRotate(delta)
         }
     }
 
@@ -1052,7 +1098,7 @@ class GearslipRunner(
                 log.i("<- UpdateUiConfigRequest (${body.size} bytes) - sending the stream's start again")
                 log.hex("   ui config", body, limit = 64)
                 lastCodecConfig?.let { send(MSG_MEDIA_CODEC_CONFIG, it, encrypted = true, channel = videoChannelId) }
-                videoSource?.requestSyncFrame()
+                frameSource?.requestSyncFrame()
             }
 
             else -> log.i("<- unhandled video message id=$messageId (${body.size} bytes)")
@@ -1084,38 +1130,8 @@ class GearslipRunner(
         return wide.minByOrNull(::pixels) ?: known.maxByOrNull(::pixels)
     }
 
-    /**
-     * The part of a [frameWidth] x [frameHeight] frame shaped like the screen size set in
-     * Settings, centred and in even pixels; null when none is set or it is the frame's own shape.
-     * Some head units report the wrong size, then crop or squash the frame onto their real screen.
-     */
-    private fun screenShape(frameWidth: Int, frameHeight: Int): Pair<Int, Int>? {
-        val screen = CarSettings.screenSize.value ?: return null
-        val wider = screen.width.toLong() * frameHeight >= screen.height.toLong() * frameWidth
-        val shape = if (wider) {
-            frameWidth to (frameWidth.toLong() * screen.height / screen.width).toInt()
-        } else {
-            (frameHeight.toLong() * screen.width / screen.height).toInt() to frameHeight
-        }
-        val even = (shape.first / 2 * 2).coerceAtLeast(2) to (shape.second / 2 * 2).coerceAtLeast(2)
-        return even.takeIf { it != (frameWidth to frameHeight) }
-    }
-
-    /**
-     * The strips of the frame the car doesn't show: the head unit's own margins, or, when a screen
-     * size is set to crop, whatever lies outside [screenShape]. The UI keeps out of them and taps
-     * are measured from inside them.
-     */
-    private fun marginsFor(config: ServiceDiscovery.VideoConfig): Insets {
-        val (width, height) = config.pixelSize() ?: return config.marginInsets()
-        if (CarSettings.screenFit.value != ScreenFit.CROP) return config.marginInsets()
-        val (w, h) = screenShape(width, height) ?: return config.marginInsets()
-        val sideX = width - w
-        val sideY = height - h
-        return Insets(top = sideY / 2, bottom = sideY - sideY / 2, left = sideX / 2, right = sideX - sideX / 2)
-    }
-
     private fun startVideoSource() {
+        if (stopped) return
         lastKeyframeSentAt = System.currentTimeMillis() // frame #1 is always a keyframe
         val index = selectedConfigIndex ?: 0
         val config = videoConfigs.getOrNull(index)
@@ -1128,33 +1144,51 @@ class GearslipRunner(
             return
         }
         config.visibleSize()?.let { (w, h) -> SessionReport.carScreen("${w}x$h", config.density) }
+        // The frame is shared with hosted car apps: they need its real geometry and density,
+        // whether or not anything on the phone is drawing the screen.
+        CarEnvironment.setDisplay(width, height, config.density)
+        // Ask for the phone's sound as the screen comes up, not only when a media app opens:
+        // the map needs it too. The deleted car UI used to do this on composition; with no UI
+        // there is nothing else to ask, and the driver would hear nothing on the car.
+        if (CarSettings.pipesNow) {
+            log.i("audio: asking for capture as the car's screen comes up")
+            CarAudio.request()
+        }
+        // The deleted car home screen bound the map and the media app once it knew the frame
+        // geometry. With no UI that never happens: the car's keys have nothing to control and
+        // no track metadata reaches the session. Bind them here, on the main Looper that
+        // MediaBrowser needs, once per session even if focus is granted again. The package
+        // scans inside autostart run on IO, so the protocol read loop is never blocked.
+        // stop() can land between the null check and the assignment on the UI thread; hold the
+        // same lock it uses and re-check stopped, so no app binds after disconnect cleanup.
+        synchronized(autostartLock) {
+            if (stopped || autostartJob != null) return@synchronized
+            val frame = CarEnvironment.frame.value
+            val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+            autostartScope = scope
+            autostartJob = scope.launch {
+                try {
+                    CarServices.autostart(frame)
+                } catch (e: CancellationException) {
+                    throw e // the session ended; let the cancelled job stay cancelled
+                } catch (e: Throwable) {
+                    log.w("hosted app autostart failed: ${e.message}")
+                }
+            }
+            // The deleted car home screen pushed configuration changes to the map from a
+            // LaunchedEffect. With no UI, follow night here; cancelling autostart on session exit
+            // cancels this observer too, so it cannot reach a newer session's app.
+            scope.launch {
+                CarEnvironment.darkOutside.collect {
+                    CarServices.nav.pushConfiguration()
+                }
+            }
+        }
 
         val start = Protobuf.varintField(1, SESSION_ID.toLong()) +
             Protobuf.varintField(2, index.toLong())
         send(MSG_MEDIA_START, start, encrypted = true, channel = videoChannelId)
         log.i("-> Start(session_id=$SESSION_ID, configuration_index=$index -> $config)")
-        // The car crops its margins off the frame, so keep the UI out of them unless a vehicle
-        // profile has its own tuned insets.
-        stretcher?.release()
-        stretcher = null
-        drawSize = null
-        val shape = screenShape(width, height)
-        val squash = shape != null && CarSettings.screenFit.value == ScreenFit.SQUASH
-        if (shape != null) {
-            log.i(
-                "screen size set to ${CarSettings.screenSize.value} in Settings: " +
-                    "${if (squash) "drawing" else "cropping to"} ${shape.first}x${shape.second} of the ${width}x$height frame",
-            )
-        }
-        if (squash) {
-            CarEnvironment.setInsets(Insets.NONE)
-        } else if (vehicleProfile?.insets.let { it == null || it == Insets.NONE }) {
-            val insets = marginsFor(config)
-            CarEnvironment.setInsets(insets)
-            if (insets != Insets.NONE) log.i("keeping the UI clear of the car's margins: $insets")
-        }
-
-        val useProjection = projection != null
         // 60fps only over a cable: over Wi-Fi it doubles the data for little the driver sees.
         videoFrameRate = if (config.frameRate == 1 && !wireless) 60 else 30
         smoothWindows = 0
@@ -1162,43 +1196,53 @@ class GearslipRunner(
         decoderBound = false
         adaptiveVideo = CarSettings.experimentalFeaturesEnabled.value && CarSettings.adaptiveVideoEnabled.value
         if (adaptiveVideo) log.i("video: adaptive bitrate on (experimental)")
-        videoSource = VideoSource(
-            width = width,
-            height = height,
-            frameRate = videoFrameRate,
-            mode = if (useProjection) VideoSource.Mode.SURFACE else VideoSource.Mode.TEST_CARD,
-            wireless = wireless,
-            onCodecConfig = { csd ->
+        // The car crops its margins; publish them so any attached surface can keep its content
+        // inside the visible frame. A vehicle profile with its own insets takes precedence.
+        if (vehicleProfile?.insets.let { it == null || it == Insets.NONE }) {
+            CarEnvironment.setInsets(config.marginInsets())
+        }
+
+        val spec = VideoSpec(width, height, videoFrameRate, config.density, wireless)
+        val output = object : FrameOutput {
+            override fun onCodecConfig(csd: ByteArray) {
                 lastCodecConfig = csd
                 send(MSG_MEDIA_CODEC_CONFIG, csd, encrypted = true, channel = videoChannelId)
                 log.i("-> CodecConfig (${csd.size} bytes SPS/PPS)")
                 log.hex("   csd", csd, limit = 64)
-            },
-            onFrame = { data, presentationTimeUs, keyFrame ->
+            }
+
+            override fun onFrame(data: ByteArray, presentationTimeUs: Long, keyFrame: Boolean) {
                 sendVideoFrame(data, presentationTimeUs, keyFrame)
-            },
-            onStill = { projection?.onStill() },
-        ).also { source ->
+            }
+        }
+        // A surface is attached for every session; only one that declares PROVIDES_FRAMES may
+        // replace the encoder's source. Everything else keeps the generated placeholder.
+        // stop() can land after the entry guard: attach and start under the same lock releaseSurface
+        // uses, re-checking stopped so nothing is attached after the surface was torn down.
+        synchronized(surfaceLock) {
+            if (stopped || surfaceDetached) return@synchronized
+            val source = FrameSources.choose(
+                surface, surfaceContext(), spec,
+                PlaceholderFrameSource(width, height, videoFrameRate, wireless),
+            )
+            frameSource = source
             runCatching {
-                source.start()
-                val surface = source.inputSurface
-                if (projection != null && surface != null) {
-                    val stretch = shape?.takeIf { squash }?.let { (w, h) ->
-                        FrameStretcher(surface, w, h, width, height).takeIf { it.start() }
-                    }
-                    stretcher = stretch
-                    if (stretch != null) {
-                        drawSize = stretch.width to stretch.height
-                        projection.onSurfaceReady(stretch.input, stretch.width, stretch.height, config.density)
-                    } else {
-                        projection.onSurfaceReady(surface, width, height, config.density)
-                    }
-                    SessionStatus.projecting()
-                    BluetoothAudioCheck.onProjecting()
-                    LocationCheck.onProjecting()
-                }
+                source.start(output)
+                SessionStatus.projecting()
+                BluetoothAudioCheck.onProjecting()
+                LocationCheck.onProjecting()
             }.onFailure { e -> log.e("encoder start failed", e) }
         }
+    }
+
+    /** A stable, read-only view of session state for whichever head-unit surface is attached. */
+    private fun surfaceContext() = object : SurfaceContext {
+        override val session = SessionStatus.state
+        override val frame = CarEnvironment.frame
+        override val insets = CarEnvironment.insets
+        override val night = CarEnvironment.darkOutside
+        override val carData = CarData.state
+        override val vehicle = CarEnvironment.vehicle
     }
 
     /**
@@ -1275,11 +1319,13 @@ class GearslipRunner(
             CarFocus.request = ::requestNativeFocus
             log.i("PHASE A COMPLETE - video focus granted; starting video source")
             startVideoSource()
+            surface?.onFocus(true)
             return
         }
         if (projected == videoProjected) return
         videoProjected = projected
         CarFocus.set(projected)
+        surface?.onFocus(projected)
         if (projected) {
             log.i("the car handed its screen back - restarting the stream")
             // Frames sent just before the car took over may never be acked.
@@ -1292,7 +1338,7 @@ class GearslipRunner(
             send(MSG_MEDIA_START, start, encrypted = true, channel = videoChannelId)
             log.i("-> Start(session_id=$SESSION_ID)")
             lastCodecConfig?.let { send(MSG_MEDIA_CODEC_CONFIG, it, encrypted = true, channel = videoChannelId) }
-            videoSource?.requestSyncFrame()
+            frameSource?.requestSyncFrame()
         } else {
             // A phone ends the stream when the car takes its screen. LIVI switches on the focus
             // answer alone, but the 2018 Uconnect kept showing our last frame until it got Stop.
@@ -1450,7 +1496,7 @@ class GearslipRunner(
                 } catch (e: IOException) {
                     if (running) log.w("send failed, stopping: ${e.message}")
                     running = false
-                    videoSource?.stop()
+                    frameSource?.stop()
                 }
             }
         } catch (e: RejectedExecutionException) {
@@ -1541,7 +1587,7 @@ class GearslipRunner(
                     log.i(
                         "video: ${"%.1f".format(fps)} fps over 5s | sent=$sent waited=${waited}ms " +
                             "acked=$acksSeen inFlight=$inFlight split=$splitMessages " +
-                            "kbps=${(videoSource?.bitRate ?: 0) / 1000}",
+                            "kbps=${(frameSource?.bitRate ?: 0) / 1000}",
                     )
                     adaptBitRate(fps, waited)
 
@@ -1551,7 +1597,7 @@ class GearslipRunner(
                     // some other path - a real decoder desync should never outlive this.
                     val idleSinceKeyframe = System.currentTimeMillis() - lastKeyframeSentAt
                     if (idleSinceKeyframe > PERIODIC_KEYFRAME_MS) {
-                        videoSource?.requestSyncFrame()
+                        frameSource?.requestSyncFrame()
                     }
                 }
             }
@@ -1578,7 +1624,7 @@ class GearslipRunner(
      */
     private fun adaptBitRate(fps: Double, waitedMs: Long) {
         if (!adaptiveVideo) return
-        val source = videoSource ?: return
+        val source = frameSource ?: return
         val target = videoFrameRate.toDouble()
         val behind = waitedMs > ADAPT_WINDOW_MS / 2 && fps < target * 0.8
         val easy = waitedMs < ADAPT_WINDOW_MS / 10
@@ -1590,12 +1636,12 @@ class GearslipRunner(
                     // The last cut bought no frames: the car's decoder is the limit, not the
                     // link, and smaller frames would only look worse. Undo it and stop here.
                     decoderBound = true
-                    source.setBitRate(cut.first)
+                    source.applyBitRate(cut.first)
                     log.i("video: a lower bitrate didn't help the car keep up - back to ${cut.first / 1000} kbps, adapting off")
                     return
                 }
                 val before = source.bitRate
-                source.setBitRate((before * 0.75).toInt())
+                source.applyBitRate((before * 0.75).toInt())
                 if (source.bitRate != before) {
                     lastCut = before to fps
                     log.i("video: car falling behind - bitrate ${before / 1000} -> ${source.bitRate / 1000} kbps")
@@ -1606,7 +1652,7 @@ class GearslipRunner(
                 if (++smoothWindows >= 2) {
                     smoothWindows = 0
                     val before = source.bitRate
-                    source.setBitRate((before * 1.1).toInt() + 1)
+                    source.applyBitRate((before * 1.1).toInt() + 1)
                     log.i("video: keeping up - bitrate ${before / 1000} -> ${source.bitRate / 1000} kbps")
                 }
             }

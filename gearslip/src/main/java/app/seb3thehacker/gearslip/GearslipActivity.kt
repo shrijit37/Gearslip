@@ -27,10 +27,12 @@ import app.seb3thehacker.gearslip.mirror.MirrorService
 import app.seb3thehacker.gearslip.mirror.PhoneMirror
 import app.seb3thehacker.gearslip.mirror.TouchRelayService
 import app.seb3thehacker.gearslip.car.CarEnvironment
+import app.seb3thehacker.gearslip.car.CarServices
 import app.seb3thehacker.gearslip.car.CarSettings
 import app.seb3thehacker.gearslip.car.CarUi
 import app.seb3thehacker.gearslip.car.Prefetch
 import app.seb3thehacker.gearslip.protocol.TouchPoint
+import app.seb3thehacker.gearslip.surface.HeadunitSurfaces
 import app.seb3thehacker.gearslip.ui.GearslipApp
 import app.seb3thehacker.gearslip.ui.GearslipTheme
 import java.io.FileInputStream
@@ -159,8 +161,14 @@ class GearslipActivity : ComponentActivity(), Projection {
             }
         }
         CarSettings.init(this)
-        // Before any car connects: CarServices only starts once the car shows Gearslip's screen,
-        // and a car that waits to know the phone before it shows it would never hear (issue #43).
+        // The runner now binds the map and media apps itself on service discovery. Initialise the
+        // services here, before any car connects: CarUi() is no longer composed on a real session,
+        // so waiting for the deleted car screen to do it would leave autostart() with no context
+        // and nothing would bind. CarBluetooth still needs an early init for issue #43.
+        // CarEnvironment used to start in onSurfaceReady(), which no longer has a caller. Start it
+        // here too so night mode, battery and appContext are ready before the first app binds.
+        CarEnvironment.start(this)
+        CarServices.init(this)
         app.seb3thehacker.gearslip.car.CarBluetooth.init(this)
         AppSettings.applyGearslipEnabled(this)
         // A capture that died without tidying up would leave notifications exposed to every
@@ -173,7 +181,16 @@ class GearslipActivity : ComponentActivity(), Projection {
 
         setContent {
             GearslipTheme {
-                GearslipApp(onDisconnect = { closeAccessory() }, onRequestCallScreening = ::requestCallScreeningRole)
+                GearslipApp(
+                    onDisconnect = {
+                        closeAccessory()
+                        // An explicit disconnect is not a cable slip: runner.stop() closes the
+                        // audio link, which starts a 30s grace timer. End the capture now so the
+                        // phone's speaker and screen sharing come back at once.
+                        CarAudio.release()
+                    },
+                    onRequestCallScreening = ::requestCallScreeningRole,
+                )
                 val offer by offerBluetooth.collectAsState()
                 if (offer) {
                     fun close() {
@@ -260,6 +277,8 @@ class GearslipActivity : ComponentActivity(), Projection {
         CarAudio.release()
         PhoneMirror.requestStop()
         closeAccessory()
+        CarServices.shutdown()
+        CarEnvironment.stop()
         GearslipLog.flush()
     }
 
@@ -422,9 +441,9 @@ class GearslipActivity : ComponentActivity(), Projection {
             input = FileInputStream(pfd.fileDescriptor),
             output = FileOutputStream(pfd.fileDescriptor),
             identityProvider = { CertProvider.load(this) },
-            projection = this,
             vehicleProfileFor = { info -> VehicleProfiles.find(VehicleProfiles.load(this), info) },
             phoneIcons = { PhoneIcons.pngs(this) },
+            surface = HeadunitSurfaces.create(this),
         )
         this.runner = runner
         worker = Thread { runner.run() }.apply { name = "gearslip"; start() }
@@ -445,10 +464,10 @@ class GearslipActivity : ComponentActivity(), Projection {
             input = socket.getInputStream(),
             output = socket.getOutputStream(),
             identityProvider = { CertProvider.load(this) },
-            projection = this,
             vehicleProfileFor = { info -> VehicleProfiles.find(VehicleProfiles.load(this), info) },
             wireless = true,
             phoneIcons = { PhoneIcons.pngs(this) },
+            surface = HeadunitSurfaces.create(this),
         )
         this.runner = runner
         worker = Thread { runner.run() }.apply { name = "gearslip"; start() }
@@ -479,6 +498,9 @@ class GearslipActivity : ComponentActivity(), Projection {
     /** Ends the session, wired or wireless. [stopWireless] also drops the car's Bluetooth and Wi-Fi. */
     private fun closeAccessory(stopWireless: Boolean) {
         runner?.stop()
+        // The car UI is no longer composed on a real session, so its disposal no longer shuts
+        // the hosted apps down. Unbind them here while the old session is still identifiable.
+        CarServices.disconnectHosts()
         SessionReport.print()
         runCatching { descriptor?.close() }
         descriptor = null

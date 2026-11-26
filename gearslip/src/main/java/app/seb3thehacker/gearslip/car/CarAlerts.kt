@@ -57,9 +57,9 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
 /**
- * The one alert on the car screen, from whichever hosted app sent it: Waze asking whether a
- * hazard is still there, say. As in Android Auto, a newer alert replaces the one showing, and it
- * shows over any screen, since a question about the road matters while music is up too.
+ * The alert a hosted car app asked to show, held as session state. Rendering is up to whichever
+ * head-unit surface is attached; the protocol side only owns the queue and the callbacks.
+ * [CarAlertOverlay] is the legacy renderer, kept until the car UI that calls it is removed.
  */
 @MainThread
 internal object CarAlerts {

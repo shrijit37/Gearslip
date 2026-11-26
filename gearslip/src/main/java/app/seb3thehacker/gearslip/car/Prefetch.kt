@@ -7,11 +7,10 @@ import app.seb3thehacker.gearslip.mirror.PhoneApps
 import java.util.concurrent.Executors
 
 /**
- * Loads what the car screens show before anyone opens them: the car and media apps with their
- * icons, the phone's launcher apps, the weather and the calendar. Also unlocks the certificate,
- * so a head unit's first message is answered at once. Each screen paints from these
- * results at once and refreshes behind them, so nothing waits on the package manager, the
- * network or the calendar provider.
+ * Loads what the car screens show before anyone opens them: the phone's launcher apps, the weather
+ * and the calendar. Also unlocks the certificate, so a head unit's first message is answered at
+ * once. The screens still present until later splits paint from these results immediately rather
+ * than waiting on the package manager, the network or the calendar provider.
  *
  * Safe to call as often as you like: calls closer together than [MIN_GAP_MS] are dropped.
  */

@@ -14,20 +14,22 @@ import androidx.car.app.model.SearchCallbackDelegate
 import androidx.car.app.model.TabCallbackDelegate
 import androidx.car.app.OnDoneCallback
 import androidx.car.app.serialization.Bundleable
+import android.graphics.Bitmap
 import androidx.compose.ui.graphics.Color
-import androidx.core.graphics.drawable.toBitmap
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.toArgb
+import androidx.core.graphics.drawable.toBitmap
 import app.seb3thehacker.gearslip.GearslipLog
 import java.util.concurrent.TimeUnit
 import kotlin.math.roundToInt
 
 /**
- * Turns the Car App Library's model objects into things Compose can draw.
+ * Turns the Car App Library's model objects into plain values a host can render.
  *
  * A templated app describes its screen in these types and says nothing about how they should
  * look - that is the host's job, and every host looks different. These helpers are the seam
- * between the app's description and Gearslip's rendering of it.
+ * between the app's description and whatever head-unit surface draws it.
  */
 
 /** The app's text, preferring the longest variant that will fit; variants are ordered longest first. */
@@ -75,16 +77,16 @@ private fun CharSequence.withSpansFilledIn(): String {
  * car-screen size is small and a shelf plus its sections stays well under a hundred distinct
  * icons on screen at once.
  */
-private val iconCache = android.util.LruCache<String, ImageBitmap>(200)
+private val iconCache = android.util.LruCache<String, Bitmap>(200)
 
 /**
- * Loads an icon the app described.
+ * Loads an icon the app described, as a plain [Bitmap] for a headless host.
  *
  * A [CarIcon] is either a standard type the host is expected to draw itself, or an IconCompat
  * pointing into the app's own resources - which is why this needs a Context that can see the
  * app, and why a failure here is a missing glyph rather than an error worth stopping for.
  */
-fun CarIcon?.image(context: Context): ImageBitmap? {
+fun CarIcon?.imageBitmap(context: Context): Bitmap? {
     val icon = this?.icon ?: return null
     val key = icon.cacheKey(context)
     key?.let { k -> iconCache.get(k)?.let { return it } }
@@ -98,18 +100,23 @@ fun CarIcon?.image(context: Context): ImageBitmap? {
     val rawWidth = drawable.intrinsicWidth.takeIf { it > 0 } ?: ICON_FALLBACK_PX
     val rawHeight = drawable.intrinsicHeight.takeIf { it > 0 } ?: ICON_FALLBACK_PX
     // A handful of apps (Spotify's search glyph, 12x12) hand over an icon so small it turns to
-    // mush once Compose stretches it up to button size. Rasterizing it larger here instead lets
-    // Android's own bitmap scaler do that smoothing while the source is still a Drawable, rather
-    // than Compose scaling an already-tiny texture at draw time.
+    // mush when drawn at button size. Rasterizing it larger here lets Android's bitmap scaler do
+    // the smoothing while the source is still a Drawable.
     val scale = (ICON_FALLBACK_PX.toFloat() / maxOf(rawWidth, rawHeight)).coerceAtLeast(1f)
     val width = (rawWidth * scale).toInt()
     val height = (rawHeight * scale).toInt()
-    val bitmap = runCatching { drawable.toBitmap(width, height).asImageBitmap() }
+    val bitmap = runCatching { drawable.toBitmap(width, height) }
         .onFailure { GearslipLog.w("icon: toBitmap threw for ${icon.describe()}: ${it.javaClass.simpleName}: ${it.message}") }
         .getOrNull() ?: return null
     key?.let { iconCache.put(it, bitmap) }
     return bitmap
 }
+
+/**
+ * The legacy Compose-facing view of [imageBitmap], kept until the car screens that draw it are
+ * removed in a later split. The bitmap is cached once; wrapping it is cheap.
+ */
+fun CarIcon?.image(context: Context): ImageBitmap? = imageBitmap(context)?.asImageBitmap()
 
 /**
  * [describe], plus when the app was last installed for a resource icon. Resource ids are only
@@ -144,18 +151,22 @@ private fun androidx.core.graphics.drawable.IconCompat.describe(): String = when
 val CarIcon?.standardType: Int? get() = this?.takeIf { it.icon == null }?.type
 
 /**
- * Resolves a colour the app asked for. The named colours deliberately stay close to what a
- * driver expects them to mean rather than matching the app's brand.
+ * Resolves a colour the app asked for as an ARGB int, for a headless host. The named colours
+ * deliberately stay close to what a driver expects them to mean rather than matching the app's
+ * brand.
  */
-fun CarColor?.color(dark: Boolean, default: Color): Color = when (this?.type) {
+fun CarColor?.colorInt(dark: Boolean, default: Int): Int = when (this?.type) {
     null, CarColor.TYPE_DEFAULT -> default
-    CarColor.TYPE_CUSTOM -> Color(if (dark) colorDark else color)
-    CarColor.TYPE_RED -> Color(0xFFE53935)
-    CarColor.TYPE_GREEN -> Color(0xFF43A047)
-    CarColor.TYPE_BLUE -> Color(0xFF1E88E5)
-    CarColor.TYPE_YELLOW -> Color(0xFFFDD835)
+    CarColor.TYPE_CUSTOM -> if (dark) colorDark else color
+    CarColor.TYPE_RED -> android.graphics.Color.rgb(0xE5, 0x39, 0x35)
+    CarColor.TYPE_GREEN -> android.graphics.Color.rgb(0x43, 0xA0, 0x47)
+    CarColor.TYPE_BLUE -> android.graphics.Color.rgb(0x1E, 0x88, 0xE5)
+    CarColor.TYPE_YELLOW -> android.graphics.Color.rgb(0xFD, 0xD8, 0x35)
     else -> default
 }
+
+/** The legacy Compose-facing view of [colorInt], kept until the car UI that draws it is removed. */
+fun CarColor?.color(dark: Boolean, default: Color): Color = Color(colorInt(dark, default.toArgb()))
 
 /**
  * "500 ft", "2.4 mi". The app picks the unit and its rounding; when that's the other system from
