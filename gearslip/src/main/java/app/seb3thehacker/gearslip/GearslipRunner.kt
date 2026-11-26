@@ -207,6 +207,10 @@ class GearslipRunner(
             // for the next one. Close the music channel now, so the audio capture behind it,
             // and the screen sharing Android shows for it, stop too (issue #43).
             if (!stopped) audioLink?.close()
+            // A car-initiated drop never reaches closeAccessory(), so nobody else would unbind
+            // the hosted apps and release their location keep-alive hold. An explicit stop() is
+            // handled there synchronously; doing it here too could tear down a newer session.
+            if (!stopped) app.seb3thehacker.gearslip.car.CarServices.disconnectHosts()
             writer.shutdown()
             if (drainWriterOnExit) writer.awaitTermination(2, TimeUnit.SECONDS)
             writer.shutdownNow()

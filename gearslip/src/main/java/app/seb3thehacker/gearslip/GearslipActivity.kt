@@ -273,6 +273,7 @@ class GearslipActivity : ComponentActivity(), Projection {
         CarAudio.release()
         PhoneMirror.requestStop()
         closeAccessory()
+        CarServices.shutdown()
         GearslipLog.flush()
     }
 
@@ -492,6 +493,9 @@ class GearslipActivity : ComponentActivity(), Projection {
     /** Ends the session, wired or wireless. [stopWireless] also drops the car's Bluetooth and Wi-Fi. */
     private fun closeAccessory(stopWireless: Boolean) {
         runner?.stop()
+        // The car UI is no longer composed on a real session, so its disposal no longer shuts
+        // the hosted apps down. Unbind them here while the old session is still identifiable.
+        CarServices.disconnectHosts()
         SessionReport.print()
         runCatching { descriptor?.close() }
         descriptor = null
