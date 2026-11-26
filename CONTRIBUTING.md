@@ -26,7 +26,7 @@ on the first build.
 Gradle writes one APK per ABI to `build/` (`Gearslip-arm64-v8a-debug.apk`,
 `Gearslip-armeabi-v7a-debug.apk`, `Gearslip-x86-debug.apk`, `Gearslip-x86_64-debug.apk`), plus
 `Gearslip-universal-debug.apk` with every ABI. Install the one matching your phone, or the
-universal one. It installs in a separate `.dev` package, next to the regular app.
+universal one. It replaces the regular app, since stable and dev builds share one application id and signing key.
 
 For a quick local iteration, add `-PnoR8` to skip shrinking; published builds are always shrunk.
 `-PgearslipAbi=arm64-v8a` builds just that ABI and no universal APK, which also cuts packaging
