@@ -3,10 +3,14 @@ package app.seb3thehacker.gearslip.car
 import android.content.Context
 import app.seb3thehacker.gearslip.CertProvider
 import app.seb3thehacker.gearslip.GearslipLog
+import app.seb3thehacker.gearslip.mirror.PhoneApps
 import java.util.concurrent.Executors
 
 /**
- * Unlocks the certificate ahead of time, so a head unit's first message is answered at once.
+ * Loads what the car screens show before anyone opens them: the phone's launcher apps, the weather
+ * and the calendar. Also unlocks the certificate, so a head unit's first message is answered at
+ * once. The screens still present until later splits paint from these results immediately rather
+ * than waiting on the package manager, the network or the calendar provider.
  *
  * Safe to call as often as you like: calls closer together than [MIN_GAP_MS] are dropped.
  */
@@ -26,7 +30,10 @@ object Prefetch {
         worker.execute {
             val start = System.currentTimeMillis()
             step("certificate") { CertProvider.warm(app) }
-            GearslipLog.i("certificate warmed in ${System.currentTimeMillis() - start}ms")
+            step("launcher apps") { warmLauncherApps(app) }
+            step("phone apps") { PhoneApps.warm(app) }
+            step("weather and calendar") { warmDashboard(app) }
+            GearslipLog.i("prefetch done in ${System.currentTimeMillis() - start}ms")
         }
     }
 
