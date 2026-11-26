@@ -20,6 +20,7 @@ import app.seb3thehacker.gearslip.car.CarEnvironment
 import app.seb3thehacker.gearslip.car.CarSettings
 import app.seb3thehacker.gearslip.car.CarSettings.MusicUi
 import app.seb3thehacker.gearslip.car.CarUi
+import app.seb3thehacker.gearslip.protocol.TouchPoint
 import app.seb3thehacker.gearslip.traffic.MapPoint
 import app.seb3thehacker.gearslip.traffic.RealRoutePlanner
 import app.seb3thehacker.gearslip.traffic.VelaTrafficSource

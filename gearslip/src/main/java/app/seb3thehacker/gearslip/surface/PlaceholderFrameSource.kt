@@ -134,10 +134,15 @@ class PlaceholderFrameSource(
     private fun pump(encoder: MediaCodec) {
         val info = MediaCodec.BufferInfo()
         val frameIntervalUs = 1_000_000L / frameRate
+        val frameIntervalNs = 1_000_000_000L / frameRate
+        var nextFrameAtNs = System.nanoTime()
 
         while (running) {
             val inIndex = encoder.dequeueInputBuffer(TIMEOUT_US)
             if (inIndex >= 0) {
+                // Space submissions by wall time, not by how fast the codec calls return:
+                // PTS runs from frameIndex, so submitting ahead of the clock builds latency.
+                if (!awaitFrameDeadline(nextFrameAtNs) || !running) break
                 val image = encoder.getInputImage(inIndex)
                 if (image != null) {
                     drawTestCard(image, frameIndex)
@@ -148,6 +153,10 @@ class PlaceholderFrameSource(
                     encoder.queueInputBuffer(inIndex, 0, 0, frameIndex * frameIntervalUs, 0)
                 }
                 frameIndex++
+                // Advance from the previous deadline, not from now, so an iteration that ran
+                // slightly long doesn't slow the stream. If it ran very long, resume from now
+                // rather than bursting to catch up.
+                nextFrameAtNs = maxOf(nextFrameAtNs + frameIntervalNs, System.nanoTime())
             }
 
             var outIndex = encoder.dequeueOutputBuffer(info, TIMEOUT_US)
@@ -170,7 +179,20 @@ class PlaceholderFrameSource(
                 encoder.releaseOutputBuffer(outIndex, false)
                 outIndex = encoder.dequeueOutputBuffer(info, 0)
             }
-            Thread.sleep(maxOf(1L, frameIntervalUs / 2000))
+        }
+    }
+
+    /** Waits until [deadlineNs] on the monotonic clock; false if the thread was interrupted. */
+    private fun awaitFrameDeadline(deadlineNs: Long): Boolean {
+        while (true) {
+            val remaining = deadlineNs - System.nanoTime()
+            if (remaining <= 0) return true
+            try {
+                Thread.sleep(remaining / 1_000_000L, (remaining % 1_000_000L).toInt())
+            } catch (e: InterruptedException) {
+                Thread.currentThread().interrupt()
+                return false
+            }
         }
     }
 

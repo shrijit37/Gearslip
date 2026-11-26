@@ -43,7 +43,7 @@ import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.seb3thehacker.gearslip.GearslipLog
 import app.seb3thehacker.gearslip.ScreenProjector
-import app.seb3thehacker.gearslip.TouchPoint
+import app.seb3thehacker.gearslip.protocol.TouchPoint
 import app.seb3thehacker.gearslip.car.CarEnvironment
 import app.seb3thehacker.gearslip.car.CarUi
 
