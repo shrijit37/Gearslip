@@ -439,7 +439,7 @@ class GearslipActivity : ComponentActivity() {
         runner?.stop()
         // The car UI is no longer composed on a real session, so its disposal no longer shuts
         // the hosted apps down. Unbind them here while the old session is still identifiable.
-        CarServices.shutdown()
+        CarServices.disconnectHosts()
         CarEnvironment.stop()
         SessionReport.print()
         runCatching { descriptor?.close() }
