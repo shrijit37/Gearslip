@@ -73,7 +73,6 @@ import app.seb3thehacker.gearslip.update.UpdateChecker
 @Composable
 fun HomeScreen(
     onOpenSettings: () -> Unit,
-    onOpenCarPreview: () -> Unit,
     onDisconnect: () -> Unit,
     onOpenCarGroup: (CarGroup) -> Unit,
 ) {
@@ -112,10 +111,6 @@ fun HomeScreen(
 
                 // Sits at the bottom, where a thumb reaches it.
                 Column(Modifier.padding(vertical = 16.dp)) {
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        // The preview draws the car screen on the phone, so it waits until no car is using it.
-                        if (!live) HomeShortcut(Icons.Filled.PlayArrow, stringResource(R.string.home_preview), onOpenCarPreview, Modifier.weight(1f))
-                    }
                     if (live) {
                         Spacer(Modifier.height(16.dp))
                         Button(onClick = onDisconnect, modifier = Modifier.fillMaxWidth().height(56.dp)) {

@@ -1,6 +1,8 @@
 package app.seb3thehacker.gearslip
 
 import android.view.Surface
+import app.seb3thehacker.gearslip.protocol.InputProtocol
+import app.seb3thehacker.gearslip.protocol.TouchPoint
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.IOException
@@ -15,6 +17,7 @@ import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Test
 
 class ConnectionLifecycleTest {
@@ -231,26 +234,13 @@ class ConnectionLifecycleTest {
     }
 
 
-    @Test fun `touchpad reports are not injected as touchscreen taps`() {
-        var touches = 0
-        val projection = object : Projection {
-            override fun onSurfaceReady(surface: Surface, width: Int, height: Int, densityDpi: Int) = Unit
-            override fun onTouch(action: Int, actionIndex: Int, points: List<TouchPoint>) { touches++ }
-            override fun onProjectionStopped() = Unit
-        }
-        val runner = GearslipRunner(ByteArrayInputStream(byteArrayOf()), ByteArrayOutputStream(), ::identity, projection)
-        val input = GearslipRunner::class.java.getDeclaredMethod("onInputReport", ByteArray::class.java)
-            .apply { isAccessible = true }
-        val touch = Protobuf.bytesField(1, Protobuf.varintField(1, 100) +
+    @Test fun `touchpad reports are not decoded as touchscreen taps`() {
+        val pointer = Protobuf.bytesField(1, Protobuf.varintField(1, 100) +
             Protobuf.varintField(2, 200) + Protobuf.varintField(3, 0))
-        try {
-            input.invoke(runner, Protobuf.varintField(1, 1000) + Protobuf.bytesField(7, touch))
-            assertEquals(0, touches)
-            input.invoke(runner, Protobuf.varintField(1, 1000) + Protobuf.bytesField(3, touch))
-            assertEquals(1, touches)
-        } finally {
-            runner.stop()
-        }
+        val touchscreenReport = pointer + Protobuf.varintField(3, 0)
+        // Field 3 is the touchscreen report; field 7 is a touchpad gesture. Only one is a tap.
+        assertEquals(1, InputProtocol.touch(touchscreenReport, null)?.points?.size)
+        assertNull(InputProtocol.touch(Protobuf.bytesField(7, pointer), null))
     }
 
 }

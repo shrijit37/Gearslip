@@ -40,6 +40,7 @@ jobs:
         with:
           signing: none
           build: false
+          gradle-encryption-key: ${{ secrets.GRADLE_ENCRYPTION_KEY }}
 
       # CodeQL scans Kotlin as it compiles. R8 runs after that and produces no source facts,
       # so skipping it here shortens the scan without changing what is published.

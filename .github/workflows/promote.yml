@@ -31,6 +31,7 @@ jobs:
           store-password: ${{ secrets.UPDATE_STORE_PASSWORD }}
           key-alias: ${{ secrets.UPDATE_KEY_ALIAS }}
           key-password: ${{ secrets.UPDATE_KEY_PASSWORD }}
+          gradle-encryption-key: ${{ secrets.GRADLE_ENCRYPTION_KEY }}
 
       - name: Write release body
         run: |

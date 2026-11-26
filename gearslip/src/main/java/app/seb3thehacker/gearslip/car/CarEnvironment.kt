@@ -117,6 +117,9 @@ object CarEnvironment {
         running = true
         appContext = context.applicationContext
         setPhoneTheme(context.resources.configuration)
+        // Compute night synchronously: the posted tick is the periodic refresh, but a car can
+        // bind its navigation app before the next main-loop pass (issue: day mode at night).
+        refresh()
         val sticky = context.applicationContext.registerReceiver(
             batteryReceiver, IntentFilter(Intent.ACTION_BATTERY_CHANGED), Context.RECEIVER_NOT_EXPORTED,
         )

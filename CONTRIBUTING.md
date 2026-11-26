@@ -29,8 +29,16 @@ Gradle writes one APK per ABI to `build/` (`Gearslip-arm64-v8a-debug.apk`,
 universal one. It installs as Gearslip Dev, next to the regular app.
 
 For a quick local iteration, add `-PnoR8` to skip shrinking; published builds are always shrunk.
-Add `-PpseudoLocales` when you want the stretched and right-to-left inspection locales. Build
-caching is on by default, so a repeat build only redoes what actually changed.
+`-PgearslipAbi=arm64-v8a` builds just that ABI and no universal APK, which also cuts packaging
+time. Add `-PpseudoLocales` when you want the stretched and right-to-left inspection locales.
+Build and configuration caching are on by default, so a repeat build reuses both task outputs
+and the task graph; use `--no-configuration-cache` once if a build-logic change needs a fresh
+evaluation. The default version code comes from a clock that is a tracked configuration input,
+so the cached task graph is invalidated when the minute changes. For a run of local builds that
+should reuse it, pass a fixed `-PgearslipBuildSeq=<minutes since epoch>` (CI always does). Pin
+`-PgearslipVersionName` and `-PgearslipBuildSha` too: they skip the git reads that would otherwise
+invalidate the same entry on every commit. Those pins are local-only; published builds always use
+the real commit identity.
 
 ## Pull requests
 

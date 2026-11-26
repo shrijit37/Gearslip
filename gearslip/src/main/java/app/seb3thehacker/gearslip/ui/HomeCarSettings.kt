@@ -1,76 +1,71 @@
 package app.seb3thehacker.gearslip.ui
 
-import androidx.compose.foundation.border
-import androidx.compose.foundation.layout.offset
 import androidx.annotation.StringRes
-import androidx.compose.ui.res.stringResource
-import app.seb3thehacker.gearslip.R
-import app.seb3thehacker.gearslip.car.theme.DarkStyle
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.selection.selectable
-import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Checkbox
 import androidx.core.graphics.drawable.toBitmap
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.ui.graphics.asImageBitmap
-import kotlinx.coroutines.launch
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import app.seb3thehacker.gearslip.car.AppTheme
-import app.seb3thehacker.gearslip.car.CarApps
-import app.seb3thehacker.gearslip.car.LauncherMode
-import app.seb3thehacker.gearslip.car.CarSettings.MusicSource
-import app.seb3thehacker.gearslip.car.CarSettings.MusicUi
+import app.seb3thehacker.gearslip.R
 import app.seb3thehacker.gearslip.car.CarSettings
-import app.seb3thehacker.gearslip.car.LauncherCache
-import app.seb3thehacker.gearslip.car.NavBarMode
 import app.seb3thehacker.gearslip.car.NightMode
+import app.seb3thehacker.gearslip.car.SavedPlaces
 import app.seb3thehacker.gearslip.car.Units
+import app.seb3thehacker.gearslip.host.CarAppCatalog
+import app.seb3thehacker.gearslip.host.CustomCarApps
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-/** The car's setting groups, each opening its own screen from the phone's home screen. */
-enum class CarGroup(@param:StringRes val title: Int) {
+/** The car's settings on the phone's home screen, grouped by what they affect. */
+enum class CarGroup(@StringRes val title: Int) {
     APPS(R.string.crumb_apps),
     SCREEN(R.string.car_group_screen),
-    NAV_BAR(R.string.car_group_nav_bar),
     SOUND(R.string.car_group_sound),
     PLACES(R.string.places_title),
     WARNINGS(R.string.car_group_warnings),
@@ -78,128 +73,56 @@ enum class CarGroup(@param:StringRes val title: Int) {
 }
 
 @Composable
-private fun sizeChoices() = listOf(1f to stringResource(R.string.choice_size_normal), 1.25f to stringResource(R.string.choice_size_large), 1.5f to stringResource(R.string.choice_size_xlarge))
-
-/** Marks the menu's Custom entry, which opens [CustomDensityDialog] instead of choosing. */
-private const val DENSITY_CUSTOM = -1
-
-/** The presets, a typed-in value when that's what's set, and Custom to type one. */
-@Composable
-private fun densityChoices(current: Int): List<Pair<Int, String>> {
-    val values = CarSettings.DENSITIES.let { if (current != CarSettings.DENSITY_FROM_CAR && current !in it) (it + current).sorted() else it }
-    return listOf(CarSettings.DENSITY_FROM_CAR to stringResource(R.string.choice_density_car)) +
-        values.map { it to stringResource(R.string.choice_density_dpi, it) } +
-        (DENSITY_CUSTOM to stringResource(R.string.choice_density_custom))
-}
-
-/** Types in any density in [CarSettings.CUSTOM_DENSITIES] (issue #82). */
-@Composable
-private fun CustomDensityDialog(current: Int, onDismiss: () -> Unit, onSave: (Int) -> Unit) {
-    var text by remember { mutableStateOf(current.takeIf { it != CarSettings.DENSITY_FROM_CAR }?.toString().orEmpty()) }
-    val value = text.toIntOrNull()?.takeIf { it in CarSettings.CUSTOM_DENSITIES }
-    val range = CarSettings.CUSTOM_DENSITIES
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.density_custom_title)) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text(stringResource(R.string.density_custom_note, range.first, range.last))
-                OutlinedTextField(
-                    text, { text = it.filter(Char::isDigit).take(3) },
-                    label = { Text(stringResource(R.string.density_custom_label)) },
-                    singleLine = true,
-                    isError = text.isNotEmpty() && value == null,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                )
-            }
-        },
-        confirmButton = { TextButton(onClick = { value?.let(onSave) }, enabled = value != null) { Text(stringResource(R.string.save)) } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
-    )
-}
-@Composable
-private fun themeChoices() = listOf(AppTheme.PHONE to stringResource(R.string.choice_theme_phone), AppTheme.LIGHT to stringResource(R.string.choice_theme_light), AppTheme.DARK to stringResource(R.string.choice_theme_dark))
-@Composable
-private fun darkChoices() = listOf(
-    DarkStyle.BLACK to stringResource(R.string.choice_dark_black),
-    DarkStyle.BLACK_COLOUR to stringResource(R.string.choice_dark_black_colour),
-    DarkStyle.DEEP_COLOUR to stringResource(R.string.choice_dark_deep_colour),
-    DarkStyle.GREY to stringResource(R.string.choice_dark_grey),
+private fun nightChoices() = listOf(
+    NightMode.AUTO to stringResource(R.string.choice_auto),
+    NightMode.DAY to stringResource(R.string.choice_night_day),
+    NightMode.NIGHT to stringResource(R.string.choice_night_night),
 )
+
 @Composable
-private fun nightChoices() = listOf(NightMode.AUTO to stringResource(R.string.choice_auto), NightMode.DAY to stringResource(R.string.choice_night_day), NightMode.NIGHT to stringResource(R.string.choice_night_night))
-@Composable
-private fun unitChoices() = listOf(Units.AUTO to stringResource(R.string.choice_auto), Units.IMPERIAL to stringResource(R.string.choice_units_imperial), Units.METRIC to stringResource(R.string.choice_units_metric))
-@Composable
-private fun navBarChoices() = listOf(
-    NavBarMode.SHOW to stringResource(R.string.choice_nav_show),
-    NavBarMode.HIDE_NAVIGATING to stringResource(R.string.choice_nav_hide_navigating),
-    NavBarMode.HIDE to stringResource(R.string.choice_nav_hide),
+private fun unitChoices() = listOf(
+    Units.AUTO to stringResource(R.string.choice_auto),
+    Units.IMPERIAL to stringResource(R.string.choice_units_imperial),
+    Units.METRIC to stringResource(R.string.choice_units_metric),
 )
+
 @Composable
 private fun musicSourceChoices() = listOf(
-    MusicSource.AUTO to "Automatic",
-    MusicSource.VIVI to "Vivi Music",
-    MusicSource.ECHO to "Echo Music",
-    MusicSource.LAST_USED to "Last used",
+    CarSettings.MusicSource.AUTO to "Automatic",
+    CarSettings.MusicSource.VIVI to "Vivi Music",
+    CarSettings.MusicSource.ECHO to "Echo Music",
+    CarSettings.MusicSource.LAST_USED to "Last used",
 )
-@Composable
-private fun openChoices(): List<Pair<String, String>> {
-    val context = LocalContext.current
-    val apps = remember(context) { CarApps.shown(LauncherMode.enabled(context), LauncherMode.canCall(context)) }
-    return listOf(CarSettings.HOME to stringResource(R.string.choice_open_home)) + apps.map { it.id to stringResource(it.labelRes) }
-}
 
-/**
- * The car's settings on the phone's home screen: one card per group with a summary of where it
- * stands, each opening a screen of its own. They are the same settings as the car's own Settings
- * app, so a change in either shows in both; the phone is just the easier place when parked.
- */
+/** Session settings that survive a rewrite of the head-unit UI, shown from the phone when parked. */
 @Composable
 internal fun HomeCarSettings(onOpen: (CarGroup) -> Unit, modifier: Modifier = Modifier) {
-    val scale by CarSettings.scale.collectAsState()
-    val open by CarSettings.openOnConnect.collectAsState()
-    val navBar by CarSettings.navBarMode.collectAsState()
+    val context = LocalContext.current
     val pipeAudio by CarSettings.pipeAudio.collectAsState()
     val bluetoothWarning by CarSettings.bluetoothWarning.collectAsState()
     val locationWarning by CarSettings.locationWarning.collectAsState()
-    val playerLeft by CarSettings.playerLeft.collectAsState()
-    val theme by CarSettings.appTheme.collectAsState()
     val experimental by CarSettings.experimentalFeaturesEnabled.collectAsState()
-    val musicUi by CarSettings.musicUi.collectAsState()
+    val places = remember { SavedPlaces.all(context) }
 
-    val opens = openChoices()
-    val sizes = sizeChoices()
-    val themes = themeChoices()
-    val navBars = navBarChoices()
-    val context = androidx.compose.ui.platform.LocalContext.current
-    fun str(id: Int) = context.getString(id)
-    // Read again each time Home shows, so a place saved a moment ago is listed.
-    val places = androidx.compose.runtime.remember { app.seb3thehacker.gearslip.car.SavedPlaces.all(context) }
+    @Composable
     fun summary(group: CarGroup) = when (group) {
-        CarGroup.APPS -> listOf(str(R.string.car_apps_sub))
-        CarGroup.SCREEN -> listOf(opens.label(open), sizes.label(scale), themes.label(theme))
-        CarGroup.NAV_BAR -> listOf(navBars.label(navBar), str(if (playerLeft) R.string.summary_player_left else R.string.summary_player_right))
-        CarGroup.SOUND -> listOf(
-            str(if (pipeAudio) R.string.summary_usb_audio else R.string.summary_bluetooth_audio),
-            str(if (musicUi == MusicUi.STITCH) R.string.choice_music_stitch else R.string.choice_music_classic),
-        )
+        CarGroup.APPS -> stringResource(R.string.car_apps_sub)
+        CarGroup.SCREEN -> stringResource(R.string.car_map_day_night)
+        CarGroup.SOUND -> stringResource(if (pipeAudio) R.string.summary_usb_audio else R.string.summary_bluetooth_audio)
         CarGroup.PLACES -> places.mapIndexedNotNull { i, place ->
             when {
                 place.address.isBlank() -> null
-                i == app.seb3thehacker.gearslip.car.SavedPlaces.HOME -> str(R.string.places_home)
-                i == app.seb3thehacker.gearslip.car.SavedPlaces.WORK -> str(R.string.places_work)
-                else -> place.label.ifBlank { context.getString(R.string.places_other, i - app.seb3thehacker.gearslip.car.SavedPlaces.WORK) }
+                i == SavedPlaces.HOME -> stringResource(R.string.places_home)
+                i == SavedPlaces.WORK -> stringResource(R.string.places_work)
+                else -> place.label.ifBlank { stringResource(R.string.places_other, i - SavedPlaces.WORK) }
             }
-        }.ifEmpty { listOf(str(R.string.places_sub)) }
+        }.ifEmpty { listOf(stringResource(R.string.places_sub)) }.joinToString(" · ")
         CarGroup.WARNINGS -> listOf(
-            str(if (bluetoothWarning && !pipeAudio) R.string.summary_bluetooth_on else R.string.summary_bluetooth_off),
-            str(if (locationWarning) R.string.summary_location_on else R.string.summary_location_off),
-        )
-        CarGroup.MORE -> listOf(
-            str(if (experimental) R.string.summary_experimental_shown else R.string.summary_experimental_hidden),
-        )
-    }.filter { it.isNotEmpty() }.joinToString(" · ")
+            stringResource(if (bluetoothWarning && !pipeAudio) R.string.summary_bluetooth_on else R.string.summary_bluetooth_off),
+            stringResource(if (locationWarning) R.string.summary_location_on else R.string.summary_location_off),
+        ).joinToString(" · ")
+        CarGroup.MORE -> stringResource(if (experimental) R.string.summary_experimental_shown else R.string.summary_experimental_hidden)
+    }
 
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text(
@@ -224,16 +147,16 @@ internal fun HomeCarSettings(onOpen: (CarGroup) -> Unit, modifier: Modifier = Mo
 }
 
 /** One group of the car's settings, on a screen of its own. */
-@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun CarGroupScreen(group: CarGroup, onBack: () -> Unit) {
-    androidx.compose.material3.Scaffold(
+    Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
-            androidx.compose.material3.TopAppBar(
+            TopAppBar(
                 title = { Text(stringResource(group.title)) },
                 navigationIcon = {
-                    androidx.compose.material3.IconButton(onClick = onBack) {
+                    IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.back))
                     }
                 },
@@ -242,105 +165,36 @@ internal fun CarGroupScreen(group: CarGroup, onBack: () -> Unit) {
     ) { padding ->
         Column(
             Modifier.fillMaxSize().padding(padding).padding(horizontal = 24.dp)
-                .verticalScroll(androidx.compose.foundation.rememberScrollState()),
+                .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             SettingsCard { GroupRows(group) }
-            // The bigger pieces each keep their own card: the car screen's size and the preview's,
-            // and how music reaches the car.
-            when (group) {
-                CarGroup.SCREEN -> CarScreenSection()
-                CarGroup.SOUND -> CarAudioSection()
-                else -> Unit
-            }
-            // The car's own Settings has no list of apps.
-            if (group != CarGroup.APPS) Text(
-                stringResource(R.string.car_group_same),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = 16.dp),
-            )
+            if (group == CarGroup.SOUND) CarAudioSection()
         }
     }
 }
 
 @Composable
 private fun GroupRows(group: CarGroup) {
-    val scale by CarSettings.scale.collectAsState()
-    val density by CarSettings.carDensity.collectAsState()
-    val open by CarSettings.openOnConnect.collectAsState()
     val night by CarSettings.nightMode.collectAsState()
     val units by CarSettings.units.collectAsState()
-    val navBar by CarSettings.navBarMode.collectAsState()
     val pipeAudio by CarSettings.pipeAudio.collectAsState()
     val bluetoothWarning by CarSettings.bluetoothWarning.collectAsState()
     val locationWarning by CarSettings.locationWarning.collectAsState()
-    val autoplay by CarSettings.autoplay.collectAsState()
-    val musicSource by CarSettings.musicSource.collectAsState()
-    val musicUi by CarSettings.musicUi.collectAsState()
-    val playerTitle by CarSettings.playerTitle.collectAsState()
-    val playerLeft by CarSettings.playerLeft.collectAsState()
-    val navMic by CarSettings.navMic.collectAsState()
-    val theme by CarSettings.appTheme.collectAsState()
-    val darkStyle by CarSettings.darkStyle.collectAsState()
     val experimental by CarSettings.experimentalFeaturesEnabled.collectAsState()
     val carSensors by CarSettings.carSensorsEnabled.collectAsState()
     val adaptiveVideo by CarSettings.adaptiveVideoEnabled.collectAsState()
     val clusterVideo by CarSettings.clusterVideoEnabled.collectAsState()
+    val musicSource by CarSettings.musicSource.collectAsState()
 
     when (group) {
         CarGroup.APPS -> AppRows()
         CarGroup.SCREEN -> {
-            Choice(stringResource(R.string.car_open_on_connect), openChoices(), open, CarSettings::setOpenOnConnect)
-            SettingsDivider()
-            Choice(stringResource(R.string.car_size), sizeChoices(), scale, CarSettings::setScale)
-            SettingsDivider()
-            var customDensity by remember { mutableStateOf(false) }
-            Choice(
-                stringResource(R.string.car_density), densityChoices(density), density,
-                { if (it == DENSITY_CUSTOM) customDensity = true else CarSettings.setCarDensity(it) },
-                note = stringResource(R.string.car_density_note),
-            )
-            if (customDensity) {
-                CustomDensityDialog(density, onDismiss = { customDensity = false }) {
-                    CarSettings.setCarDensity(it)
-                    customDensity = false
-                }
-            }
-            SettingsDivider()
-            Choice(stringResource(R.string.car_app_theme), themeChoices(), theme, CarSettings::setAppTheme)
-            SettingsDivider()
-            if (theme != AppTheme.LIGHT) {
-                Choice(stringResource(R.string.car_dark_mode), darkChoices(), darkStyle, CarSettings::setDarkStyle)
-                SettingsDivider()
-            }
             Choice(stringResource(R.string.car_map_day_night), nightChoices(), night, CarSettings::setNightMode)
             SettingsDivider()
             Choice(stringResource(R.string.car_units), unitChoices(), units, CarSettings::setUnits)
         }
-        CarGroup.NAV_BAR -> {
-            Choice(stringResource(R.string.car_nav_bar), navBarChoices(), navBar, CarSettings::setNavBarMode)
-            SettingsDivider()
-            Toggle(stringResource(R.string.car_nav_mic), navMic, CarSettings::setNavMic, note = stringResource(R.string.car_nav_mic_note))
-            SettingsDivider()
-            Choice(stringResource(R.string.car_player_nav_bar), listOf(false to stringResource(R.string.car_skip_buttons), true to stringResource(R.string.car_song_title)), playerTitle, CarSettings::setPlayerTitle)
-            SettingsDivider()
-            Choice(stringResource(R.string.car_player_beside_map), listOf(false to stringResource(R.string.car_right), true to stringResource(R.string.car_left)), playerLeft, CarSettings::setPlayerLeft, note = stringResource(R.string.car_player_beside_map_note))
-            SettingsDivider()
-            Toggle(stringResource(R.string.car_autoplay), autoplay, CarSettings::setAutoplay, note = stringResource(R.string.car_autoplay_note))
-        }
-        CarGroup.SOUND -> {
-            Choice("MUSIC SOURCE", musicSourceChoices(), musicSource, CarSettings::setMusicSource)
-            Choice(
-                stringResource(R.string.music_layout_title),
-                listOf(
-                    MusicUi.CLASSIC to stringResource(R.string.choice_music_classic),
-                    MusicUi.STITCH to stringResource(R.string.choice_music_stitch),
-                ),
-                musicUi,
-                CarSettings::setMusicUi,
-            )
-        }
+        CarGroup.SOUND -> Choice("MUSIC SOURCE", musicSourceChoices(), musicSource, CarSettings::setMusicSource)
         CarGroup.PLACES -> Unit
         CarGroup.WARNINGS -> {
             if (!pipeAudio) {
@@ -353,77 +207,75 @@ private fun GroupRows(group: CarGroup) {
             Toggle(stringResource(R.string.car_experimental), experimental, CarSettings::setExperimentalFeaturesEnabled, note = stringResource(R.string.car_experimental_note))
             if (experimental) {
                 SettingsDivider()
-                Toggle(
-                    stringResource(R.string.car_vehicle_data),
-                    carSensors,
-                    CarSettings::setCarSensorsEnabled,
-                    note = stringResource(R.string.car_vehicle_data_note),
-                )
+                Toggle(stringResource(R.string.car_vehicle_data), carSensors, CarSettings::setCarSensorsEnabled, note = stringResource(R.string.car_vehicle_data_note))
                 SettingsDivider()
-                Toggle(
-                    stringResource(R.string.car_adaptive_video),
-                    adaptiveVideo,
-                    CarSettings::setAdaptiveVideoEnabled,
-                    note = stringResource(R.string.car_adaptive_video_note),
-                )
+                Toggle(stringResource(R.string.car_adaptive_video), adaptiveVideo, CarSettings::setAdaptiveVideoEnabled, note = stringResource(R.string.car_adaptive_video_note))
                 SettingsDivider()
-                Toggle(
-                    stringResource(R.string.car_cluster_video),
-                    clusterVideo,
-                    CarSettings::setClusterVideoEnabled,
-                    note = stringResource(R.string.car_cluster_video_note),
-                )
+                Toggle(stringResource(R.string.car_cluster_video), clusterVideo, CarSettings::setClusterVideoEnabled, note = stringResource(R.string.car_cluster_video_note))
             }
         }
     }
 }
 
-/** One row per tile the installed apps put in the car's drawer, ticked while it shows there. */
+/** One row per installed car app, ticked while it is offered to the car. */
 @Composable
 private fun AppRows() {
-    val context = androidx.compose.ui.platform.LocalContext.current
-    val apps by LauncherCache.state.collectAsState()
+    val context = LocalContext.current
+    val apps by produceState<List<app.seb3thehacker.gearslip.host.TemplateApp>?>(null) {
+        value = withContext(Dispatchers.IO) { CarAppCatalog.installed(context) }
+    }
     val hidden by CarSettings.hiddenApps.collectAsState()
-    // Its own scan, so an app installed since the last drive is here to choose.
-    LaunchedEffect(Unit) { withContext(Dispatchers.IO) { LauncherCache.load(context, force = true) } }
-    val rows = apps.orEmpty().mapNotNull { entry -> entry.componentId?.let { it to entry } }
-    if (rows.isEmpty()) SettingsRow(stringResource(if (apps == null) R.string.car_apps_finding else R.string.car_apps_none))
-    val custom by app.seb3thehacker.gearslip.host.CustomCarApps.state.collectAsState()
-    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    val customState by CustomCarApps.state.collectAsState()
+    // Reading the settings once here too, so a package added by hand has a row even before
+    // anything else in the app has asked for the custom list.
+    val custom = customState ?: CustomCarApps.all(context)
     var adding by remember { mutableStateOf(false) }
-    fun rescan() = scope.launch { withContext(Dispatchers.IO) { LauncherCache.load(context, force = true) } }
-    rows.forEachIndexed { i, (id, entry) ->
+
+    val rows = apps.orEmpty().map { it.component.flattenToString() to it }
+    val listed = rows.map { (_, app) -> app.component.packageName }.toSet()
+    // An added app without a CarAppService can't be discovered, but it still has to be
+    // visible here: otherwise it can be added and never seen, checked or removed again.
+    val addedOnly = custom.filter { it.packageName !in listed }.map { entry ->
+        val label = runCatching {
+            context.packageManager.getApplicationInfo(entry.packageName, 0)
+                .loadLabel(context.packageManager).toString()
+        }.getOrDefault(entry.packageName)
+        entry to label
+    }
+    if (rows.isEmpty() && addedOnly.isEmpty()) {
+        SettingsRow(stringResource(if (apps == null) R.string.car_apps_finding else R.string.car_apps_none))
+    }
+    rows.forEachIndexed { i, (id, app) ->
         val shown = id !in hidden
-        val pkg = entry.media?.component?.packageName ?: entry.messaging?.packageName
-        val added = pkg != null && custom.orEmpty().any { it.packageName == pkg }
+        val pkg = app.component.packageName
+        val added = custom.any { it.packageName == pkg }
         if (i > 0) SettingsDivider()
         SettingsRow(
-            entry.label,
+            app.label,
             Modifier.toggleable(shown, role = Role.Checkbox) { CarSettings.setAppHidden(id, !it) },
             subtitle = if (added) stringResource(R.string.car_apps_added_by_you) else null,
-            leading = {
-                Box {
-                    entry.icon?.let { Image(it, contentDescription = null, Modifier.size(40.dp)) }
-                    // The same red X the car shows, so it's clear why the app starts unticked.
-                    if (app.seb3thehacker.gearslip.car.markedBroken(context, entry)) {
-                        app.seb3thehacker.gearslip.car.BrokenBadge(
-                            16.dp,
-                            Modifier.align(Alignment.BottomEnd)
-                                .offset(x = 4.dp, y = 3.dp)
-                                .border(2.dp, MaterialTheme.colorScheme.surfaceContainerHigh, androidx.compose.foundation.shape.CircleShape),
-                        )
-                    }
-                }
-            },
             trailing = {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    if (added && pkg != null) {
-                        androidx.compose.material3.IconButton({
-                            app.seb3thehacker.gearslip.host.CustomCarApps.remove(context, pkg)
-                            rescan()
-                        }) { Icon(androidx.compose.material.icons.Icons.Filled.Delete, stringResource(R.string.car_apps_remove, entry.label)) }
+                    if (added) {
+                        IconButton({ CustomCarApps.remove(context, pkg) }) {
+                            Icon(Icons.Filled.Delete, stringResource(R.string.car_apps_remove, app.label))
+                        }
                     }
                     Checkbox(checked = shown, onCheckedChange = null)
+                }
+            },
+        )
+    }
+    addedOnly.forEachIndexed { i, (entry, label) ->
+        if (rows.isNotEmpty() || i > 0) SettingsDivider()
+        SettingsRow(
+            label,
+            subtitle = stringResource(
+                if (entry.kind == CustomCarApps.Kind.MEDIA) R.string.car_apps_as_media else R.string.car_apps_as_messaging,
+            ),
+            trailing = {
+                IconButton({ CustomCarApps.remove(context, entry.packageName) }) {
+                    Icon(Icons.Filled.Delete, stringResource(R.string.car_apps_remove, label))
                 }
             },
         )
@@ -434,38 +286,37 @@ private fun AppRows() {
             stringResource(R.string.car_apps_add),
             Modifier.clickable { adding = true },
             subtitle = stringResource(R.string.car_apps_add_note),
-            icon = androidx.compose.material.icons.Icons.Filled.Add,
+            icon = Icons.Filled.Add,
         )
     }
     if (adding) {
         AddCarAppDialog(
-            listed = rows.mapNotNull { (_, e) -> e.media?.component?.packageName ?: e.messaging?.packageName ?: e.template?.component?.packageName }.toSet(),
+            listed = listed + custom.map { it.packageName },
             onDismiss = { adding = false },
         ) { pkg, kind ->
-            app.seb3thehacker.gearslip.host.CustomCarApps.add(context, pkg, kind)
+            CustomCarApps.add(context, pkg, kind)
             adding = false
-            rescan()
         }
     }
 }
 
 /**
- * Picks an installed app the car doesn't list, then whether it's music or messages (issue #84).
- * Music plays through Gearslip's player from the app's playback session; messages show from its
- * notifications. Neither needs the app to support Android Auto.
+ * Picks an installed app the car doesn't list, then whether it is music or messages (issue #84).
  */
 @Composable
 private fun AddCarAppDialog(
     listed: Set<String>,
     onDismiss: () -> Unit,
-    onAdd: (String, app.seb3thehacker.gearslip.host.CustomCarApps.Kind) -> Unit,
+    onAdd: (String, CustomCarApps.Kind) -> Unit,
 ) {
-    val context = androidx.compose.ui.platform.LocalContext.current
+    val context = LocalContext.current
     var picked by remember { mutableStateOf<Pair<String, String>?>(null) }
-    val candidates by androidx.compose.runtime.produceState<List<Triple<String, String, androidx.compose.ui.graphics.ImageBitmap?>>?>(null) {
+    val candidates by produceState<List<Triple<String, String, androidx.compose.ui.graphics.ImageBitmap?>>?>(null) {
         value = withContext(Dispatchers.IO) {
             val manager = context.packageManager
-            manager.queryIntentActivities(android.content.Intent(android.content.Intent.ACTION_MAIN).addCategory(android.content.Intent.CATEGORY_LAUNCHER), 0)
+            manager.queryIntentActivities(
+                android.content.Intent(android.content.Intent.ACTION_MAIN).addCategory(android.content.Intent.CATEGORY_LAUNCHER), 0,
+            )
                 .map { it.activityInfo.packageName to it.loadLabel(manager).toString() }
                 .distinctBy { it.first }
                 .filter { (pkg, _) -> pkg != context.packageName && pkg !in listed }
@@ -476,7 +327,7 @@ private fun AddCarAppDialog(
                 }
         }
     }
-    androidx.compose.material3.AlertDialog(
+    AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(picked?.let { stringResource(R.string.car_apps_add_as, it.second) } ?: stringResource(R.string.car_apps_add_pick)) },
         text = {
@@ -486,7 +337,7 @@ private fun AddCarAppDialog(
                 if (list == null) {
                     Text(stringResource(R.string.car_apps_finding))
                 } else {
-                    androidx.compose.foundation.lazy.LazyColumn(Modifier.heightIn(max = 420.dp)) {
+                    LazyColumn(Modifier.heightIn(max = 420.dp)) {
                         items(list.size) { i ->
                             val (pkg, label, icon) = list[i]
                             Row(
@@ -503,17 +354,17 @@ private fun AddCarAppDialog(
             } else {
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     KindRow(stringResource(R.string.car_apps_as_media), stringResource(R.string.car_apps_as_media_note)) {
-                        onAdd(choice.first, app.seb3thehacker.gearslip.host.CustomCarApps.Kind.MEDIA)
+                        onAdd(choice.first, CustomCarApps.Kind.MEDIA)
                     }
                     KindRow(stringResource(R.string.car_apps_as_messaging), stringResource(R.string.car_apps_as_messaging_note)) {
-                        onAdd(choice.first, app.seb3thehacker.gearslip.host.CustomCarApps.Kind.MESSAGING)
+                        onAdd(choice.first, CustomCarApps.Kind.MESSAGING)
                     }
                 }
             }
         },
         confirmButton = {},
         dismissButton = {
-            androidx.compose.material3.TextButton({ if (picked != null) picked = null else onDismiss() }) {
+            TextButton({ if (picked != null) picked = null else onDismiss() }) {
                 Text(stringResource(if (picked != null) R.string.back else R.string.cancel))
             }
         },
@@ -539,17 +390,13 @@ private fun <T> Choice(title: String, choices: List<Pair<T, String>>, selected: 
         Modifier.clickable { menu = true },
         subtitle = note,
         trailing = {
-            // The menu hangs from the value it changes, at the row's end.
             Box {
                 Text(choices.label(selected), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.primary)
                 DropdownMenu(menu, onDismissRequest = { menu = false }) {
                     choices.forEach { (value, label) ->
                         DropdownMenuItem(
                             text = { Text(label, fontWeight = if (value == selected) FontWeight.Bold else FontWeight.Normal) },
-                            onClick = {
-                                onSelect(value)
-                                menu = false
-                            },
+                            onClick = { onSelect(value); menu = false },
                         )
                     }
                 }
@@ -578,16 +425,16 @@ internal fun CarAudioSection() {
     ) {
         SettingsRow(
             stringResource(R.string.car_audio_bt),
-            Modifier.selectable(!usb, role = androidx.compose.ui.semantics.Role.RadioButton) { CarSettings.setPipeAudio(false) },
+            Modifier.selectable(!usb, role = Role.RadioButton) { CarSettings.setPipeAudio(false) },
             subtitle = stringResource(R.string.car_audio_bt_sub),
-            trailing = { androidx.compose.material3.RadioButton(selected = !usb, onClick = null) },
+            trailing = { RadioButton(selected = !usb, onClick = null) },
         )
         SettingsDivider()
         SettingsRow(
             stringResource(R.string.guide_audio_usb),
-            Modifier.selectable(usb, role = androidx.compose.ui.semantics.Role.RadioButton) { CarSettings.setPipeAudio(true) },
+            Modifier.selectable(usb, role = Role.RadioButton) { CarSettings.setPipeAudio(true) },
             subtitle = stringResource(R.string.car_audio_usb_sub),
-            trailing = { androidx.compose.material3.RadioButton(selected = usb, onClick = null) },
+            trailing = { RadioButton(selected = usb, onClick = null) },
         )
     }
 }

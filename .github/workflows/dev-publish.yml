@@ -45,6 +45,7 @@ jobs:
           key-alias: ${{ secrets.UPDATE_KEY_ALIAS }}
           key-password: ${{ secrets.UPDATE_KEY_PASSWORD }}
           channel: dev
+          gradle-encryption-key: ${{ secrets.GRADLE_ENCRYPTION_KEY }}
 
       - name: Name assets by commit
         env:
