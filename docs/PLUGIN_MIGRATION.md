@@ -138,8 +138,13 @@ and a docs update. Do not combine phases into one large PR.
 
 - Introduce a pure-Kotlin `surface/api` package of immutable models and command types.
 - Add a JVM architecture test that fails if a core package (`protocol`, `car`, `host`, `media`,
-  `call`, `notify`, `update`, `surface/api`) imports `androidx.compose`, `android.view`,
-  `android.widget` or a concrete renderer package. Keep it as a guard, not a one-off.
+  `call`, `notify`, `update`, `surface/api`) imports `androidx.compose.*`, `android.view.View`,
+  `android.view.ViewGroup`, `android.widget.*` or a concrete renderer package. Keep it as a guard,
+  not a one-off. Explicitly allow `android.view.Surface`: `host/CarAppConnection.kt:17` needs it for
+  the surface lease the target architecture retains, and it is not a UI hierarchy type. Keycodes
+  and bitmaps are deliberately out of scope here — `KeyEvent` and `Bitmap` imports stay until
+  Phase 1 (finding 8 and the state boundary inventory), so enabling that gate now would fail the
+  existing tree.
 - Extract `FakeContext`/`FakeSurface`/`FakeFrameSource` into shared test fixtures.
 - Remove the dead `maplibre` and `okhttp` dependencies.
 - **Exit:** the architecture test fails on a deliberately bad import; all existing tests pass.
