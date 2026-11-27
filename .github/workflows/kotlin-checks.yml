@@ -23,10 +23,11 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
-      # The encryption key is what lets setup-gradle read back configuration-cache entries;
-      # without it CI only ever writes them. Fork PRs have no secret and simply miss the cache.
+      # No cache-encryption-key here. PR code controls this build script, and that key authenticates
+      # the cache restored by the signing/publishing workflows — it must never reach a PR runner.
+      # PRs read the unencrypted cache but do not write to it.
       - uses: gradle/actions/setup-gradle@v4
         with:
-          cache-encryption-key: ${{ secrets.GRADLE_ENCRYPTION_KEY }}
+          cache-read-only: ${{ github.event_name == 'pull_request' }}
       - name: Run unit tests and assemble debug APK
         run: ./gradlew :gearslip:testDebugUnitTest :gearslip:assembleDebug --no-daemon
