@@ -6,6 +6,12 @@ on:
       - main
   workflow_dispatch:
 
+# Only the newest main commit should become the prerelease. Without this, a burst of merges can
+# run several git-describe/action-gh-release steps against the same tag name.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-latest

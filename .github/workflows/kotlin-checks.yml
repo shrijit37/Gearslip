@@ -5,6 +5,12 @@ on:
   push:
     branches: [main]
 
+# A new push to the same ref makes the previous run's result obsolete; let it go so runners and
+# Gradle cache entries are spent on the current commit instead.
+concurrency:
+  group: kotlin-checks-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   kotlin-checks:
     name: kotlin-checks
@@ -17,6 +23,10 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
+      # The encryption key is what lets setup-gradle read back configuration-cache entries;
+      # without it CI only ever writes them. Fork PRs have no secret and simply miss the cache.
       - uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-encryption-key: ${{ secrets.GRADLE_ENCRYPTION_KEY }}
       - name: Run unit tests and assemble debug APK
         run: ./gradlew :gearslip:testDebugUnitTest :gearslip:assembleDebug --no-daemon

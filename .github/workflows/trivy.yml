@@ -6,9 +6,15 @@ on:
   push:
     branches: [main, experimental]
   pull_request:
+  # The filesystem scan is cheap, so it stays the scheduled safety net for newly published
+  # advisories on otherwise unchanged code (CodeQL only runs when code or a PR changes).
   schedule:
     - cron: "0 9 * * 1"
   workflow_dispatch:
+
+concurrency:
+  group: security-scan-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   trivy:
