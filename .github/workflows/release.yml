@@ -6,11 +6,11 @@ on:
       - main
   workflow_dispatch:
 
-# Only the newest main commit should become the prerelease. Without this, a burst of merges can
-# run several git-describe/action-gh-release steps against the same tag name.
+# Release assets are shared state, like the dev feed: serialize publishes so a newer main push
+# cannot cancel an in-flight upload after the prerelease was created but before all APKs landed.
 concurrency:
   group: release-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   build:

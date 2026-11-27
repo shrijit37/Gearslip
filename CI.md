@@ -51,9 +51,10 @@ Workflows should not spend a runner on work that is duplicated or that can be do
 
 - A PR branch is published to the dev feed by its **push** event only; the old `pull_request`
   trigger built and uploaded the same commit a second time. The ref is the branch name.
-- `kotlin-checks`, `codeql`, `security-scan` and the main `release` build cancel superseded runs
-  on the same ref (`cancel-in-progress: true`). `dev-publish` stays serialized and never cancels:
-  its asset upload, manifest write and prune must not interleave or prune against a stale read.
+- `kotlin-checks`, `codeql` and `security-scan` cancel superseded runs on the same ref
+  (`cancel-in-progress: true`). The publishing workflows stay serialized instead: `dev-publish`'s
+  asset upload, manifest write and prune, and `release`'s prerelease asset upload, must finish
+  rather than be interrupted mid-publish.
 - CodeQL runs on pushes and PRs only. A weekly scan of unchanged Kotlin added a full rebuild with
   no new source facts; Trivy's cheap filesystem scan keeps the `0 9 * * 1` slot as the scheduled
   safety net for newly published advisories.
@@ -65,7 +66,7 @@ Both channels install over the same package with the same signing key, so third-
 | Channel | Source | Published by |
 |---|---|---|
 | Stable | Non-prerelease releases from hand-written `v*` tags | `promote.yml`, on a tag push |
-| Dev | One branch head at a time | `dev-publish.yml`, on a branch push |
+| Dev | Up to 30 newest branch heads | `dev-publish.yml`, on a branch push |
 
 - `promote.yml` requires the four signing secrets; a stable release without them could not replace an installed Gearslip.
 - `dev-publish.yml` builds the selected ref and uploads per-ABI APKs to the `dev-builds` prerelease, then writes `manifest.json` on the `dev-feed` branch. The manifest pins a commit and a SHA-256 per asset; the app refuses bytes whose digest doesn't match. Release assets are pruned to those still named by the manifest, so every ref in the feed has a downloadable APK.
