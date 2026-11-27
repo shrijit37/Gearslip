@@ -1,7 +1,2 @@
 # Default owner for all files.
 * @shrijit37
-
-# Safety-critical update logic, release tooling and CI need explicit ownership.
-/gearslip/src/main/java/app/seb3thehacker/gearslip/update/ @shrijit37
-/.github/workflows/ @shrijit37
-/CI.md @shrijit37
