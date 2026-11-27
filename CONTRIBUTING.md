@@ -42,10 +42,10 @@ the real commit identity.
 
 ## Pull requests
 
-Check recent history before you branch: feature work currently lands on `main`, while
-`experimental` has been receiving dependency bumps. Base your branch on the branch your change
-belongs to, and open your pull request against it. Head-unit UI work should follow the plug-in
-contract in [docs/HEADUNIT_SURFACES.md](docs/HEADUNIT_SURFACES.md) and the design target in
+Base feature and UI pull requests on `main`, which is where feature work currently lands. Only
+open a pull request against `experimental` when the change is a dependency bump that belongs there;
+confirm against recent history first. Head-unit UI work should follow the plug-in contract in
+[docs/HEADUNIT_SURFACES.md](docs/HEADUNIT_SURFACES.md) and the design target in
 [docs/PLUGIN_ARCHITECTURE.md](docs/PLUGIN_ARCHITECTURE.md).
 
 - Keep each pull request to one change, and explain the problem it solves.
