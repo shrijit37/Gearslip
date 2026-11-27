@@ -42,8 +42,11 @@ the real commit identity.
 
 ## Pull requests
 
-Work happens on the `experimental` branch, which merges into `main` at each release. Base your
-branch on `experimental`, and open your pull request against it.
+Check recent history before you branch: feature work currently lands on `main`, while
+`experimental` has been receiving dependency bumps. Base your branch on the branch your change
+belongs to, and open your pull request against it. Head-unit UI work should follow the plug-in
+contract in [docs/HEADUNIT_SURFACES.md](docs/HEADUNIT_SURFACES.md) and the design target in
+[docs/PLUGIN_ARCHITECTURE.md](docs/PLUGIN_ARCHITECTURE.md).
 
 - Keep each pull request to one change, and explain the problem it solves.
 - Say how you tested it: which car or head unit, which phone, and which apps.
