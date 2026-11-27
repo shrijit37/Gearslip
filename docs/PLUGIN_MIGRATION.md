@@ -11,13 +11,13 @@
 | --- | --- |
 | Plug-in contract | `gearslip/src/main/java/app/seb3thehacker/gearslip/surface/HeadunitSurface.kt:28` — `id`, three capabilities, `attach/detach/onFocus/onTouch/onKey/onRotate` |
 | State exposed | `surface/SurfaceContext.kt:16-34` — six read-only flows: session, frame, insets, night, carData, vehicle |
-| Frame production | `surface/FrameSource.kt:25-37` (H.264 bytes into core-owned `FrameOutput`); one implementation, `PlaceholderFrameSource.kt:19`, which feeds YUV straight into `MediaCodec` |
+| Frame production | `surface/FrameSource.kt:25-37` (H.264 bytes into core-owned `FrameOutput`); one production implementation, `PlaceholderFrameSource.kt:19`, which feeds YUV straight into `MediaCodec`; tests add `FakeFrameSource` at `surface/SurfacePluginTest.kt:21` |
 | Registry | `surface/HeadunitSurfaces.kt:12-31` — one volatile global slot, factory or instance, `install`/`clear` |
 | Runner wiring | `GearslipRunner.kt:1221-1242, 1325-1331` attaches/starts a source, routes input by capability, releases on stop and EOF |
 | App wiring | `GearslipActivity.kt:28,355,401` creates a surface from the registry but **never installs one** |
 | Hosted car apps | `host/CarAppConnection.kt` binds templated apps and lends surfaces through `attachSurface()` at `:507`; the method currently has no caller |
 | Session state | Process-wide `object`s: `SessionStatus`, `CarEnvironment`, `CarServices`, `CarKeys`, and internal `CarAlerts`/`CarToasts` flows |
-| Tests | 21 pure-JVM files; `surface/SurfacePluginTest.kt:73-176` has six plug-in tests; no instrumentation tests exist |
+| Tests | 21 pure-JVM files; `surface/SurfacePluginTest.kt:73-176` has seven plug-in tests, including a focused natural-EOF teardown case; no instrumentation tests exist |
 | Modules | One Gradle module (`:gearslip`); Compose, car-app library, MapLibre and OkHttp are all declared together |
 
 ## Findings
@@ -49,8 +49,9 @@
    by `FrameSources.choose` without a guard, and `requestSyncFrame`/`applyBitRate` at `:1104`,
    `:1344`, `:1603` and `:1642-1658` can also propagate. An exception from a WebView bridge or a
    renderer can reach the `run()` catch-all at `:213-217`, be reported as `"transport failed"` and
-   tear down the session. `FrameOutput` is implemented once, at `:1209`, so nothing else stands
-   between the plug-in and the transport. A plug-in must never be able to end a drive.
+   tear down the session. The only `FrameOutput` implementation is the anonymous object at `:1209`
+   (no test fake implements it), so nothing else stands between the plug-in and the transport. A
+   plug-in must never be able to end a drive.
 
 5. **Session state is process-global, not session-scoped.** `object SessionStatus`,
    `object CarEnvironment`, `object CarServices`, `object CarKeys`, `object CarData`,
@@ -77,15 +78,18 @@
 
 9. **Isolation is not build-enforced.** Everything is in one module; `gearslip/build.gradle.kts:239-244`
    declares Compose alongside protocol dependencies, so core code could import a View today and only
-   a human review would catch it. `maplibre` and `okhttp` (`:252, :254`) are unused; `androidTest`
-   dependencies (`:256-259`) have no source set. Bitmap work also sits in core helpers —
+   a human review would catch it. `maplibre` and `okhttp` (`:252, :254`) are unused — no `com.maplibre`
+   or `okhttp3` imports exist in `gearslip/src` — and the comments at `:251` and `:253` that assign
+   them live purposes are stale. `androidTest` dependencies (`:256-259`) also have no source set;
+   the comment at `:256-257` is stale. Bitmap work also sits in core helpers —
    `host/CarModels.kt:76` keeps a global `LruCache<String, Bitmap>` and `:85` returns a `Bitmap` — so
    pure screen models need rasterization moved into the renderer.
 
 10. **Test coverage has holes at exactly the migration seam.** `SurfacePluginTest` covers selection,
-    basic routing and detach, but not the factory install path, `onFocus`, `requestSyncFrame`/
-    `applyBitRate` forwarding, attach-under-stop, a throwing plug-in, or a plug-in swapped
-    mid-session. `UpdateCheckerTest` does not cover generation bumps or queued installs.
+    basic routing, explicit detach and natural-EOF detach (`:142-147`), but not the factory install
+    path, `onFocus`, `requestSyncFrame`/`applyBitRate` forwarding, attach-under-stop, a throwing
+    plug-in, or a plug-in swapped mid-session. `UpdateCheckerTest` does not cover generation bumps
+    or queued installs.
 
 11. **Docs and comments were stale about rendering.** [BUILDING_APPS.md](BUILDING_APPS.md#drawing-a-map)
     described a virtual display and chrome overlays that no longer exist, said Gearslip renders
@@ -94,7 +98,7 @@
     `main`; it previously directed work to `experimental`. Those sections are corrected here.
     Remaining drift: `host/CarAppConnection.kt`
     comments at `:499-502`, `:539-551`, `:589-591`, `:622-626` and `:753-761`; the build-script
-    comments at `gearslip/build.gradle.kts:177,185`; empty car-UI headings in
+    comments at `gearslip/build.gradle.kts:177,185,251,253,256-257`; empty car-UI headings in
     `res/values/strings.xml:294-395`; duplicate session text at `:408-432`; unused `<queries>` for
     recognition and TTS services in `AndroidManifest.xml:121-128`.
 

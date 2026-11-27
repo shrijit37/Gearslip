@@ -66,7 +66,7 @@ command API.
 keep state that outlives its session. Callbacks arrive off the main thread; a UI implementation
 dispatches to its own main thread.
 
-These rules are a architectural contract, not yet a build-enforced one. [PLUGIN_MIGRATION.md](PLUGIN_MIGRATION.md)
+These rules are an architectural contract, not yet a build-enforced one. [PLUGIN_MIGRATION.md](PLUGIN_MIGRATION.md)
 proposes a JVM architecture test to enforce the import boundary.
 
 ## Contract pieces
