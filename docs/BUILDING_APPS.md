@@ -10,9 +10,10 @@ state but has no renderer installed, so it draws no car UI yet.
 | [Messaging apps](#messaging-apps) | An app whose notifications opted in to Android Auto. | Hosted today; not drawn |
 | [Gearslip apps](#gearslip-apps) | A native Gearslip screen, described over binder. | Specified here; not yet implemented |
 
-Write a templated app when your app fits the Car App Library's templates, because it runs today
-and it also runs on Android Auto. Write a media app when you ship audio. Write a Gearslip app
-when you want a screen the Car App Library cannot describe.
+Write a templated app when your app fits the Car App Library's templates: Gearslip hosts it today
+and a renderer will draw it once installed, and it also runs on Android Auto. Write a media app
+when you ship audio. Write a Gearslip app when you want a screen the Car App Library cannot
+describe.
 
 Gearslip's package name is `app.seb3thehacker.gearslip`. It declares
 `android.car.permission.TEMPLATE_RENDERER`.
@@ -162,8 +163,9 @@ area as the region that never gets covered. The covered area depends on the temp
 Turn chrome and map buttons float over the visible area, as they do in Android Auto, when the
 attached renderer draws them.
 
-Your app receives four gestures, never raw touches: `onClick`, `onScroll`, `onFling` and
-`onScale`. Coordinates are surface pixels. Scroll distances follow `GestureDetector`'s
+Once a renderer that supports app surfaces is installed, your app receives four gestures, never
+raw touches: `onClick`, `onScroll`, `onFling` and `onScale`. With no renderer installed today, it
+receives none of them. Coordinates are surface pixels. Scroll distances follow `GestureDetector`'s
 convention, which reports the previous position minus the current one.
 
 ### Car hardware
