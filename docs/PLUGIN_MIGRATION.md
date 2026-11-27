@@ -151,8 +151,8 @@ and a docs update. Do not combine phases into one large PR.
   not a one-off. Explicitly allow `android.view.Surface`: `host/CarAppConnection.kt:17` needs it for
   the surface lease the target architecture retains, and it is not a UI hierarchy type. Keycodes
   and bitmaps are deliberately out of scope here — `KeyEvent` and `Bitmap` imports stay until
-  Phase 1 (finding 8 and the state boundary inventory), so enabling that gate now would fail the
-  existing tree.
+  Phase 1 (finding 8 and the state boundary inventory); a gate that also banned them would fail
+  the existing tree.
 - Extract `FakeContext`/`FakeSurface`/`FakeFrameSource` into shared test fixtures.
 - Remove the dead `maplibre` and `okhttp` dependencies.
 - **Exit:** the architecture test fails on a deliberately bad import; all existing tests pass.
@@ -163,8 +163,9 @@ and a docs update. Do not combine phases into one large PR.
   sensors, hosted-app templates and status, alerts, toasts, catalog, surface leases, and settings.
   Use immutable models; move `Bitmap`/`Drawable` conversion out of `host/CarModels.kt:76-109` into a
   renderer adapter, and replace `KeyEvent` constants in core with plain key codes.
-- Move every owner in the inventory above into a session scope, exposing read-only snapshots. Prune
-  unread flows and dead state (finding 13) instead of publishing it. Core keeps alert timeouts and
+- Move every owner in the inventory above except `UpdateChecker`, `WirelessLink` and
+  `PermissionActivity` into a session scope, exposing read-only snapshots. Prune unread flows and
+  dead state (finding 13) instead of publishing it. Core keeps alert timeouts and
   transport-affecting rules so a headless session still answers apps.
 - Add JVM tests for template/snapshot mapping, state immutability across a session boundary, and
   absence of cross-session state leakage.
