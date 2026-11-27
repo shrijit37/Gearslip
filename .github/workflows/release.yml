@@ -16,7 +16,7 @@ jobs:
           # The build names itself after the newest tag, which a shallow clone doesn't have.
           fetch-depth: 0
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: "21"
