@@ -1,12 +1,13 @@
 # Building apps for Gearslip
 
-Gearslip renders four kinds of app on a car screen. This page specifies all four.
+Gearslip hosts four kinds of app. This page specifies all four. The headless build carries their
+state but has no renderer installed, so it draws no car UI yet.
 
 | Kind | What it is | Status |
 | --- | --- | --- |
-| [Templated apps](#templated-apps) | An AndroidX Car App Library app. Gearslip hosts it. | Works today |
-| [Media apps](#media-apps) | A `MediaBrowserService` that opted in to Android Auto. | Works today |
-| [Messaging apps](#messaging-apps) | An app whose notifications opted in to Android Auto. | Works today |
+| [Templated apps](#templated-apps) | An AndroidX Car App Library app. Gearslip hosts it. | Hosted today; not drawn |
+| [Media apps](#media-apps) | A `MediaBrowserService` that opted in to Android Auto. | Hosted today; not drawn |
+| [Messaging apps](#messaging-apps) | An app whose notifications opted in to Android Auto. | Hosted today; not drawn |
 | [Gearslip apps](#gearslip-apps) | A native Gearslip screen, described over binder. | Specified here; not yet implemented |
 
 Write a templated app when your app fits the Car App Library's templates, because it runs today
@@ -105,22 +106,23 @@ Gearslip offers car API level 8. It negotiates down to
 `min(8, yourLatestCarAppApiLevel)` and refuses the app when that falls below your
 `minCarAppApiLevel`, rather than drawing it wrongly. Keep your minimum at 8 or below.
 
-### Templates Gearslip renders
+### Templates Gearslip accepts
 
-Gearslip renders all sixteen templates. Ten describe their own content:
+Gearslip receives and classifies all sixteen templates. Ten describe their own content:
 
 `ListTemplate`, `GridTemplate`, `PaneTemplate`, `MessageTemplate`, `LongMessageTemplate`,
 `SearchTemplate`, `SignInTemplate`, `TabTemplate`, `SectionedItemTemplate`,
 `MediaPlaybackTemplate`.
 
-Six draw a map underneath and take chrome over the top:
+Six describe a map underneath with chrome over the top; drawing them is the renderer's job:
 
 `NavigationTemplate`, `MapWithContentTemplate`, `MapTemplate`, `PlaceListNavigationTemplate`,
 `RoutePreviewNavigationTemplate`, `PlaceListMapTemplate`.
 
 `SearchTemplate` and `SignInTemplate` need text. A renderer that supports text input supplies its
 own car keyboard and feeds the result back through the template's listener. No renderer is installed
-in the headless build, so text templates cannot be driven yet; see
+in the headless build, so Gearslip accepts and classifies the sixteen templates listed above but
+draws none of them, and text templates cannot be driven yet; see
 [PLUGIN_MIGRATION.md](PLUGIN_MIGRATION.md).
 
 ### Content limits
@@ -187,7 +189,8 @@ orientation, and always sets `UI_MODE_TYPE_CAR`.
 
 A head-unit renderer draws the media UI — browsing, artwork, lyrics and transport controls — from
 the media-session state Gearslip carries. No renderer is installed in the headless build, so
-Gearslip reads media sessions and metadata but draws no media screen.
+Gearslip reads media sessions, notifications and metadata but draws no media screen. The car-facing
+behaviour described in the sections below applies only once a renderer is installed.
 
 Gearslip lists a media app when it exports a `MediaBrowserService` **and** declares the Android
 Auto meta-data. Both halves are required, because the service alone also appears on phone-only
@@ -216,8 +219,10 @@ can start it playing on connection.
 
 ## Messaging apps
 
-Gearslip shows conversations from the notifications your app already posts, as Android Auto
-does. Your app needs no car screen of its own.
+No renderer is installed in the headless build, so Gearslip reads messaging notifications but
+shows no conversations, pop-up cards, Mark read button or dashboard. Once a renderer is installed,
+Gearslip shows conversations from the notifications your app already posts, as Android Auto does.
+Your app needs no car screen of its own.
 
 Gearslip lists a messaging app when its car descriptor declares notifications:
 
@@ -229,35 +234,36 @@ Gearslip lists a messaging app when its car descriptor declares notifications:
 ```
 
 Reference it from the same `com.google.android.gms.car.application` meta-data that a media app
-uses. Opening your tile on the car screen shows your recent conversations.
+uses. With a renderer installed, opening your tile on the car screen shows your recent
+conversations.
 
 ### Posting messages
 
 Post each conversation as a `MessagingStyle` notification. Gearslip reads the conversation
-title, each message's sender and text, and whether the chat is a group, and shows the last eight
-messages. Leave the sender empty on the phone owner's own messages; Gearslip treats a message
-with no sender as one the driver sent.
+title, each message's sender and text, and whether the chat is a group, and keeps the last eight
+messages for a renderer to show. Leave the sender empty on the phone owner's own messages; Gearslip
+treats a message with no sender as one the driver sent.
 
 Gearslip reads new messages aloud and lets the driver reply by voice or with a quick reply. For
 that, attach two actions, either to the notification or to its `WearableExtender`:
 
 - **Reply:** an action carrying a `RemoteInput` that allows free-form input. Gearslip fills it
   with the driver's reply and fires the action's intent.
-- **Mark as read:** an action with `SEMANTIC_ACTION_MARK_AS_READ`. Gearslip shows a Mark read
+- **Mark as read:** an action with `SEMANTIC_ACTION_MARK_AS_READ`. A renderer shows a Mark read
   button when you provide it.
 
 ### Which notifications interrupt the driver
 
-Gearslip pops up a card for a conversation, a notification with a reply action, or a
-notification in the `msg`, `missed_call`, `alarm`, `reminder` or `event` category. A channel
-below default importance never pops up. Every other notification waits quietly on the
-dashboard.
+With a renderer installed, Gearslip pops up a card for a conversation, a notification with a
+reply action, or a notification in the `msg`, `missed_call`, `alarm`, `reminder` or `event`
+category. A channel below default importance never pops up. Every other notification waits quietly
+on the dashboard.
 
 Gearslip drops these altogether:
 
 - ongoing notifications and group summaries;
 - the `transport`, `progress`, `service`, `sys` and `navigation` categories; and
-- media notifications, because the player already shows them.
+- media notifications, which are handled as media-session state rather than conversation cards.
 
 ---
 
