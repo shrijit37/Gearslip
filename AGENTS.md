@@ -54,4 +54,7 @@ reconnect to a car. Treat the following as invariants.
 - After pushing a PR, poll its check runs until every one is complete, then read the reviews and
   inline comments again. Triage every finding: fix valid ones, push, and repeat. Stop only when all
   checks are green and a fresh review brings no new findings. Treat a transient runner/dependency
-  failure by re-running the job, not by changing code.
+  failure by re-running the job, not by changing code. Verify each finding against the full PR diff
+  (`gh pr view <n> --json files` / the files API), not the last commit: reviewers sometimes see a
+  stale or partial diff. Dismiss false positives with `@mira reject` on the inline comment rather
+  than changing code that is already correct.
