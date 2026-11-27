@@ -16,8 +16,8 @@ only a part number, so the log can't name your car for you.
 
 ## Building
 
-You need Android Studio, or the Android SDK with JDK 21. Gradle downloads the NDK, CMake,
-and the speech library on the first build.
+You need Android Studio, or the Android SDK with JDK 21. Gradle downloads the NDK and CMake
+on the first build.
 
 ```
 ./gradlew :gearslip:assembleDebug
@@ -26,9 +26,9 @@ and the speech library on the first build.
 Gradle writes one APK per ABI to `build/` (`Gearslip-arm64-v8a-debug.apk`,
 `Gearslip-armeabi-v7a-debug.apk`, `Gearslip-x86-debug.apk`, `Gearslip-x86_64-debug.apk`), plus
 `Gearslip-universal-debug.apk` with every ABI. Install the one matching your phone, or the
-universal one. It installs as Gearslip Dev, next to the regular app.
+universal one. Stable and dev builds share one application id, so it replaces the regular app when the release signing key is configured; otherwise the local debug key may require an uninstall first.
 
-For a quick local iteration, add `-PnoR8` to skip shrinking; published builds are always shrunk.
+For a quick local iteration, add `-PnoR8` to skip shrinking and `-PgearslipVersionName=dev` to skip the git version read; published builds are always shrunk.
 `-PgearslipAbi=arm64-v8a` builds just that ABI and no universal APK, which also cuts packaging
 time. Add `-PpseudoLocales` when you want the stretched and right-to-left inspection locales.
 Build and configuration caching are on by default, so a repeat build reuses both task outputs

@@ -1,8 +1,6 @@
 package app.seb3thehacker.gearslip
 
-import android.view.Surface
 import app.seb3thehacker.gearslip.protocol.InputProtocol
-import app.seb3thehacker.gearslip.protocol.TouchPoint
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.IOException
