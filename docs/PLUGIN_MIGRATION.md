@@ -24,14 +24,15 @@
 
 1. **No renderer is installed.** `GearslipActivity` imports `HeadunitSurfaces` and calls `create()`
    at lines 355 and 401, but never calls `install(...)`. Every real session runs the placeholder.
-   [HEADUNIT_SURFACES.md](HEADUNIT_SURFACES.md#L55) describes an install call that is not in the code.
+   [HEADUNIT_SURFACES.md](HEADUNIT_SURFACES.md#registering-a-surface) describes an install call that
+   is not in the code.
 
 2. **Hosted navigation apps have nowhere to draw.** `CarAppConnection.attachSurface()` (`:507`) is
    dead code; its comment still describes a `SurfaceView` in a `Presentation` that was deleted.
    `surfaceEpoch` (`:537`) expects a "stage" that no longer exists. `detachSurface`,
    `replaceDeadSurface`, `reportAreas` and the gesture methods at `:622-642` have no callers either.
    The host's `template` (`:87`), `trip` (`:689`), `panMode`/`atRoot` (`:462-473`) and `surfaceEpoch`
-   have no external reader: templates arrive and are dropped. [BUILDING_APPS.md](BUILDING_APPS.md#L139)
+   have no external reader: templates arrive and are dropped. [BUILDING_APPS.md](BUILDING_APPS.md#drawing-a-map)
    promises a lent surface that nobody supplies.
 
 3. **`SurfaceContext` is not a complete view model.** It exposes six flows, implemented inline in
@@ -86,11 +87,12 @@
     `applyBitRate` forwarding, attach-under-stop, a throwing plug-in, or a plug-in swapped
     mid-session. `UpdateCheckerTest` does not cover generation bumps or queued installs.
 
-11. **Docs and comments were stale about rendering.** [BUILDING_APPS.md](BUILDING_APPS.md#L139)
+11. **Docs and comments were stale about rendering.** [BUILDING_APPS.md](BUILDING_APPS.md#drawing-a-map)
     described a virtual display and chrome overlays that no longer exist, said Gearslip renders
     third-party screens in Compose, and claimed Gearslip draws its own keyboard and media UI.
-    [CONTRIBUTING.md](../CONTRIBUTING.md#L45) directed work to `experimental` while feature PRs now
-    land on `main`. Those sections are corrected here. Remaining drift: `host/CarAppConnection.kt`
+    [CONTRIBUTING.md](../CONTRIBUTING.md#pull-requests) now reflects that feature PRs land on
+    `main`; it previously directed work to `experimental`. Those sections are corrected here.
+    Remaining drift: `host/CarAppConnection.kt`
     comments at `:499-502`, `:539-551`, `:589-591`, `:622-626` and `:753-761`; the build-script
     comments at `gearslip/build.gradle.kts:177,185`; empty car-UI headings in
     `res/values/strings.xml:294-395`; duplicate session text at `:408-432`; unused `<queries>` for
@@ -115,8 +117,10 @@
 
 ## State boundary inventory
 
-The renderer must see session state, but it must not own it. Every owner below is currently a
-process-global object; each needs a session-scoped replacement before a plug-in can be trusted.
+The renderer must see session state, but it must not own it. The state owners below are currently
+process-global; each needs a session-scoped replacement before a plug-in can be trusted. The last
+row is an explicit exception: `UpdateChecker`, `WirelessLink` and `PermissionActivity` stay in the
+app. Only their callbacks and generation need tightening, not a session-scoped replacement.
 
 | Current owner | State it holds | Destination |
 | --- | --- | --- |
@@ -205,7 +209,7 @@ and a docs update. Do not combine phases into one large PR.
 
 ### Phase 5 — External plug-ins and a WebView reference renderer
 
-- Implement the binder "Gearslip apps" specification in [BUILDING_APPS.md](BUILDING_APPS.md#L268) as
+- Implement the binder "Gearslip apps" specification in [BUILDING_APPS.md](BUILDING_APPS.md#gearslip-apps) as
   an external surface provider, with version negotiation, a permission/signing allowlist and the
   same command contract. Keep untrusted plug-ins out of the transport path.
 - Build the HTML/CSS/JS renderer as the reference plug-in: JSON state events in, JSON commands out;
