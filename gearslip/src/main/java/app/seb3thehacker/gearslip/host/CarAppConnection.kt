@@ -692,6 +692,8 @@ class CarAppConnection(private val context: Context, private val session: Sessio
 
     private val navigationHost = object : INavigationHost.Stub() {
         override fun getInterfaceVersion(): Int = INavigationHost.VERSION
+        // New in car-app 1.9.0-alpha: Gearslip has no voice-assistant capability exchange.
+        override fun setVoiceAssistantCapabilities(capabilities: Bundleable?) = Unit
         override fun navigationStarted() {
             GearslipLog.i("host: navigation started")
             navigating = true
