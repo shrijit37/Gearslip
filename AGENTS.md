@@ -34,13 +34,20 @@ reconnect to a car. Treat the following as invariants.
 
 - Unit tests for selection/decision logic belong in `gearslip/src/test/.../update/` and must stay
   pure JVM tests (no Android stubs).
-- Before submitting updater or workflow changes, run both checks in **one** invocation:
-  `./gradlew :gearslip:testDebugUnitTest :gearslip:assembleDebug --no-daemon`. Same coverage as
-  two separate runs, but the build script is evaluated once instead of twice.
-- While iterating, use the daemon and skip work a final check still needs:
+- **Only build or test when the change can affect the build.** Run the full check — both tasks in
+  **one** invocation, `./gradlew :gearslip:testDebugUnitTest :gearslip:assembleDebug --no-daemon` —
+  when Kotlin sources, resources, `build.gradle.kts`, `gradle.properties`, the Gradle wrapper or
+  dependency versions changed, or when submitting an updater code change. Same coverage as two
+  separate runs, but the build script is evaluated once instead of twice.
+- **Do not build for changes that cannot affect it.** Workflow YAML, `CI.md`, docs and reviewer
+  config do not compile. Validate those with a YAML parse, `git diff --check` and a read of the
+  changed logic. A full rebuild there spends minutes proving nothing, and the result says nothing
+  about whether the workflow is correct.
+- While iterating on a change that *does* affect the build, use the daemon and skip work a final
+  check still needs:
   `./gradlew :gearslip:testDebugUnitTest -PnoR8 -PgearslipAbi=arm64-v8a -PgearslipVersionName=local -PgearslipBuildSha=local -PgearslipBuildSeq=$(( $(date +%s) / 60 ))`.
   Pinning the version name skips `git describe`, pinning the SHA skips `git rev-parse`, and pinning
   the sequence skips the clock, so repeat builds can reuse the configuration cache. Those pinned
-  values are for local iteration only — never publish a build made with them; always finish with
-  the full command above.
+  values are for local iteration only — never publish a build made with them. Finish with the full
+  command above when the change affects the build; skip it entirely when it does not.
 - Release-process behaviour is documented in `CI.md`; keep it in sync with workflow changes.
