@@ -201,10 +201,11 @@ and a docs update. Do not combine phases into one large PR.
 - Keep `applicationId`, shared signing, monotonic `versionCode`, ABI splits and APK naming in the
   app module, per [AGENTS.md](../AGENTS.md). Move the `-keep class androidx.car.app.**` rule with
   the car-app host module.
-- Delete the dead dependencies and build/manifest residue listed in findings 9 and 11: `maplibre`,
-  `okhttp`, unused `androidTest` declarations, the MapLibre packaging and Nothing-UI build comments,
-  unused recognition/TTS `<queries>`, empty car-UI string headings and the orphaned log-share
-  `FileProvider` if no screen uses it.
+- Remove only the residue left behind by the Phase 0 dependency removal (findings 9 and 11): stale
+  build-script comments for `maplibre`/`okhttp`, their MapLibre packaging config, unused `androidTest`
+  declarations, the Nothing-UI comments, unused recognition/TTS `<queries>`, empty car-UI string
+  headings and the orphaned log-share `FileProvider` if no screen uses it. Phase 0 owns removing the
+  dependencies themselves; this phase does not repeat that step.
 - Update Gradle task paths in `.github/actions/gearslip-build/action.yml`,
   `.github/workflows/kotlin-checks.yml`, `.github/workflows/codeql.yml`, and the commands in
   `AGENTS.md`, `CI.md`, `README.md` and `CONTRIBUTING.md`.
