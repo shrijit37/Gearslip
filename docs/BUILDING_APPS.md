@@ -1,17 +1,19 @@
 # Building apps for Gearslip
 
-Gearslip renders four kinds of app on a car screen. This page specifies all four.
+Gearslip hosts four kinds of app. This page specifies all four. The headless build carries their
+state but has no renderer installed, so it draws no car UI yet.
 
 | Kind | What it is | Status |
 | --- | --- | --- |
-| [Templated apps](#templated-apps) | An AndroidX Car App Library app. Gearslip hosts it. | Works today |
-| [Media apps](#media-apps) | A `MediaBrowserService` that opted in to Android Auto. | Works today |
-| [Messaging apps](#messaging-apps) | An app whose notifications opted in to Android Auto. | Works today |
+| [Templated apps](#templated-apps) | An AndroidX Car App Library app. Gearslip hosts it. | Hosted today; not drawn |
+| [Media apps](#media-apps) | A `MediaBrowserService` that opted in to Android Auto. | Hosted today; not drawn |
+| [Messaging apps](#messaging-apps) | An app whose notifications opted in to Android Auto. | Hosted today; not drawn |
 | [Gearslip apps](#gearslip-apps) | A native Gearslip screen, described over binder. | Specified here; not yet implemented |
 
-Write a templated app when your app fits the Car App Library's templates, because it runs today
-and it also runs on Android Auto. Write a media app when you ship audio. Write a Gearslip app
-when you want a screen the Car App Library cannot describe.
+Write a templated app when your app fits the Car App Library's templates: Gearslip hosts it today
+and a renderer will draw it once installed, and it also runs on Android Auto. Write a media app
+when you ship audio. Write a Gearslip app when you want a screen the Car App Library cannot
+describe.
 
 Gearslip's package name is `app.seb3thehacker.gearslip`. It declares
 `android.car.permission.TEMPLATE_RENDERER`.
@@ -105,22 +107,24 @@ Gearslip offers car API level 8. It negotiates down to
 `min(8, yourLatestCarAppApiLevel)` and refuses the app when that falls below your
 `minCarAppApiLevel`, rather than drawing it wrongly. Keep your minimum at 8 or below.
 
-### Templates Gearslip renders
+### Templates Gearslip accepts
 
-Gearslip renders all sixteen templates. Ten describe their own content:
+Gearslip receives and classifies all sixteen templates. Ten describe their own content:
 
 `ListTemplate`, `GridTemplate`, `PaneTemplate`, `MessageTemplate`, `LongMessageTemplate`,
 `SearchTemplate`, `SignInTemplate`, `TabTemplate`, `SectionedItemTemplate`,
 `MediaPlaybackTemplate`.
 
-Six draw a map underneath and take chrome over the top:
+Six describe a map underneath with chrome over the top; drawing them is the renderer's job:
 
 `NavigationTemplate`, `MapWithContentTemplate`, `MapTemplate`, `PlaceListNavigationTemplate`,
 `RoutePreviewNavigationTemplate`, `PlaceListMapTemplate`.
 
-`SearchTemplate` and `SignInTemplate` need text. A phone keyboard cannot appear on the car's
-virtual display, so Gearslip draws its own and feeds the result back through the template's
-listener.
+`SearchTemplate` and `SignInTemplate` need text. A renderer that supports text input supplies its
+own car keyboard and feeds the result back through the template's listener. No renderer is installed
+in the headless build, so Gearslip accepts and classifies the sixteen templates listed above but
+draws none of them, and text templates cannot be driven yet; see
+[PLUGIN_MIGRATION.md](PLUGIN_MIGRATION.md).
 
 ### Content limits
 
@@ -138,23 +142,30 @@ touching the screen.
 
 ### Drawing a map
 
-A navigation app draws its own pixels. Gearslip lends it a real `Surface` taken from a
-`SurfaceView` inside the car's virtual display, so your map reaches the head unit through the
-existing video pipe. Gearslip never reads those pixels back.
+A navigation app draws its own pixels. The host keeps a surface-lease API
+(`CarAppConnection.attachSurface()`), so a head-unit renderer can lend your map a `Surface` that
+reaches the car through the video pipe; Gearslip never reads those pixels back.
 
-Gearslip then reports which part of that surface the driver can see. Treat the visible area as
-the region safe for your own controls, and the stable area as the region that never gets
-covered. Gearslip reports the same area for both, and it depends on the template:
+That lease is **not wired in the headless build**: no renderer supplies a surface today, so an app
+that needs one cannot draw. The plan to supply the lease from the attached plug-in, rather than from
+a `SurfaceView` in a deleted virtual display, is in
+[PLUGIN_MIGRATION.md](PLUGIN_MIGRATION.md).
 
-| Template | What Gearslip covers |
+When a renderer that supports app surfaces is installed, it reports which part of that surface
+the driver can see. Treat the visible area as the region safe for your own controls, and the stable
+area as the region that never gets covered. The covered area depends on the template:
+
+| Template | What the renderer covers |
 | --- | --- |
 | `NavigationTemplate` | A strip along the bottom for the trip estimate |
 | `MapWithContentTemplate`, `MapTemplate`, and the place list and route preview templates | A content pane on the left |
 
-The turn card and map buttons float over the visible area, as they do in Android Auto.
+Turn chrome and map buttons float over the visible area, as they do in Android Auto, when the
+attached renderer draws them.
 
-Your app receives four gestures, never raw touches: `onClick`, `onScroll`, `onFling` and
-`onScale`. Coordinates are surface pixels. Scroll distances follow `GestureDetector`'s
+Once a renderer that supports app surfaces is installed, your app receives four gestures, never
+raw touches: `onClick`, `onScroll`, `onFling` and `onScale`. With no renderer installed today, it
+receives none of them. Coordinates are surface pixels. Scroll distances follow `GestureDetector`'s
 convention, which reports the previous position minus the current one.
 
 ### Car hardware
@@ -163,8 +174,9 @@ A phone knows nothing about a car's sensors, so Gearslip answers every car-hardw
 "unsupported". It answers rather than ignores: an app whose sensor manager waits for a reply
 hangs when the host stays silent. Design for a host that reports no vehicle data at all.
 
-Gearslip accepts the suggestions an app pushes and discards them, because no screen shows them
-yet. Your app will not fail for offering them.
+Gearslip accepts the suggestions an app pushes and discards them, because no renderer shows them
+yet. Your app will not fail for offering them; a plug-in surface that supports vehicle suggestions
+can render them later.
 
 ### Day and night
 
@@ -177,8 +189,10 @@ orientation, and always sets `UI_MODE_TYPE_CAR`.
 
 ## Media apps
 
-Gearslip draws the media UI itself: browsing, artwork, lyrics, transport controls and a
-now-playing pill in the nav bar. Your app supplies a browse tree and a media session.
+A head-unit renderer draws the media UI — browsing, artwork, lyrics and transport controls — from
+the media-session state Gearslip carries. No renderer is installed in the headless build, so
+Gearslip reads media sessions, notifications and metadata but draws no media screen. The car-facing
+behaviour described in the sections below applies only once a renderer is installed.
 
 Gearslip lists a media app when it exports a `MediaBrowserService` **and** declares the Android
 Auto meta-data. Both halves are required, because the service alone also appears on phone-only
@@ -207,8 +221,10 @@ can start it playing on connection.
 
 ## Messaging apps
 
-Gearslip shows conversations from the notifications your app already posts, as Android Auto
-does. Your app needs no car screen of its own.
+No renderer is installed in the headless build, so Gearslip reads messaging notifications but
+shows no conversations, pop-up cards, Mark read button or dashboard. Once a renderer is installed,
+Gearslip shows conversations from the notifications your app already posts, as Android Auto does.
+Your app needs no car screen of its own.
 
 Gearslip lists a messaging app when its car descriptor declares notifications:
 
@@ -220,35 +236,36 @@ Gearslip lists a messaging app when its car descriptor declares notifications:
 ```
 
 Reference it from the same `com.google.android.gms.car.application` meta-data that a media app
-uses. Opening your tile on the car screen shows your recent conversations.
+uses. With a renderer installed, opening your tile on the car screen shows your recent
+conversations.
 
 ### Posting messages
 
 Post each conversation as a `MessagingStyle` notification. Gearslip reads the conversation
-title, each message's sender and text, and whether the chat is a group, and shows the last eight
-messages. Leave the sender empty on the phone owner's own messages; Gearslip treats a message
-with no sender as one the driver sent.
+title, each message's sender and text, and whether the chat is a group, and keeps the last eight
+messages for a renderer to show. Leave the sender empty on the phone owner's own messages; Gearslip
+treats a message with no sender as one the driver sent.
 
 Gearslip reads new messages aloud and lets the driver reply by voice or with a quick reply. For
 that, attach two actions, either to the notification or to its `WearableExtender`:
 
 - **Reply:** an action carrying a `RemoteInput` that allows free-form input. Gearslip fills it
   with the driver's reply and fires the action's intent.
-- **Mark as read:** an action with `SEMANTIC_ACTION_MARK_AS_READ`. Gearslip shows a Mark read
+- **Mark as read:** an action with `SEMANTIC_ACTION_MARK_AS_READ`. A renderer shows a Mark read
   button when you provide it.
 
 ### Which notifications interrupt the driver
 
-Gearslip pops up a card for a conversation, a notification with a reply action, or a
-notification in the `msg`, `missed_call`, `alarm`, `reminder` or `event` category. A channel
-below default importance never pops up. Every other notification waits quietly on the
-dashboard.
+With a renderer installed, Gearslip pops up a card for a conversation, a notification with a
+reply action, or a notification in the `msg`, `missed_call`, `alarm`, `reminder` or `event`
+category. A channel below default importance never pops up. Every other notification waits quietly
+on the dashboard.
 
 Gearslip drops these altogether:
 
 - ongoing notifications and group summaries;
 - the `transport`, `progress`, `service`, `sys` and `navigation` categories; and
-- media notifications, because the player already shows them.
+- media notifications, which are handled as media-session state rather than conversation cards.
 
 ---
 
@@ -256,10 +273,14 @@ Gearslip drops these altogether:
 
 This section specifies protocol version 1. Gearslip does not yet implement it.
 
-A Gearslip app describes a screen and lets Gearslip render it in Compose, using the car's theme,
-the driver's chosen scale and the current day or night state. Your app draws nothing and receives
-no surface. Everything the driver sees comes from the model below, which means your screen
-matches the rest of the car UI and cannot be made unreadable.
+A Gearslip app describes a screen and lets the attached head-unit surface render it, using the
+frame geometry, insets and current day or night state. Your app draws nothing and receives no
+surface. Everything the driver sees comes from the model below, which lets the renderer keep a
+consistent look.
+
+This extension point is specified but not implemented, and the headless build has no renderer to
+draw these screens. The plan to connect it to the plug-in contract is in
+[PLUGIN_MIGRATION.md](PLUGIN_MIGRATION.md).
 
 Write a Gearslip app to reach the parts of the car UI the Car App Library does not cover. Write a
 templated app if you need to draw a map, because version 1 lends no surface.
@@ -456,10 +477,10 @@ screen. Ship audio through a media app instead of driving these.
 
 ### Text input
 
-A phone keyboard cannot appear on the car's virtual display, so Gearslip draws its own. Call
-`requestTextInput` with a field id, a prompt and any existing text. Gearslip opens the keyboard
-and calls `onTextInput` as the driver types, so treat each call as the current contents rather
-than a final answer.
+A renderer that supports text input supplies the car keyboard. Call `requestTextInput` with a
+field id, a prompt and any existing text; the renderer calls `onTextInput` as the driver types, so
+treat each call as the current contents rather than a final answer. With no renderer installed,
+text input is unavailable.
 
 ### What version 1 leaves out
 
@@ -501,5 +522,7 @@ The flag is a label. Gearslip finds and runs your app the same way with or witho
 
 - [README.md](../README.md) - what Gearslip is.
 - [CONTRIBUTING.md](../CONTRIBUTING.md) - how to build Gearslip and report bugs.
+- [PLUGIN_ARCHITECTURE.md](PLUGIN_ARCHITECTURE.md) - the UI-as-plug-in design target.
+- [PLUGIN_MIGRATION.md](PLUGIN_MIGRATION.md) - audit and phased migration plan.
 - [Android for Cars App Library](https://developer.android.com/training/cars/apps) - the
   reference for templated apps.

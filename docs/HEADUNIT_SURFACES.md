@@ -1,5 +1,10 @@
 # Head-unit surfaces
 
+> **Current contract.** No surface is installed in the shipped app today, so sessions use the
+> placeholder frame source. The gap between this contract and a full plug-in system is recorded in
+> [PLUGIN_MIGRATION.md](PLUGIN_MIGRATION.md); the design target is in
+> [PLUGIN_ARCHITECTURE.md](PLUGIN_ARCHITECTURE.md).
+
 Gearslip's Android Auto Protocol (AAP) core owns the car connection, the frame clock and input
 decoding. It does **not** own any pixels. A head-unit UI is a plug-in: implement
 `app.seb3thehacker.gearslip.surface.HeadunitSurface`, register it once in the phone app, and the
@@ -45,6 +50,19 @@ The factory is invoked for each session, so a surface instance never outlives th
 `HeadunitSurfaces.install(surface)` installs a pre-built instance instead, and
 `HeadunitSurfaces.clear()` restores the headless placeholder mode. No reflection or service
 loading is involved: adding a surface is a compile-time dependency plus one line of wiring.
+
+> **Current status:** `GearslipActivity` creates a surface with `HeadunitSurfaces.create(this)` but
+> does not call `install(...)`. Until a renderer is installed, every session runs in placeholder
+> mode, regardless of the wiring shown above.
+
+## Known gaps
+
+This contract is a first step, not a complete plug-in system. It has no version negotiation, no
+generation counter for a surface swapped mid-session, no failure isolation around plug-in callbacks,
+and no way for a renderer to see hosted-app templates, alerts, toasts, media or calls. It also has
+no pixel-based frame mode, so every renderer must produce H.264 itself, and no way to lend a
+`Surface` to a navigation app: `CarAppConnection.attachSurface()` currently has no caller. See
+[PLUGIN_MIGRATION.md](PLUGIN_MIGRATION.md) for the findings and the plan.
 
 ## Rules
 

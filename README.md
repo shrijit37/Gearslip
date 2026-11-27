@@ -37,6 +37,18 @@ never changes the protocol. See [docs/HEADUNIT_SURFACES.md](docs/HEADUNIT_SURFAC
 
 The phone app is still there for setup, certificates, logs, settings and updates.
 
+## Architecture and roadmap
+
+The head-unit UI is meant to be a plug-in, not part of the protocol core. The core owns the
+connection, the frame clock and input; a renderer implements a small contract and receives session
+state through read-only flows. That keeps UI work away from the safety-critical connection and
+updater, and lets a renderer be Compose, a canvas, a WebView, or another process.
+
+The contract that exists today is in [docs/HEADUNIT_SURFACES.md](docs/HEADUNIT_SURFACES.md). No
+renderer is installed in this build, so a session shows the placeholder test card. The design
+target is in [docs/PLUGIN_ARCHITECTURE.md](docs/PLUGIN_ARCHITECTURE.md), and the audit and phased
+migration plan are in [docs/PLUGIN_MIGRATION.md](docs/PLUGIN_MIGRATION.md).
+
 ## Install
 
 1. Install an APK from the [releases page](https://github.com/shrijit37/Gearslip/releases).
