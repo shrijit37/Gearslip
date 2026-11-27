@@ -154,8 +154,7 @@ class PlaceholderFrameSource(
                 }
                 frameIndex++
                 // Advance from the previous deadline, not from now, so an iteration that ran
-                // slightly long doesn't slow the stream. If it ran very long, resume from now
-                // rather than bursting to catch up.
+                // slightly long doesn't slow the stream; resume from now after a long one.
                 nextFrameAtNs = maxOf(nextFrameAtNs + frameIntervalNs, System.nanoTime())
             }
 
