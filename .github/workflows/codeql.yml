@@ -39,12 +39,14 @@ jobs:
 
       # Only the manual build needs a JDK and Gradle, and they share the publishing workflows'
       # setup action. No signing key: the scan needs compiled Kotlin, not an installable APK.
+      # PR code controls the build script, so PR runs get neither the cache-authentication key
+      # nor write access to the cache the publishing workflows restore.
       - if: matrix.build-mode == 'manual'
         uses: ./.github/actions/gearslip-build
         with:
           signing: none
           build: false
-          gradle-encryption-key: ${{ secrets.GRADLE_ENCRYPTION_KEY }}
+          gradle-encryption-key: ${{ github.event_name != 'pull_request' && secrets.GRADLE_ENCRYPTION_KEY || '' }}
 
       # CodeQL scans Kotlin as it compiles. R8 runs after that and produces no source facts, and
       # the scan needs no other ABIs, so skip both. Nothing from this build is published.

@@ -32,9 +32,10 @@ cached entry and give later builds the same version code.
 `gradle/actions/setup-gradle` restores the Gradle user home in every workflow, so task outputs
 Gradle has already produced are reused instead of rebuilt. Configuration-cache entries are saved
 and restored only when `GRADLE_ENCRYPTION_KEY` is passed to setup-gradle — by the shared action in
-the publishing workflows only, never in `kotlin-checks.yml`, whose PR-controlled build script must
-not hold the key that authenticates their cache; generate one with `openssl rand -base64 16`.
-Ephemeral runners still miss more often than not, so
+the publishing workflows and by non-PR CodeQL runs. PR runs (`kotlin-checks` and CodeQL) get no key
+and a read-only cache: PR-controlled build code must not hold the key that authenticates the cache
+those workflows restore. Generate one with `openssl rand -base64 16`. Ephemeral runners still miss
+more often than not, so
 on CI the cache is mainly regression prevention: a plugin or build-script change that breaks it
 fails CI before it reaches a developer's machine.
 

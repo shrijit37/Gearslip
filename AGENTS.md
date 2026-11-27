@@ -51,3 +51,7 @@ reconnect to a car. Treat the following as invariants.
   values are for local iteration only — never publish a build made with them. Finish with the full
   command above when the change affects the build; skip it entirely when it does not.
 - Release-process behaviour is documented in `CI.md`; keep it in sync with workflow changes.
+- After pushing a PR, poll its check runs until every one is complete, then read the reviews and
+  inline comments again. Triage every finding: fix valid ones, push, and repeat. Stop only when all
+  checks are green and a fresh review brings no new findings. Treat a transient runner/dependency
+  failure by re-running the job, not by changing code.
