@@ -6,10 +6,11 @@ on:
       - main
   workflow_dispatch:
 
-# Release assets are shared state, like the dev feed: serialize publishes so a newer main push
-# cannot cancel an in-flight upload after the prerelease was created but before all APKs landed.
+# Release assets are shared state: release.yml and promote.yml can both publish the same tag, so
+# they share one group. Never cancel an in-flight upload after the release was created but before
+# all APKs landed.
 concurrency:
-  group: release-${{ github.ref }}
+  group: release-assets
   cancel-in-progress: false
 
 jobs:
@@ -43,8 +44,17 @@ jobs:
           tag=$(git describe --tags --match 'v*' --exclude '*-g*' --abbrev=7 2>/dev/null \
             || echo "v0.0.0-$(git rev-parse --short=7 HEAD)")
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          # A hand-written v* tag on this commit belongs to promote.yml. Publishing a prerelease
+          # on that same tag could flip the stable release back to a prerelease, which the stable
+          # updater ignores, so leave the tag to the promotion workflow.
+          if git describe --tags --match 'v*' --exclude '*-g*' --exact-match HEAD >/dev/null 2>&1; then
+            echo "promoted=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "promoted=false" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Create tagged release
+        if: steps.version.outputs.promoted != 'true'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.version.outputs.tag }}

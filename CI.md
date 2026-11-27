@@ -52,12 +52,14 @@ Workflows should not spend a runner on work that is duplicated or that can be do
 - A PR branch is published to the dev feed by its **push** event only; the old `pull_request`
   trigger built and uploaded the same commit a second time. The ref is the branch name.
 - `kotlin-checks`, `codeql` and `security-scan` cancel superseded runs on the same ref
-  (`cancel-in-progress: true`). The publishing workflows stay serialized instead: `dev-publish`'s
-  asset upload, manifest write and prune, and `release`'s prerelease asset upload, must finish
-  rather than be interrupted mid-publish.
-- CodeQL runs on pushes and PRs only. A weekly scan of unchanged Kotlin added a full rebuild with
-  no new source facts; Trivy's cheap filesystem scan keeps the `0 9 * * 1` slot as the scheduled
-  safety net for newly published advisories.
+  (`cancel-in-progress: true`). Scheduled Trivy runs use a separate concurrency key so a Monday
+  push cannot cancel the weekly scan. `release.yml` and `promote.yml` share one serialized
+  `release-assets` group; `dev-publish` has its own serialized group. Asset uploads must finish
+  rather than be interrupted mid-publish. A main push on a hand-written `v*` tag leaves that tag
+  to `promote.yml`, so a prerelease cannot overwrite the stable release.
+- CodeQL no longer runs on a schedule; it still runs on pushes, PRs and manual dispatch. A weekly
+  scan of unchanged Kotlin added a full rebuild with no new source facts; Trivy's cheap filesystem
+  scan keeps the `0 9 * * 1` slot as the scheduled safety net for newly published advisories.
 
 ## Update channels
 

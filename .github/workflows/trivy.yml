@@ -13,7 +13,9 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: security-scan-${{ github.ref }}
+  # Scheduled runs use main's ref too; a separate key keeps a Monday push from cancelling the
+  # weekly safety net while push and PR runs still cancel their own superseded runs.
+  group: security-scan-${{ github.event_name == 'schedule' && 'schedule' || github.ref }}
   cancel-in-progress: true
 
 jobs:
