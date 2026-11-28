@@ -498,8 +498,9 @@ class CarAppConnection(private val context: Context, private val session: Sessio
      * Navigation apps render their own map rather than describing it as a template, so the host
      * has to give them somewhere to draw. In the target architecture the surface comes from the
      * attached renderer's pixel-mode lease, which composites it into the encoded frame; the old
-     * Presentation/VirtualDisplay car UI no longer exists. No renderer requests a lease yet, so
-     * this method currently has no caller.
+     * Presentation/VirtualDisplay car UI no longer exists. `GearslipRunner` calls it for a trusted
+     * renderer that declares `PROVIDES_PIXELS`; the encoder-backed pixel frame source for that
+     * renderer is still pending.
      *
      * Safe to call before the app has asked for a surface - whichever of the two arrives second
      * completes the handoff.

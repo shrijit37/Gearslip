@@ -39,6 +39,7 @@ import app.seb3thehacker.gearslip.surface.RedactedFlows
 import app.seb3thehacker.gearslip.surface.SurfaceCapability
 import app.seb3thehacker.gearslip.surface.SurfaceContext
 import app.seb3thehacker.gearslip.surface.SessionState
+import app.seb3thehacker.gearslip.surface.SurfaceDecisions
 import app.seb3thehacker.gearslip.surface.SurfaceGuard
 import app.seb3thehacker.gearslip.surface.VideoSpec
 import java.io.InputStream
@@ -171,16 +172,23 @@ class GearslipRunner(
             }
             // A failed stop must not drop the reference: leave it for a later best-effort retry.
             if (stopped) frameSource = null
-            pixelLease?.let { lease ->
-                surfaceGuard.call("detachSurface") {
+            val lease = pixelLease
+            val provider = pixelProvider
+            if (lease != null && provider != null) {
+                // Keep the references when either call fails so cleanup stays retryable.
+                val detached = surfaceGuard.callValue("detachSurface", false) {
                     CarServices.nav.detachSurface(lease.surface)
+                    true
                 }
-                pixelProvider?.let { provider ->
-                    surfaceGuard.call("releasePixelLease") { provider.release(lease) }
+                val released = surfaceGuard.callValue("releasePixelLease", false) {
+                    provider.release(lease)
+                    true
+                }
+                if (detached && released) {
+                    pixelLease = null
+                    pixelProvider = null
                 }
             }
-            pixelLease = null
-            pixelProvider = null
             sessionState?.stop()
             sessionState = null
             sessionCommands = CommandSink {}
@@ -1335,7 +1343,10 @@ class GearslipRunner(
             // lend that same Surface to a templated navigation app; with no pixel surface
             // installed this block is inert and the placeholder stays the frame source.
             val current = surface
-            if (current != null && SurfaceCapability.PROVIDES_PIXELS in current.capabilities) {
+            if (current != null && SurfaceDecisions.mayLendPixels(
+                    trustedSurface, registrationStale(), current.capabilities,
+                )
+            ) {
                 val provider = surfaceGuard.callValue("pixelLeaseProvider", null) {
                     current.pixelLeaseProvider()
                 }
