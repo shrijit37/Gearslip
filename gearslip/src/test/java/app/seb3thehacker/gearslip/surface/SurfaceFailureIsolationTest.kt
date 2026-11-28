@@ -27,6 +27,11 @@ private class ThrowingSurface : HeadunitSurface {
     override fun onRotate(delta: Int) = throw IllegalStateException("rotate")
 }
 
+private class ThrowingCapabilities : HeadunitSurface {
+    override val id = "bad-caps"
+    override val capabilities: Set<SurfaceCapability> get() = throw IllegalStateException("caps")
+}
+
 class SurfaceFailureIsolationTest {
 
     @Test fun `guard reports a plug-in exception and keeps going`() {
@@ -51,6 +56,19 @@ class SurfaceFailureIsolationTest {
 
         assertSame(fallback, source)
         assertEquals("attach", reported)
+    }
+
+    @Test fun `a throwing capabilities getter also falls back to the placeholder`() {
+        val fallback = FakeFrameSource()
+        var reported: String? = null
+        val guard = SurfaceGuard { where, _ -> reported = where }
+
+        val source = FrameSources.choose(
+            ThrowingCapabilities(), FakeContext(), VideoSpec(800, 480, 30, 160, false), fallback, guard,
+        )
+
+        assertSame(fallback, source)
+        assertEquals("capabilities", reported)
     }
 
     @Test fun `registry generation advances on every swap`() {

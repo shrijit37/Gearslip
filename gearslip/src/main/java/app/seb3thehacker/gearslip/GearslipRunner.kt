@@ -982,8 +982,10 @@ class GearslipRunner(
         // Time the next frame against this tap: see [reportTouchLatency].
         if (action == ACTION_DOWN || action == ACTION_UP) touchAtUs = System.nanoTime() / 1000
         surface?.let { current ->
-            if (SurfaceCapability.TOUCH in current.capabilities) {
-                surfaceGuard.call("onTouch") { current.onTouch(action, actionIndex, points) }
+            surfaceGuard.call("onTouch") {
+                if (SurfaceCapability.TOUCH in current.capabilities) {
+                    current.onTouch(action, actionIndex, points)
+                }
             }
         }
     }
@@ -1018,8 +1020,10 @@ class GearslipRunner(
             val longPress = Wire.varint(fields, 4) == 1L
             log.i("<- key event: keycode=$keycode ${if (down) "down" else "up"}${if (longPress) " long" else ""}")
             surface?.let { current ->
-                if (SurfaceCapability.KEYS in current.capabilities) {
-                    surfaceGuard.call("onKey") { current.onKey(keycode, down, longPress) }
+                surfaceGuard.call("onKey") {
+                    if (SurfaceCapability.KEYS in current.capabilities) {
+                        current.onKey(keycode, down, longPress)
+                    }
                 }
             }
             if (!CarKeys.onKey(keycode, down, longPress) && down) log.i("unhandled keycode=$keycode")
@@ -1038,8 +1042,8 @@ class GearslipRunner(
             val delta = Wire.varint(fields, 2)?.toInt() ?: continue
             log.i("<- relative event: keycode=$keycode delta=$delta")
             surface?.let { current ->
-                if (SurfaceCapability.KEYS in current.capabilities) {
-                    surfaceGuard.call("onRotate") { current.onRotate(delta) }
+                surfaceGuard.call("onRotate") {
+                    if (SurfaceCapability.KEYS in current.capabilities) current.onRotate(delta)
                 }
             }
         }

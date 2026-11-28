@@ -22,7 +22,15 @@ internal object FrameSources {
         } else {
             surface?.attach(context, spec)
         }
-        return if (provided != null && surface?.capabilities?.contains(SurfaceCapability.PROVIDES_FRAMES) == true) {
+        // capabilities is plug-in code as well; a throwing getter must not escape the guard.
+        val providesFrames = if (guard != null) {
+            guard.callValue("capabilities", false) {
+                surface?.capabilities?.contains(SurfaceCapability.PROVIDES_FRAMES) == true
+            }
+        } else {
+            surface?.capabilities?.contains(SurfaceCapability.PROVIDES_FRAMES) == true
+        }
+        return if (provided != null && providesFrames) {
             provided
         } else {
             fallback
