@@ -547,8 +547,8 @@ class CarAppConnection(private val context: Context, private val session: Sessio
      * Always a new surface, never the dead one lent again: an app that draws through its own
      * VirtualDisplay builds its new display on a re-lent surface before releasing the old one,
      * whose disconnect would otherwise take the shared BufferQueue connection with it and freeze
-     * the map. A renderer keys its lease on [surfaceEpoch] and lends the replacement as it comes
-     * up.
+     * the map. A future renderer will key its lease on [surfaceEpoch] and lend the replacement as
+     * it comes up; no renderer does so today.
      */
     fun replaceDeadSurface() {
         main.post {
