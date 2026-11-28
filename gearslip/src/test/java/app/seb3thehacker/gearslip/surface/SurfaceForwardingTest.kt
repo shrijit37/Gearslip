@@ -150,6 +150,24 @@ class SurfaceForwardingTest {
         }
     }
 
+    @Test fun `a stopped or detached session never attaches its surface`() {
+        fun invokeStart(stopped: Boolean, detached: Boolean): Int {
+            val surface = FakeSurface(setOf(SurfaceCapability.PROVIDES_FRAMES))
+            val runner = GearslipRunner(ByteArrayInputStream(byteArrayOf()), ByteArrayOutputStream(), ::identity, surface = surface)
+            try {
+                val cls = GearslipRunner::class.java
+                cls.getDeclaredField("stopped").apply { isAccessible = true; setBoolean(runner, stopped) }
+                cls.getDeclaredField("surfaceDetached").apply { isAccessible = true; setBoolean(runner, detached) }
+                cls.getDeclaredMethod("startVideoSource").apply { isAccessible = true }.invoke(runner)
+                return surface.attaches
+            } finally {
+                runner.stop()
+            }
+        }
+        assertEquals(0, invokeStart(stopped = true, detached = false))
+        assertEquals(0, invokeStart(stopped = false, detached = true))
+    }
+
     private fun keyEvent(): ByteArray {
         val key = Protobuf.varintField(1, 4) + Protobuf.varintField(2, 1) // BACK down
         return Protobuf.bytesField(1, key)
