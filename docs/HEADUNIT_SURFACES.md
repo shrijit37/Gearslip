@@ -1,7 +1,7 @@
 # Head-unit surfaces
 
-> **Current contract.** No surface is installed in the shipped app today, so sessions use the
-> placeholder frame source. The gap between this contract and a full plug-in system is recorded in
+> **Current contract.** `GearslipActivity` installs the headless `PlaceholderSurface` at `onCreate`,
+> so sessions use the placeholder frame source until a real renderer is installed.
 > [PLUGIN_MIGRATION.md](PLUGIN_MIGRATION.md); the design target is in
 > [PLUGIN_ARCHITECTURE.md](PLUGIN_ARCHITECTURE.md).
 

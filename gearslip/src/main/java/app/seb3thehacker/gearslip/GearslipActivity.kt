@@ -114,8 +114,11 @@ class GearslipActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         // Explicit composition-root registration: until a real renderer ships, the headless
-        // placeholder is the installed surface. See docs/HEADUNIT_SURFACES.md.
-        HeadunitSurfaces.installSurface(PlaceholderSurface, SurfaceTrust.TRUSTED)
+        // placeholder is the installed surface. It consumes no state, so it stays untrusted and
+        // never clobbers a renderer registered earlier in app init.
+        if (!HeadunitSurfaces.hasRegistration) {
+            HeadunitSurfaces.installSurface(PlaceholderSurface, SurfaceTrust.UNTRUSTED)
+        }
         super.onCreate(savedInstanceState)
         // Location, calendar, the phone/contacts group, and the microphone are asked for one at
         // a time by PermissionsSetupScreen instead of here, each only after the driver taps

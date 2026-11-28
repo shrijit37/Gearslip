@@ -49,8 +49,11 @@ object HeadunitSurfaces {
         installed = surface
     }
 
-    /** The instance installed with [install], if any; factories are created per session. */
+    /** The instance installed with [installSurface], if any; factories are created per session. */
     val current: HeadunitSurface? get() = installed
+
+    /** True when a factory or instance has been registered; used to avoid clobbering app init. */
+    val hasRegistration: Boolean get() = factory != null || installed != null
 
     /**
      * Selects the surface, generation and trust in one critical section.
