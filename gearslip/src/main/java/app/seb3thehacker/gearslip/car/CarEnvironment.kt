@@ -1,11 +1,6 @@
 package app.seb3thehacker.gearslip.car
 
-import android.content.BroadcastReceiver
 import android.content.Context
-import android.content.Intent
-import android.content.IntentFilter
-import android.content.res.Configuration
-import android.os.BatteryManager
 import android.os.Handler
 import android.os.Looper
 import java.util.Calendar
@@ -15,8 +10,7 @@ import kotlinx.coroutines.flow.StateFlow
 /**
  * What the car UI and the apps inside it can know about the world outside the UI.
  *
- * [phoneDark] is the phone's own theme and picks the car UI's colours. [darkOutside] is a
- * separate signal, "is it dark out", for apps that want to adapt (a map, a web page).
+ * [darkOutside] is "is it dark out", for apps that want to adapt (a map, a web page).
  *
  * Where [darkOutside] comes from is deliberately swappable. Today it is a time-of-day guess.
  * The right source is the head unit's own night-mode sensor, which arrives on the AA sensor
@@ -24,12 +18,7 @@ import kotlinx.coroutines.flow.StateFlow
  */
 object CarEnvironment {
 
-    data class Battery(val percent: Int, val charging: Boolean)
-
-    private val phoneDarkFlow = MutableStateFlow(false)
     private val darkOutsideFlow = MutableStateFlow(false)
-    private val batteryFlow = MutableStateFlow(Battery(-1, false))
-    private val displayFlow = MutableStateFlow("")
 
     /** The projected frame's real geometry, for anything that has to lay out against it. */
     data class Frame(val width: Int, val height: Int, val densityDpi: Int)
@@ -40,12 +29,7 @@ object CarEnvironment {
     /** The density the car reported; [frame] carries the one the car UI and its apps draw at. */
     private var carDensityDpi = 160
 
-    val phoneDark: StateFlow<Boolean> = phoneDarkFlow
     val darkOutside: StateFlow<Boolean> = darkOutsideFlow
-    val battery: StateFlow<Battery> = batteryFlow
-
-    /** Human-readable projected resolution, for the connection info in car Settings. */
-    val display: StateFlow<String> = displayFlow
 
     private val vehicleFlow = MutableStateFlow("")
     private val insetsFlow = MutableStateFlow(app.seb3thehacker.gearslip.Insets.NONE)
@@ -80,17 +64,6 @@ object CarEnvironment {
         }
     }
 
-    private val batteryReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context?, intent: Intent?) {
-            intent?.let(::readBattery)
-        }
-    }
-
-    fun setPhoneTheme(configuration: Configuration) {
-        phoneDarkFlow.value =
-            (configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
-    }
-
     /** For the AA sensor channel: null goes back to the time-of-day guess. */
     fun setSensorNight(night: Boolean?) {
         sensorNight = night
@@ -100,7 +73,6 @@ object CarEnvironment {
     fun setDisplay(width: Int, height: Int, densityDpi: Int) {
         carDensityDpi = densityDpi
         val dpi = CarSettings.effectiveDensity(densityDpi)
-        displayFlow.value = "${width}x$height @ ${dpi}dpi"
         frameFlow.value = Frame(width, height, dpi)
     }
 
@@ -116,14 +88,9 @@ object CarEnvironment {
         if (running) return
         running = true
         appContext = context.applicationContext
-        setPhoneTheme(context.resources.configuration)
         // Compute night synchronously: the posted tick is the periodic refresh, but a car can
         // bind its navigation app before the next main-loop pass (issue: day mode at night).
         refresh()
-        val sticky = context.applicationContext.registerReceiver(
-            batteryReceiver, IntentFilter(Intent.ACTION_BATTERY_CHANGED), Context.RECEIVER_NOT_EXPORTED,
-        )
-        sticky?.let(::readBattery)
         handler.post(tick)
     }
 
@@ -131,7 +98,6 @@ object CarEnvironment {
         if (!running) return
         running = false
         handler.removeCallbacks(tick)
-        runCatching { appContext?.unregisterReceiver(batteryReceiver) }
     }
 
     fun refresh() {
@@ -147,12 +113,4 @@ object CarEnvironment {
         return hour >= 20 || hour < 6
     }
 
-    private fun readBattery(intent: Intent) {
-        val level = intent.getIntExtra(BatteryManager.EXTRA_LEVEL, -1)
-        val scale = intent.getIntExtra(BatteryManager.EXTRA_SCALE, 100)
-        val status = intent.getIntExtra(BatteryManager.EXTRA_STATUS, -1)
-        val charging = status == BatteryManager.BATTERY_STATUS_CHARGING ||
-            status == BatteryManager.BATTERY_STATUS_FULL
-        batteryFlow.value = Battery(if (level >= 0 && scale > 0) level * 100 / scale else -1, charging)
-    }
 }
