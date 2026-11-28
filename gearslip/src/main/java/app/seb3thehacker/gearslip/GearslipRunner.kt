@@ -177,24 +177,27 @@ class GearslipRunner(
             val lease = pixelLease
             val provider = pixelProvider
             if (lease != null && provider != null) {
-                // Keep the references when a step fails so only that step is retried.
+                // Detach before releasing: the host may still be drawing through the Surface.
                 if (!pixelDetached) {
                     pixelDetached = surfaceGuard.callValue("detachSurface", false) {
                         CarServices.nav.detachSurface(lease.surface)
                         true
                     }
                 }
-                if (!pixelReleased) {
-                    pixelReleased = surfaceGuard.callValue("releasePixelLease", false) {
-                        provider.release(lease)
-                        true
+                // Keep the references when a step fails so only that step is retried.
+                if (pixelDetached) {
+                    if (!pixelReleased) {
+                        pixelReleased = surfaceGuard.callValue("releasePixelLease", false) {
+                            provider.release(lease)
+                            true
+                        }
                     }
-                }
-                if (pixelDetached && pixelReleased) {
-                    pixelLease = null
-                    pixelProvider = null
-                    pixelDetached = false
-                    pixelReleased = false
+                    if (pixelReleased) {
+                        pixelLease = null
+                        pixelProvider = null
+                        pixelDetached = false
+                        pixelReleased = false
+                    }
                 }
             }
             sessionState?.stop()
