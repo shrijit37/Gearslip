@@ -1374,12 +1374,14 @@ class GearslipRunner(
                             CarServices.nav.detachSurface(previous.surface); true
                         }
                     }
+                    // Never release a Surface the host may still be drawing through.
+                    if (!pixelDetached) return@synchronized
                     if (!pixelReleased) {
                         pixelReleased = surfaceGuard.callValue("releasePixelLease", false) {
                             oldProvider.release(previous); true
                         }
                     }
-                    if (!pixelDetached || !pixelReleased) return@synchronized
+                    if (!pixelReleased) return@synchronized
                     pixelLease = null
                     pixelProvider = null
                     pixelDetached = false
