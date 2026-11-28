@@ -53,7 +53,9 @@ together. No reflection or service loading is involved: a surface is a compile-t
 one line of wiring.
 
 > **Current status:** `GearslipActivity` installs `PlaceholderSurface` at `onCreate` only when nothing
-> is registered, and selects through the fail-closed `selectSurface()` wrapper, which calls `select(this)`.
+> is registered, through `installSurfaceIfAbsent(surface, trust)`; an existing factory or instance
+> wins and the generation is untouched. Selection goes through the fail-closed `selectSurface()`
+> wrapper, which calls `select(this)`. It declares no capabilities, so sessions stay headless.
 
 ## Known gaps
 
