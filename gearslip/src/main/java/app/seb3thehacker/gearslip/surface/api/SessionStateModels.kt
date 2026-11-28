@@ -116,7 +116,7 @@ data class HostedAppSnapshot(
 /** A pure description of a templated screen a hosted app supplied. */
 data class TemplateSnapshot(
     val appPackage: String,
-    val title: String,
+    val title: String = "",
     val rows: List<String> = emptyList(),
     val actions: List<String> = emptyList(),
     val isLoading: Boolean = false,
@@ -175,6 +175,8 @@ data class SurfaceSnapshot(
     val session: SessionSnapshot = SessionSnapshot(SessionPhase.IDLE),
     val frame: FrameGeometry = FrameGeometry(0, 0, 0, 0, false),
     val insets: ScreenInsets = ScreenInsets.NONE,
+    /** The car's night sensor (or its time-of-day fallback), not the user's night-mode setting. */
+    val night: Boolean = false,
     val vehicle: String = "",
     val vehicleModel: VehicleModel? = null,
     val carData: VehicleSnapshot = VehicleSnapshot(),
@@ -189,4 +191,43 @@ data class SurfaceSnapshot(
     val catalog: List<CatalogEntrySnapshot> = emptyList(),
     val lease: SurfaceLeaseSnapshot = SurfaceLeaseSnapshot(),
     val settings: SettingsSnapshot = SettingsSnapshot(),
-)
+) {
+    /**
+     * The view an untrusted plug-in may see.
+     *
+     * Caller identity, message bodies and precise location are removed; structural state (that a
+     * call is ringing, that a notification arrived, that navigation is active) remains so a
+     * third-party renderer can still lay out a useful screen. External plug-ins in Phase 5 must
+     * construct their [SessionState] with `trusted = false`.
+     */
+    fun redacted(): SurfaceSnapshot = copy(
+        call = call?.copy(caller = CallerSnapshot()),
+        notifications = notifications.copy(
+            history = notifications.history.map { it.redacted() },
+            popup = notifications.popup?.redacted(),
+        ),
+        hostedApps = hostedApps.copy(
+            apps = hostedApps.apps.map { it.copy(label = "", iconToken = "") },
+            template = hostedApps.template?.copy(title = "", rows = emptyList(), actions = emptyList()),
+        ),
+        catalog = catalog.map { it.copy(label = "") },
+        carData = carData.copy(location = null),
+        alert = alert?.copy(title = "", actions = emptyList(), ownerToken = ""),
+        toast = toast?.copy(text = "", ownerToken = ""),
+        sensors = sensors.map { it.copy(raw = "", typeName = "") },
+        media = media.copy(
+            source = "", title = "", artist = "", album = "", error = null, artToken = "",
+            queue = media.queue.map { it.copy(title = "", artist = "", album = "", artToken = "") },
+        ),
+        navigation = navigation?.copy(road = "", distanceText = "", key = "", arrowToken = ""),
+    )
+
+    private fun NotificationSnapshot.redacted() = copy(
+        appLabel = "",
+        title = "",
+        text = "",
+        artToken = "",
+        lines = emptyList(),
+        canReply = false,
+    )
+}

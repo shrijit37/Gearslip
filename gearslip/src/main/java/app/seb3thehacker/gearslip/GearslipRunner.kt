@@ -32,10 +32,12 @@ import app.seb3thehacker.gearslip.surface.HeadunitSurface
 import app.seb3thehacker.gearslip.surface.PlaceholderFrameSource
 import app.seb3thehacker.gearslip.surface.SurfaceCapability
 import app.seb3thehacker.gearslip.surface.SurfaceContext
+import app.seb3thehacker.gearslip.surface.SessionState
 import app.seb3thehacker.gearslip.surface.VideoSpec
 import java.io.InputStream
 import java.io.OutputStream
 import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.FutureTask
 import java.util.concurrent.RejectedExecutionException
 import java.util.concurrent.TimeUnit
@@ -128,11 +130,17 @@ class GearslipRunner(
     private var frameSource: FrameSource? = null
     @Volatile private var surfaceDetached = false
     private val surfaceLock = Any()
+    /** The session's immutable state view; replaced for each attach and cancelled on release. */
+    @Volatile private var sessionState: SessionState? = null
+    /** Monotonic per-runner generation: the wall clock can repeat or move backwards. */
+    private val sessionGeneration = AtomicLong(0)
     /** Session-owned render resources; safe to call from stop() and the transport-exit finally. */
     private fun releaseSurface() {
         synchronized(surfaceLock) {
             frameSource?.stop()
             frameSource = null
+            sessionState?.stop()
+            sessionState = null
             if (!surfaceDetached) {
                 surfaceDetached = true
                 surface?.detach()
@@ -1224,6 +1232,15 @@ class GearslipRunner(
         // uses, re-checking stopped so nothing is attached after the surface was torn down.
         synchronized(surfaceLock) {
             if (stopped || surfaceDetached) return@synchronized
+            // One state view per attach: its generation is pinned before any source publishes,
+            // so a late collector from a previous session cannot write into this one.
+            sessionState?.stop()
+            // The only renderer installed today is the app's own placeholder; external
+            // plug-ins (Phase 5) must be constructed with trusted = false.
+            val state = SessionState(sessionGeneration.incrementAndGet(), trusted = true)
+            state.start()
+            state.setVideoSpec(spec)
+            sessionState = state
             val source = FrameSources.choose(
                 surface, surfaceContext(), spec,
                 PlaceholderFrameSource(width, height, videoFrameRate, wireless),
@@ -1246,6 +1263,8 @@ class GearslipRunner(
         override val night = CarEnvironment.darkOutside
         override val carData = CarData.state
         override val vehicle = CarEnvironment.vehicle
+        // Resolve on access: a re-attach must never leave a renderer holding a cancelled flow.
+        override val snapshot get() = sessionState?.snapshot ?: super.snapshot
     }
 
     /**
