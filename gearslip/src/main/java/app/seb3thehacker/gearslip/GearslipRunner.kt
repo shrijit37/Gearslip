@@ -74,6 +74,8 @@ class GearslipRunner(
     private val surface: HeadunitSurface? = null,
     /** Generation read by the caller at the same time it selected [surface]. */
     selectionGeneration: Long = -1L,
+    /** Trust captured with the surface; defaults to redacted when not supplied. */
+    selectionTrusted: Boolean = false,
 ) {
     private val log = GearslipLog.tagged("PROTO")
     /** A renderer failure is logged and dropped; it never reaches the transport or installer. */
@@ -146,12 +148,16 @@ class GearslipRunner(
     /** Generation captured atomically with the surface this runner was handed. */
     private val pinnedGeneration: Long =
         if (selectionGeneration >= 0) selectionGeneration else HeadunitSurfaces.generation()
-    private val externalSurface = HeadunitSurfaces.isExternal(surface)
+    private val trustedSurface = selectionTrusted
     /** Session-owned render resources; safe to call from stop() and the transport-exit finally. */
     private fun releaseSurface() {
         synchronized(surfaceLock) {
-            surfaceGuard.call("frameSource.stop") { frameSource?.stop() }
-            frameSource = null
+            val stopped = surfaceGuard.callValue("frameSource.stop", false) {
+                frameSource?.stop()
+                true
+            }
+            // A failed stop must not drop the reference: leave it for a later best-effort retry.
+            if (stopped) frameSource = null
             sessionState?.stop()
             sessionState = null
             if (!surfaceDetached) {
@@ -1262,11 +1268,8 @@ class GearslipRunner(
             sessionState?.stop()
             // The only renderer installed today is the app's own placeholder; external
             // plug-ins (Phase 5) must be constructed with trusted = false.
-            val state = SessionState(sessionGeneration.incrementAndGet(), trusted = !externalSurface)
-            state.watchGeneration {
-                HeadunitSurfaces.generation() != pinnedGeneration ||
-                    HeadunitSurfaces.isExternal(surface) != externalSurface
-            }
+            val state = SessionState(sessionGeneration.incrementAndGet(), trusted = trustedSurface)
+            state.watchGeneration { HeadunitSurfaces.generation() != pinnedGeneration }
             state.start()
             state.setVideoSpec(spec)
             sessionState = state

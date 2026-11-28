@@ -1,5 +1,7 @@
 package app.seb3thehacker.gearslip.surface
 
+import app.seb3thehacker.gearslip.surface.SurfaceTrust
+
 import app.seb3thehacker.gearslip.CertProvider
 import app.seb3thehacker.gearslip.GearslipRunner
 import app.seb3thehacker.gearslip.Protobuf
@@ -45,7 +47,7 @@ class SurfacePluginTest {
 
     @Test fun `registry holds one installed surface and can be cleared`() {
         val surface = FakeSurface(emptySet())
-        HeadunitSurfaces.install(surface)
+        HeadunitSurfaces.install(surface, SurfaceTrust.TRUSTED)
         assertSame(surface, HeadunitSurfaces.current)
         HeadunitSurfaces.clear()
         assertNull(HeadunitSurfaces.current)

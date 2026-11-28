@@ -3,6 +3,16 @@ package app.seb3thehacker.gearslip.surface
 import android.content.Context
 import java.util.concurrent.atomic.AtomicLong
 
+/** Who may see the full session snapshot. External renderers get the redacted view. */
+enum class SurfaceTrust { TRUSTED, UNTRUSTED }
+
+/** Surface, generation and trust captured together, so a swap cannot split them. */
+data class SurfaceSelection(
+    val surface: HeadunitSurface?,
+    val generation: Long,
+    val trusted: Boolean,
+)
+
 /**
  * Composition root for the head-unit surface.
  *
@@ -10,52 +20,60 @@ import java.util.concurrent.atomic.AtomicLong
  * starts. No reflection or service loading: a new UI is a compile-time implementation of
  * [HeadunitSurface] plus one line in the app. Installing null restores the headless placeholder.
  *
- * Every change bumps [generation]. A session pins the generation when it attaches and re-checks
- * it before publishing state, mirroring the updater's generation rule: a renderer swapped under a
- * running session cannot publish into the new one.
+ * Every change bumps [generation] inside the same lock as [select]. A session pins the generation
+ * and trust from one [SurfaceSelection] and re-checks the generation before publishing state, so a
+ * renderer swapped under a running session cannot publish into the new one. Trust is mandatory at
+ * install time: an external renderer cannot make itself trusted by omitting an argument.
  */
 object HeadunitSurfaces {
-    private val generation = AtomicLong(0)
+    private val generationCounter = AtomicLong(0)
 
     @Volatile private var factory: ((Context) -> HeadunitSurface)? = null
     @Volatile private var installed: HeadunitSurface? = null
-    @Volatile private var external = false
+    @Volatile private var trust = SurfaceTrust.UNTRUSTED
 
     /** Monotonic identity of the current registration. */
-    fun generation(): Long = generation.get()
+    fun generation(): Long = generationCounter.get()
 
-    fun install(factory: ((Context) -> HeadunitSurface)?) {
-        generation.incrementAndGet()
-        external = false
+    fun install(factory: ((Context) -> HeadunitSurface)?, trust: SurfaceTrust) = synchronized(this) {
+        generationCounter.incrementAndGet()
+        this.trust = trust
         installed = null
         this.factory = factory
     }
 
-    fun install(surface: HeadunitSurface?, externallyProvided: Boolean = false) {
-        generation.incrementAndGet()
-        external = externallyProvided
+    fun install(surface: HeadunitSurface?, trust: SurfaceTrust) = synchronized(this) {
+        generationCounter.incrementAndGet()
+        this.trust = trust
         factory = null
         installed = surface
-    }
-
-    /** True when [surface] is the currently installed external (untrusted) renderer. */
-    fun isExternal(surface: HeadunitSurface?): Boolean = external && surface != null && installed === surface
-
-    /** Selects the surface and the generation it was selected at, atomically. */
-    fun createWithGeneration(context: Context): Pair<HeadunitSurface?, Long> = synchronized(this) {
-        create(context) to generation()
     }
 
     /** The instance installed with [install], if any; factories are created per session. */
     val current: HeadunitSurface? get() = installed
 
-    /** The surface this session should use, or null when none is installed. */
-    fun create(context: Context): HeadunitSurface? =
-        factory?.invoke(context.applicationContext) ?: installed
+    /**
+     * Selects the surface, generation and trust in one critical section.
+     *
+     * A factory is invoked while holding the lock so a swap cannot pair the newly created surface
+     * with the old generation or trust bit.
+     */
+    fun select(context: Context): SurfaceSelection = synchronized(this) {
+        SurfaceSelection(
+            surface = factory?.invoke(context.applicationContext) ?: installed,
+            generation = generationCounter.get(),
+            trusted = trust == SurfaceTrust.TRUSTED,
+        )
+    }
 
-    fun clear() {
-        generation.incrementAndGet()
-        external = false
+    /** Kept for callers that only need to know whether the installed renderer is external. */
+    fun isExternal(surface: HeadunitSurface?): Boolean = synchronized(this) {
+        trust == SurfaceTrust.UNTRUSTED && surface != null && installed === surface
+    }
+
+    fun clear() = synchronized(this) {
+        generationCounter.incrementAndGet()
+        trust = SurfaceTrust.UNTRUSTED
         factory = null
         installed = null
     }

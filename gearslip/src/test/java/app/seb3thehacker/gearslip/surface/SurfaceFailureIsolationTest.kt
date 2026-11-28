@@ -1,5 +1,7 @@
 package app.seb3thehacker.gearslip.surface
 
+import app.seb3thehacker.gearslip.surface.SurfaceTrust
+
 import app.seb3thehacker.gearslip.surface.api.CallSnapshot
 import app.seb3thehacker.gearslip.surface.api.CallState
 import kotlinx.coroutines.delay
@@ -75,9 +77,9 @@ class SurfaceFailureIsolationTest {
     @Test fun `registry generation advances on every swap`() {
         val surface = FakeSurface(emptySet())
         val before = HeadunitSurfaces.generation()
-        HeadunitSurfaces.install(surface)
+        HeadunitSurfaces.install(surface, SurfaceTrust.TRUSTED)
         val installed = HeadunitSurfaces.generation()
-        HeadunitSurfaces.install { surface }
+        HeadunitSurfaces.install({ surface }, SurfaceTrust.TRUSTED)
         val factory = HeadunitSurfaces.generation()
         HeadunitSurfaces.clear()
         val cleared = HeadunitSurfaces.generation()
@@ -90,7 +92,7 @@ class SurfaceFailureIsolationTest {
     @Test fun `external registrations are marked untrusted and cleared`() {
         val surface = FakeSurface(emptySet())
         val before = HeadunitSurfaces.generation()
-        HeadunitSurfaces.install(surface, externallyProvided = true)
+        HeadunitSurfaces.install(surface, SurfaceTrust.UNTRUSTED)
         try {
             assertTrue(HeadunitSurfaces.isExternal(surface))
             assertTrue(HeadunitSurfaces.generation() > before)
