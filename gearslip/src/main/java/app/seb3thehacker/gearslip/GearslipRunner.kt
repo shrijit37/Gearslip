@@ -166,7 +166,12 @@ class GearslipRunner(
             sessionState = null
             if (!surfaceDetached) {
                 surfaceDetached = true
-                surface?.let { current -> surfaceGuard.call("detach") { current.detach() } }
+                // Only mark detached when the plug-in actually released: a failed detach stays
+                // retryable instead of silently leaking the renderer's resources.
+                val detached = surface?.let { current ->
+                    surfaceGuard.callValue("detach", false) { current.detach(); true }
+                } ?: true
+                if (detached) surfaceDetached = true
             }
         }
     }
@@ -1309,12 +1314,16 @@ class GearslipRunner(
             SessionStatus.state.value.copy(headline = "", detail = ""),
         )
         override val frame = if (trustedSurface) CarEnvironment.frame else MutableStateFlow(
-            CarEnvironment.frame.value.copy(width = 0, height = 0, densityDpi = 0),
+            CarEnvironment.frame.value,
         )
-        override val insets = if (trustedSurface) CarEnvironment.insets else MutableStateFlow(Insets.NONE)
-        override val night = if (trustedSurface) CarEnvironment.darkOutside else MutableStateFlow(false)
+        override val insets = if (trustedSurface) CarEnvironment.insets else MutableStateFlow(
+            CarEnvironment.insets.value,
+        )
+        override val night = if (trustedSurface) CarEnvironment.darkOutside else MutableStateFlow(
+            CarEnvironment.darkOutside.value,
+        )
         override val carData = if (trustedSurface) CarData.state else MutableStateFlow(
-            CarData.Snapshot(location = null),
+            CarData.state.value.copy(location = null),
         )
         override val vehicle = if (trustedSurface) CarEnvironment.vehicle else MutableStateFlow("")
         // Resolve on access: a re-attach must never leave a renderer holding a cancelled flow.

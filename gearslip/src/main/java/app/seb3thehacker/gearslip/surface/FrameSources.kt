@@ -30,10 +30,10 @@ internal object FrameSources {
         } else {
             surface?.capabilities?.contains(SurfaceCapability.PROVIDES_FRAMES) == true
         }
-        return if (provided != null && providesFrames) {
-            provided
-        } else {
-            fallback
-        }
+        if (provided != null && providesFrames) return provided
+        // A source returned by a surface we cannot trust with capabilities must not be left
+        // running; stop it before falling back to the placeholder.
+        if (provided != null && guard != null) guard.call("discardedFrameSource.stop") { provided.stop() }
+        return fallback
     }
 }

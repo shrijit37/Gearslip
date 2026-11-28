@@ -26,6 +26,7 @@ import app.seb3thehacker.gearslip.car.CarSettings
 import app.seb3thehacker.gearslip.car.Prefetch
 import app.seb3thehacker.gearslip.protocol.TouchPoint
 import app.seb3thehacker.gearslip.surface.HeadunitSurfaces
+import app.seb3thehacker.gearslip.surface.SurfaceSelection
 import app.seb3thehacker.gearslip.ui.GearslipApp
 import app.seb3thehacker.gearslip.ui.GearslipTheme
 import java.io.FileInputStream
@@ -346,7 +347,10 @@ class GearslipActivity : ComponentActivity() {
         }
         descriptor = pfd
 
-        val selection = HeadunitSurfaces.select(this)
+        val selection = runCatching { HeadunitSurfaces.select(this) }.getOrElse { e ->
+            GearslipLog.w("surface: selection threw, running headless: ${e.message}")
+            SurfaceSelection(null, 0L, false)
+        }
         val runner = GearslipRunner(
             input = FileInputStream(pfd.fileDescriptor),
             output = FileOutputStream(pfd.fileDescriptor),
@@ -394,7 +398,10 @@ class GearslipActivity : ComponentActivity() {
         }
         GearslipLog.i("wireless: starting a session over Wi-Fi to ${socket.inetAddress?.hostAddress}:${socket.port}")
         wirelessSocket = socket
-        val selection = HeadunitSurfaces.select(this)
+        val selection = runCatching { HeadunitSurfaces.select(this) }.getOrElse { e ->
+            GearslipLog.w("surface: selection threw, running headless: ${e.message}")
+            SurfaceSelection(null, 0L, false)
+        }
         val runner = GearslipRunner(
             input = socket.getInputStream(),
             output = socket.getOutputStream(),
