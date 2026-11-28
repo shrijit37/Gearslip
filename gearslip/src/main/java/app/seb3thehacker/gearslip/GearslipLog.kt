@@ -141,17 +141,6 @@ object GearslipLog {
         }
     }
 
-    /** An earlier launch's log, copied to the cache dir for sharing like [shareableFile]. */
-    fun shareableFile(context: Context, past: File): android.net.Uri {
-        val dir = File(context.cacheDir, "shared").apply { mkdirs() }
-        dir.listFiles()?.forEach { it.delete() }
-        val out = File(dir, "gearslip-log-${past.name.removePrefix("gearslip-").removeSuffix(".log")}.txt")
-        past.copyTo(out, overwrite = true)
-        return androidx.core.content.FileProvider.getUriForFile(
-            context, "${context.packageName}.logshare", out,
-        )
-    }
-
     fun snapshot(): List<String> = synchronized(live) { live.toList() }
 
     /** Clears the live view only. The log file on disk is left alone. */
@@ -165,20 +154,6 @@ object GearslipLog {
         flush()
         val f = file
         return if (f != null && f.isFile) f.readText() else snapshot().joinToString("\n")
-    }
-
-    /**
-     * The current session's log, with the session report on top, copied to the cache dir for
-     * sharing as an attachment (a whole log can exceed what an Intent may carry as text).
-     */
-    fun shareableFile(context: Context): android.net.Uri {
-        val dir = File(context.cacheDir, "shared").apply { mkdirs() }
-        dir.listFiles()?.forEach { it.delete() }
-        val out = File(dir, "gearslip-log.txt")
-        out.writeText(SessionReport.render() + "\n\n" + fullText())
-        return androidx.core.content.FileProvider.getUriForFile(
-            context, "${context.packageName}.logshare", out,
-        )
     }
 
     fun i(message: String, tag: String = "APP") = write("I", message, tag)

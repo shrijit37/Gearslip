@@ -153,10 +153,9 @@ android {
         buildConfig = true
     }
 
-    // One small APK per ABI instead of a single 35 MB universal build. Most of the difference is
-    // MapLibre's native libraries for ABIs a phone can't use. The updater picks the
-    // asset matching Build.SUPPORTED_ABIS; the universal build stays as a fallback for anything
-    // we didn't list. The DSL below is the public AGP API (verified against AGP 9.1.1).
+    // One small APK per ABI instead of a single universal build. The updater picks the asset
+    // matching Build.SUPPORTED_ABIS; the universal build stays as a fallback for anything we
+    // didn't list. The DSL below is the public AGP API (verified against AGP 9.1.1).
     splits {
         abi {
             // -PgearslipAbi=arm64-v8a builds only that ABI, without the 35 MB universal fallback,
@@ -181,9 +180,6 @@ android {
         sourceCompatibility = JavaVersion.VERSION_21
         targetCompatibility = JavaVersion.VERSION_21
     }
-
-    // MapLibre ships four ABIs; compressing them keeps the download small.
-    packaging { jniLibs { useLegacyPackaging = true } }
 
     testOptions {
         // GearslipLog calls android.util.Log, which is a stub on the local JVM.
@@ -249,10 +245,6 @@ dependencies {
     implementation(libs.androidx.car.app.projected)
     implementation(libs.androidx.media)
     testImplementation(libs.junit)
-    // The one androidTest only uses AndroidJUnit4 and assertions; Espresso is not referenced,
-    // so pulling it into every build is dead weight. Keep runner: AndroidJUnit4 needs it.
-    androidTestImplementation(libs.androidx.junit)
-    androidTestImplementation("androidx.test:runner:1.6.2")
 }
 
 tasks.withType<KotlinJvmCompile>().configureEach {
