@@ -15,11 +15,13 @@ session will drive it. The core contains no Compose, View or drawing code.
 `HeadunitSurface` declares:
 
 - `id` — used in session logs.
-- `capabilities` — `TOUCH`, `KEYS`, `PROVIDES_FRAMES`. The core forwards input only when the
-  surface declares it can handle it.
+- `capabilities` — `TOUCH`, `KEYS`, `PROVIDES_FRAMES`, `PROVIDES_PIXELS`. The core forwards input
+  only when the surface declares it can handle it.
 - `attach(context: SurfaceContext, spec: VideoSpec): FrameSource?` — called once per session with
   the negotiated frame size/density and a read-only view of session state. Return a `FrameSource`
   only when `PROVIDES_FRAMES` is declared.
+- `pixelLeaseProvider(): PixelLeaseProvider?` — a pixel-mode renderer supplies the Surface the core
+  lends to hosted car apps; the default null keeps the placeholder headless.
 - `detach()` — called when the session ends; release everything here.
 - `onFocus(projected: Boolean)` — the car took its screen back, or handed it over again.
 - `onTouch(action, actionIndex, points)` / `onRotate(delta)` — head-unit touch and knob input in
@@ -63,9 +65,8 @@ one line of wiring.
 This contract is a first step, not a complete plug-in system. It has no version negotiation and no
 multi-surface routing, though `HeadunitSurfaces.generation()` detects a swap and `SurfaceGuard`
 isolates plug-in callbacks. `SurfaceContext.snapshot` now exposes hosted-app templates, alerts,
-toasts, media and calls, but there is still no pixel-based frame mode, so every renderer must
-produce H.264 itself, and no way to lend a `Surface` to a navigation app: `attachSurface()` still
-has no caller. See [PLUGIN_MIGRATION.md](PLUGIN_MIGRATION.md) for the findings and the plan.
+toasts, media and calls. `PROVIDES_PIXELS` and `PixelLeaseProvider` now let a trusted renderer lend
+a Surface to `attachSurface()`, but no encoder-backed pixel frame source ships yet. See [PLUGIN_MIGRATION.md](PLUGIN_MIGRATION.md) for the findings and the plan.
 
 ## Rules
 
