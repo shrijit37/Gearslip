@@ -140,6 +140,8 @@ class GearslipRunner(
     @Volatile private var sessionState: SessionState? = null
     /** Monotonic per-runner generation: the wall clock can repeat or move backwards. */
     private val sessionGeneration = AtomicLong(0)
+    /** Pinned at construction so a swap during the handshake is detected too. */
+    private val pinnedGeneration = HeadunitSurfaces.generation()
     /** Session-owned render resources; safe to call from stop() and the transport-exit finally. */
     private fun releaseSurface() {
         synchronized(surfaceLock) {
@@ -1256,7 +1258,6 @@ class GearslipRunner(
             // The only renderer installed today is the app's own placeholder; external
             // plug-ins (Phase 5) must be constructed with trusted = false.
             val state = SessionState(sessionGeneration.incrementAndGet(), trusted = true)
-            val pinnedGeneration = HeadunitSurfaces.generation()
             state.watchGeneration { HeadunitSurfaces.generation() != pinnedGeneration }
             state.start()
             state.setVideoSpec(spec)
@@ -1539,7 +1540,7 @@ class GearslipRunner(
                 } catch (e: IOException) {
                     if (running) log.w("send failed, stopping: ${e.message}")
                     running = false
-                    frameSource?.stop()
+                    surfaceGuard.call("frameSource.stop") { frameSource?.stop() }
                 }
             }
         } catch (e: RejectedExecutionException) {
