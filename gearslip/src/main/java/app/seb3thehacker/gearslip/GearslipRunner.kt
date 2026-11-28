@@ -1046,15 +1046,16 @@ class GearslipRunner(
             val down = Wire.varint(fields, 2) == 1L
             val longPress = Wire.varint(fields, 4) == 1L
             log.i("<- key event: keycode=$keycode ${if (down) "down" else "up"}${if (longPress) " long" else ""}")
-            surface?.let { current ->
-                if (registrationStale()) return@let
-                surfaceGuard.call("onKey") {
-                    if (SurfaceCapability.KEYS in current.capabilities) {
+            val consumed = surface?.let { current ->
+                if (registrationStale()) return@let false
+                surfaceGuard.callValue("onKey", false) {
+                    SurfaceCapability.KEYS in current.capabilities &&
                         current.onKey(keycode, down, longPress)
-                    }
-                }
+                } ?: false
+            } ?: false
+            if (!consumed && !CarKeys.onKey(keycode, down, longPress) && down) {
+                log.i("unhandled keycode=$keycode")
             }
-            if (!CarKeys.onKey(keycode, down, longPress) && down) log.i("unhandled keycode=$keycode")
         }
     }
 

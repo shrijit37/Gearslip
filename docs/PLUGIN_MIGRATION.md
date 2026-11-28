@@ -76,7 +76,8 @@
    and publishes `screenKeys` to a flow with no subscriber; `CarFocus.exitToCar()` is also orphaned.
    Keycodes are now plain `surface/api/KeyCodes.kt` integers in the core and the plug-in contract;
    `CarMedia` still builds a `KeyEvent` only for the Android media-session Intent it must send.
-   A plug-in cannot customize key maps or intercept a key before core acts on it.
+   `HeadunitSurface.onKey` can now consume a key before core acts on it; per-renderer custom key
+   maps are still pending.
 
 9. **Isolation is not build-enforced.** Everything is in one module;
    `gearslip/build.gradle.kts:239-244` declares Compose alongside protocol dependencies. Phase 0

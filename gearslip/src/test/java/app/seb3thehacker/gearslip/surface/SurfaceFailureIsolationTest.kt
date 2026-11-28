@@ -28,7 +28,8 @@ private class ThrowingSurface : HeadunitSurface {
     override fun onFocus(projected: Boolean) = throw IllegalStateException("focus")
     override fun onTouch(action: Int, actionIndex: Int, points: List<app.seb3thehacker.gearslip.protocol.TouchPoint>) =
         throw IllegalStateException("touch")
-    override fun onKey(keyCode: Int, down: Boolean, longPress: Boolean) = throw IllegalStateException("key")
+    override fun onKey(keyCode: Int, down: Boolean, longPress: Boolean): Boolean =
+        throw IllegalStateException("key")
     override fun onRotate(delta: Int) = throw IllegalStateException("rotate")
 }
 

@@ -47,8 +47,12 @@ interface HeadunitSurface {
     /** A head-unit touch, in negotiated frame coordinates. */
     fun onTouch(action: Int, actionIndex: Int, points: List<TouchPoint>) {}
 
-    /** A steering-wheel or hard key edge. */
-    fun onKey(keyCode: Int, down: Boolean, longPress: Boolean) {}
+    /**
+     * A steering-wheel or hard key edge. Return true to consume it: the core then leaves the key
+     * alone, so a renderer can own its own key map. Returning false (the default) keeps the core's
+     * media/call/screen behaviour unchanged.
+     */
+    fun onKey(keyCode: Int, down: Boolean, longPress: Boolean): Boolean = false
 
     /** One rotary-knob click; positive turns clockwise. */
     fun onRotate(delta: Int) {}
