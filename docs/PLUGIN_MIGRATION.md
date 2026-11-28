@@ -50,7 +50,7 @@
    reads and writes, `start` and `stop`; a failure is logged and dropped instead of reaching the
    `run()` catch-all. A reusable throwing-plug-in suite lives in
    `surface/SurfaceFailureIsolationTest.kt`. The remaining gap is `FrameOutput`: the only
-   implementation is the anonymous object at `:1242` (no test fake implements it), so a plug-in
+   implementation is the anonymous object at `:1254` (no test fake implements it), so a plug-in
    that writes bytes directly into the encoder still has no buffer between it and the transport.
    A plug-in must never be able to end a drive.
 

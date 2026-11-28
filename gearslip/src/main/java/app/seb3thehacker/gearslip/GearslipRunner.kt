@@ -149,6 +149,9 @@ class GearslipRunner(
     private val pinnedGeneration: Long =
         if (selectionGeneration >= 0) selectionGeneration else HeadunitSurfaces.generation()
     private val trustedSurface = selectionTrusted
+
+    /** True once the registry generation this runner was selected at has been replaced. */
+    private fun registrationStale(): Boolean = HeadunitSurfaces.generation() != pinnedGeneration
     /** Session-owned render resources; safe to call from stop() and the transport-exit finally. */
     private fun releaseSurface() {
         synchronized(surfaceLock) {
@@ -994,6 +997,7 @@ class GearslipRunner(
         }
         // Time the next frame against this tap: see [reportTouchLatency].
         if (action == ACTION_DOWN || action == ACTION_UP) touchAtUs = System.nanoTime() / 1000
+        if (registrationStale()) return
         surface?.let { current ->
             surfaceGuard.call("onTouch") {
                 if (SurfaceCapability.TOUCH in current.capabilities) {
@@ -1032,6 +1036,7 @@ class GearslipRunner(
             val down = Wire.varint(fields, 2) == 1L
             val longPress = Wire.varint(fields, 4) == 1L
             log.i("<- key event: keycode=$keycode ${if (down) "down" else "up"}${if (longPress) " long" else ""}")
+            if (registrationStale()) continue
             surface?.let { current ->
                 surfaceGuard.call("onKey") {
                     if (SurfaceCapability.KEYS in current.capabilities) {
@@ -1054,6 +1059,7 @@ class GearslipRunner(
             // int32, so a turn the other way arrives as a 64-bit two's complement varint.
             val delta = Wire.varint(fields, 2)?.toInt() ?: continue
             log.i("<- relative event: keycode=$keycode delta=$delta")
+            if (registrationStale()) continue
             surface?.let { current ->
                 surfaceGuard.call("onRotate") {
                     if (SurfaceCapability.KEYS in current.capabilities) current.onRotate(delta)
@@ -1269,7 +1275,13 @@ class GearslipRunner(
             // The only renderer installed today is the app's own placeholder; external
             // plug-ins (Phase 5) must be constructed with trusted = false.
             val state = SessionState(sessionGeneration.incrementAndGet(), trusted = trustedSurface)
-            state.watchGeneration { HeadunitSurfaces.generation() != pinnedGeneration }
+            state.watchGeneration {
+                val stale = registrationStale()
+                // A swap must also stop the old frame source and detach the old renderer; freezing
+                // snapshots alone would leave a stale surface receiving focus and input.
+                if (stale) releaseSurface()
+                stale
+            }
             state.start()
             state.setVideoSpec(spec)
             sessionState = state
@@ -1366,6 +1378,7 @@ class GearslipRunner(
      * keyframe, since the car's decoder may have been reset in between.
      */
     private fun onVideoFocus(mode: Int) {
+        if (registrationStale()) return
         val projected = mode == VIDEO_FOCUS_PROJECTED || mode == VIDEO_FOCUS_PROJECTED_NO_INPUT
         if (!videoStarted) {
             // The head unit repeats this while it waits for frames; only start once.

@@ -59,16 +59,22 @@ object HeadunitSurfaces {
      * with the old generation or trust bit.
      */
     fun select(context: Context): SurfaceSelection = synchronized(this) {
+        // Capture identity and trust BEFORE running plug-in code: a factory that re-registers
+        // itself inside the lock must not be able to pair its surface with a newer trusted slot.
+        val capturedGeneration = generationCounter.get()
+        val capturedTrusted = trust == SurfaceTrust.TRUSTED
         SurfaceSelection(
             surface = factory?.invoke(context.applicationContext) ?: installed,
-            generation = generationCounter.get(),
-            trusted = trust == SurfaceTrust.TRUSTED,
+            generation = capturedGeneration,
+            trusted = capturedTrusted,
         )
     }
 
     /** Kept for callers that only need to know whether the installed renderer is external. */
     fun isExternal(surface: HeadunitSurface?): Boolean = synchronized(this) {
-        trust == SurfaceTrust.UNTRUSTED && surface != null && installed === surface
+        if (surface == null || trust == SurfaceTrust.TRUSTED) return@synchronized false
+        // An untrusted factory also makes its per-session surfaces untrusted.
+        installed === surface || factory != null
     }
 
     fun clear() = synchronized(this) {
