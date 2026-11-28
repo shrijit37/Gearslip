@@ -7,6 +7,12 @@ on:
     tags:
       - 'v*'
 
+# Shares release-assets with release.yml: both can publish the same tag, so their uploads must
+# not interleave, and an in-flight publish must finish rather than be cancelled.
+concurrency:
+  group: release-assets
+  cancel-in-progress: false
+
 jobs:
   promote:
     # CI-generated tags carry "-<count>-g<sha>". Only a hand-written version tag promotes.

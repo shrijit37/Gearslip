@@ -1,6 +1,6 @@
 # CI/CD
 
-Every push to `main` builds the debug APK and publishes it as a prerelease in Releases, with a tag derived from `git describe`.
+Every push to `main` builds the debug APK and publishes it as a prerelease in Releases, with a tag derived from `git describe`. A push whose commit carries a hand-written `v*` tag is left to `promote.yml` and publishes no prerelease.
 
 You can also run that workflow manually from the Actions tab.
 
@@ -31,8 +31,11 @@ cached entry and give later builds the same version code.
 
 `gradle/actions/setup-gradle` restores the Gradle user home in every workflow, so task outputs
 Gradle has already produced are reused instead of rebuilt. Configuration-cache entries are saved
-and restored only when the `GRADLE_ENCRYPTION_KEY` secret is passed through the shared action;
-generate one with `openssl rand -base64 16`. Ephemeral runners still miss more often than not, so
+and restored only when `GRADLE_ENCRYPTION_KEY` is passed to setup-gradle — by the shared action in
+the publishing workflows and by non-PR CodeQL runs. PR runs (`kotlin-checks` and CodeQL) get no key
+and a read-only cache: PR-controlled build code must not hold the key that authenticates the cache
+those workflows restore. Generate one with `openssl rand -base64 16`. Ephemeral runners still miss
+more often than not, so
 on CI the cache is mainly regression prevention: a plugin or build-script change that breaks it
 fails CI before it reaches a developer's machine.
 
@@ -41,7 +44,24 @@ into `BuildConfig`, so a new publish recompiles Kotlin and reruns R8 even when t
 unchanged. That is the price of the monotonic version code the updater relies on. For local
 iteration, `-PnoR8` skips shrinking entirely, `-PgearslipAbi=arm64-v8a` builds only that ABI with
 no universal fallback, and `-PpseudoLocales` generates the stretched and right-to-left inspection
-locales. CodeQL uses `-PnoR8` too: it needs the Kotlin compile, not the shrinker's output.
+locales. CodeQL uses `-PnoR8 -PgearslipAbi=arm64-v8a` too: it needs the Kotlin compile, not the
+shrinker's output or the other ABIs, and publishes nothing.
+
+## What CI runs, and when
+
+Workflows should not spend a runner on work that is duplicated or that can be done cheaply:
+
+- A PR branch is published to the dev feed by its **push** event only; the old `pull_request`
+  trigger built and uploaded the same commit a second time. The ref is the branch name.
+- `kotlin-checks`, `codeql` and `security-scan` cancel superseded runs on the same ref
+  (`cancel-in-progress: true`). Scheduled Trivy runs use a separate concurrency key so a Monday
+  push cannot cancel the weekly scan. `release.yml` and `promote.yml` share one serialized
+  `release-assets` group; `dev-publish` has its own serialized group. Asset uploads must finish
+  rather than be interrupted mid-publish. A main push on a hand-written `v*` tag leaves that tag
+  to `promote.yml`, so a prerelease cannot overwrite the stable release.
+- CodeQL no longer runs on a schedule; it still runs on pushes, PRs and manual dispatch. A weekly
+  scan of unchanged Kotlin added a full rebuild with no new source facts; Trivy's cheap filesystem
+  scan keeps the `0 9 * * 1` slot as the scheduled safety net for newly published advisories.
 
 ## Update channels
 
@@ -50,11 +70,11 @@ Both channels install over the same package with the same signing key, so third-
 | Channel | Source | Published by |
 |---|---|---|
 | Stable | Non-prerelease releases from hand-written `v*` tags | `promote.yml`, on a tag push |
-| Dev | One branch head or `pr-<number>` at a time | `dev-publish.yml`, on a push or a same-repository PR |
+| Dev | Up to 30 newest branch heads | `dev-publish.yml`, on a branch push |
 
 - `promote.yml` requires the four signing secrets; a stable release without them could not replace an installed Gearslip.
 - `dev-publish.yml` builds the selected ref and uploads per-ABI APKs to the `dev-builds` prerelease, then writes `manifest.json` on the `dev-feed` branch. The manifest pins a commit and a SHA-256 per asset; the app refuses bytes whose digest doesn't match. Release assets are pruned to those still named by the manifest, so every ref in the feed has a downloadable APK.
-- Fork PRs are skipped: they cannot use the signing key, so an APK from them could not be installed over the app a driver has.
+- Fork PRs are skipped: their push lands in the fork, not this repository, and the signing key is never available to them. A PR branch in this repository is published from its push event under the branch name, so a commit is offered once rather than once for the push and again for the PR.
 - The stable updater ignores prereleases, so until a tag is promoted it reports that no stable release is available. Main pushes remain reachable from the Releases page. It pages through the releases list so a promotion older than the first 100 releases is still found.
 - Both workflows publish the APK's version code (minutes since the epoch): the dev feed as `seq`, the stable release as an HTML comment in its body. The app also reads the code from the downloaded APK before installing, and skips any offered build that would be an out-of-order downgrade from a later dev build.
 - To promote, push a hand-written tag such as `v0.6.0` to the repository. CI-generated tags contain `-g<sha>` and are never promoted.

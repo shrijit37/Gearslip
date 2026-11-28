@@ -1,15 +1,14 @@
 name: Publish dev build
 
-# Branch heads and same-repository PRs get an APK the dev channel can install in place. The
-# manifest is published separately so the app reads one small file instead of paging the GitHub
-# API. Fork PRs are skipped: they have no signing key, and a throwaway-signed APK could never
-# install over the app a driver already has.
+# Branch heads get an APK the dev channel can install in place. A PR branch is covered by its
+# push event, so this workflow runs once per commit instead of once for the push and again for
+# the PR. The manifest is published separately so the app reads one small file instead of paging
+# the GitHub API. Fork PRs never reach a push here: they have no signing key, and a
+# throwaway-signed APK could never install over the app a driver already has.
 on:
   push:
     branches-ignore:
       - 'dev-feed'
-  pull_request:
-    types: [opened, synchronize, reopened]
 
 permissions:
   contents: write
@@ -22,15 +21,13 @@ concurrency:
 
 jobs:
   publish:
-    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     steps:
-      # Check out first: a local action cannot be loaded from an empty runner. Build the PR's
-      # head (not its merge with main), so the ref the driver picks is the commit that shipped.
-      # Full history gives gitVersion a name for the build.
+      # Check out first: a local action cannot be loaded from an empty runner. Full history gives
+      # gitVersion a name for the build.
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          ref: ${{ github.sha }}
           fetch-depth: 0
 
       # The shared action sets up the toolchain and stable key, builds the dev APKs and verifies
@@ -76,7 +73,7 @@ jobs:
       - name: Publish the dev manifest
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          DEV_REF: ${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.number) || github.ref_name }}
+          DEV_REF: ${{ github.ref_name }}
           DEV_SHA7: ${{ steps.build.outputs.sha7 }}
           DEV_VERSION: ${{ steps.build.outputs.version }}
           DEV_SEQ: ${{ steps.build.outputs.seq }}

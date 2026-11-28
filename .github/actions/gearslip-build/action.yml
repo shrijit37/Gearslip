@@ -73,6 +73,10 @@ runs:
     - uses: gradle/actions/setup-gradle@v4
       with:
         cache-encryption-key: ${{ inputs.gradle-encryption-key }}
+        # Callers that run on PRs (CodeQL) must not write cache entries: PR-controlled build code
+        # could otherwise poison what a later signing/publishing run restores. This is defense in
+        # depth alongside the caller omitting the encryption key.
+        cache-read-only: ${{ github.event_name == 'pull_request' }}
 
     # A stable signature is what lets an installed Gearslip accept the next build. Without it
     # each runner's throwaway debug key makes Android refuse the update. Forks of release.yml

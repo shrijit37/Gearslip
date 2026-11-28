@@ -5,6 +5,12 @@ on:
   push:
     branches: [main]
 
+# A new push to the same ref makes the previous run's result obsolete; let it go so runners and
+# Gradle cache entries are spent on the current commit instead.
+concurrency:
+  group: kotlin-checks-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   kotlin-checks:
     name: kotlin-checks
@@ -17,6 +23,11 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
+      # No cache-encryption-key here. PR code controls this build script, and that key authenticates
+      # the cache restored by the signing/publishing workflows — it must never reach a PR runner.
+      # PRs read the unencrypted cache but do not write to it.
       - uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: ${{ github.event_name == 'pull_request' }}
       - name: Run unit tests and assemble debug APK
         run: ./gradlew :gearslip:testDebugUnitTest :gearslip:assembleDebug --no-daemon
