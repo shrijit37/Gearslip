@@ -92,9 +92,9 @@ proposes a JVM architecture test to enforce the import boundary.
 4. **Frame production.** Two modes, both owned by the session:
    - `PROVIDES_FRAMES` — the plug-in returns a `FrameSource` that writes H.264 bytes to a core-owned
      `FrameOutput`. Lowest latency, but the plug-in owns an encoder.
-   - `PROVIDES_PIXELS` *(proposed)* — the core lends a `Surface` backed by the encoder and the plug-in
-     draws into it. This is the cheap path for Compose or WebView renderers and avoids asking every
-     plug-in to reimplement bitrate control, keyframe resync and ack handling.
+   - `PROVIDES_PIXELS` — the renderer supplies a `Surface` through `PixelLeaseProvider` that the core
+     lends to hosted apps. The encoder-backed pixel frame source is still pending; the cheap path
+     for Compose/WebView renderers is not shippable yet.
 
    The existing placeholder is a `FrameSource` that feeds YUV buffers straight into `MediaCodec`
    without a drawing surface. It stays the fallback for a session with no plug-in.

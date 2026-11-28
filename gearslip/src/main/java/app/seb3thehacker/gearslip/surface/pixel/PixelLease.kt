@@ -4,7 +4,7 @@ import android.view.Surface
 import app.seb3thehacker.gearslip.surface.VideoSpec
 
 /**
- * A core-owned encoder surface lent to a pixel-mode renderer.
+ * A surface supplied by a pixel-mode renderer for the core to lend to hosted car apps.
  *
  * This is the one surface-layer type allowed to name `android.view.Surface`: it is not a UI
  * hierarchy type, and the car-app host needs the same lease for templated navigation apps. The

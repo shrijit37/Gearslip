@@ -1366,10 +1366,10 @@ class GearslipRunner(
                 val previous = pixelLease
                 val oldProvider = pixelProvider
                 if (previous != null && oldProvider != null) {
-                    val detached = surfaceGuard.callValue("detachSurface", false) {
+                    val detached = pixelDetached || surfaceGuard.callValue("detachSurface", false) {
                         CarServices.nav.detachSurface(previous.surface); true
                     }
-                    val released = surfaceGuard.callValue("releasePixelLease", false) {
+                    val released = pixelReleased || surfaceGuard.callValue("releasePixelLease", false) {
                         oldProvider.release(previous); true
                     }
                     if (!detached || !released) return@synchronized
