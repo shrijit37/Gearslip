@@ -48,6 +48,8 @@ class ArchitectureTest {
         assertTrue(forbiddenImport("import android.view.ViewGroup") != null)
         assertTrue(forbiddenImport("import android.view.ViewGroup.LayoutParams") != null)
         assertTrue(forbiddenImport("import android.view.ViewGroup.*") != null)
+        assertTrue(forbiddenImport("import android.view.*") != null)
+        assertTrue(forbiddenImport("import android.*") != null)
         assertTrue(forbiddenImport("import android.widget.Button") != null)
         assertTrue(forbiddenImport("import app.seb3thehacker.gearslip.ui.HomeScreen") != null)
         assertTrue(forbiddenImport("import app.seb3thehacker.gearslip.renderer.ComposeSurface") != null)
@@ -65,7 +67,8 @@ class ArchitectureTest {
         return when {
             name.startsWith("androidx.compose.") -> name
             name == "android.view.View" || name == "android.view.ViewGroup" ||
-                name.startsWith("android.view.View.") || name.startsWith("android.view.ViewGroup.") -> name
+                name.startsWith("android.view.View.") || name.startsWith("android.view.ViewGroup.") ||
+                name == "android.view.*" || name == "android.*" -> name
             name.startsWith("android.widget.") -> name
             name.startsWith("app.seb3thehacker.gearslip.ui.") -> name
             name.startsWith("app.seb3thehacker.gearslip.renderer.") -> name
