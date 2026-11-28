@@ -85,6 +85,7 @@ class SessionStateTest {
             assertEquals(42, before.lease.generation)
             assertEquals(SessionPhase.IDLE, before.session.phase)
 
+            state.setVideoSpec(VideoSpec(1024, 600, 60, 200, true))
             sources.sessionFlow.value = SessionSnapshot(SessionPhase.PROJECTING)
             sources.mediaFlow.value = MediaSnapshot(state = MediaPlaybackState.PLAYING)
             sources.callFlow.value = CallSnapshot(CallState.ACTIVE)
@@ -97,6 +98,10 @@ class SessionStateTest {
             delay(100)
 
             val after = state.snapshot.value
+            assertEquals(1024, after.frame.width)
+            assertEquals(60, after.frame.frameRate)
+            assertEquals(200, after.frame.densityDpi)
+            assertTrue(after.frame.wireless)
             assertEquals(SessionPhase.PROJECTING, after.session.phase)
             assertEquals(MediaPlaybackState.PLAYING, after.media.state)
             assertEquals(CallState.ACTIVE, after.call?.state)
@@ -168,6 +173,8 @@ class SessionStateTest {
             ),
         )
         sources.dataFlow.value = VehicleSnapshot(location = VehicleLocation(1.0, 2.0, 3f, 4.0, 5f, 6f))
+        sources.mediaFlow.value = MediaSnapshot(title = "Private track")
+        sources.navigationFlow.value = NavigationTurnSnapshot("k", "map", "500 m", "Home", 1)
         val state = SessionState(9, sources, trusted = false)
         try {
             state.start()
@@ -176,9 +183,12 @@ class SessionStateTest {
             assertEquals(CallState.INCOMING, view.call?.state)
             assertEquals("", view.call?.caller?.name)
             assertEquals("", view.call?.caller?.number)
+            assertEquals("", view.notifications.history.first().title)
             assertEquals("", view.notifications.history.first().text)
             assertTrue(view.notifications.history.first().lines.isEmpty())
             assertNull(view.carData.location)
+            assertEquals("", view.media.title)
+            assertEquals("", view.navigation?.road)
         } finally {
             state.stop()
         }

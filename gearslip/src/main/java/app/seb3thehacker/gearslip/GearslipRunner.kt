@@ -1234,6 +1234,7 @@ class GearslipRunner(
             sessionState?.stop()
             val state = SessionState(System.currentTimeMillis())
             state.start()
+            state.setVideoSpec(spec)
             sessionState = state
             val source = FrameSources.choose(
                 surface, surfaceContext(), spec,

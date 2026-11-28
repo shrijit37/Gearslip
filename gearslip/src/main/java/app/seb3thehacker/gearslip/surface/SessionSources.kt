@@ -50,6 +50,8 @@ import app.seb3thehacker.gearslip.surface.api.VehicleSnapshot
 import app.seb3thehacker.gearslip.surface.StateFlows.startingWith
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.map
 import java.util.UUID
 import java.util.WeakHashMap
@@ -157,7 +159,15 @@ object GlobalSources : SessionSources {
         )
     }.asState(MediaSnapshot())
 
-    override val call = combine(CarCalls.state, CarCalls.muted) { state, muted ->
+    /** A 1 Hz tick so a call's displayed duration advances without a state change. */
+    private val callTick = flow {
+        while (true) {
+            emit(Unit)
+            delay(1_000)
+        }
+    }
+
+    override val call = combine(CarCalls.state, CarCalls.muted, callTick) { state, muted, _ ->
         when (state) {
             CallUiState.None -> null
             is CallUiState.Ringing -> CallSnapshot(CallState.INCOMING, caller(state.caller))

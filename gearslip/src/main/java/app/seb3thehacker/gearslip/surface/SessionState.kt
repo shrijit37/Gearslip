@@ -1,5 +1,6 @@
 package app.seb3thehacker.gearslip.surface
 
+import app.seb3thehacker.gearslip.surface.api.FrameGeometry
 import app.seb3thehacker.gearslip.surface.api.SurfaceSnapshot
 import app.seb3thehacker.gearslip.surface.api.SurfaceLeaseSnapshot
 import kotlinx.coroutines.CoroutineScope
@@ -8,6 +9,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -30,6 +32,8 @@ class SessionState(
     private val _snapshot = MutableStateFlow(
         SurfaceSnapshot(lease = SurfaceLeaseSnapshot(generation = generation)),
     )
+    /** The negotiated video format is known only to the runner, not to the geometry owner. */
+    private val videoSpec = MutableStateFlow<VideoSpec?>(null)
 
     /** The complete session view. Every emission is an immutable value. */
     val snapshot: StateFlow<SurfaceSnapshot> = _snapshot.asStateFlow()
@@ -37,7 +41,20 @@ class SessionState(
     /** Starts mirroring the source flows. Safe to call once per session. */
     fun start() {
         mirror(sources.session) { copy(session = it) }
-        mirror(sources.frame) { copy(frame = it) }
+        // Merge geometry with the negotiated spec so frameRate and wireless are real values,
+        // not placeholders invented by the source that only knows width/height/density.
+        scope.launch {
+            combine(sources.frame, videoSpec) { geometry, spec ->
+                if (spec == null) geometry else FrameGeometry(
+                    spec.width, spec.height, spec.frameRate, spec.densityDpi, spec.wireless,
+                )
+            }.collect { value ->
+                if (job.isActive) _snapshot.update { current ->
+                    val next = current.copy(frame = value)
+                    if (trusted) next else next.redacted()
+                }
+            }
+        }
         mirror(sources.insets) { copy(insets = it) }
         mirror(sources.night) { copy(night = it) }
         mirror(sources.vehicle) { copy(vehicle = it) }
@@ -54,6 +71,11 @@ class SessionState(
         mirror(sources.catalog) { copy(catalog = it) }
         mirror(sources.lease) { copy(lease = it.copy(generation = generation)) }
         mirror(sources.settings) { copy(settings = it) }
+    }
+
+    /** Publishes the format the car negotiated for this session. */
+    fun setVideoSpec(spec: VideoSpec) {
+        videoSpec.value = spec
     }
 
     /** Ends the session: collectors stop and no later source change can publish. */
