@@ -587,8 +587,8 @@ class CarAppConnection(private val context: Context, private val session: Sessio
         // The app draws for the whole surface; the visible area is what the renderer leaves
         // uncovered, and the stable area is the part that never gets covered. Both depend on the
         // template (see visibleAreaFor) and are reported by the attached renderer via
-        // [reportAreas]. A fresh surface of the same size keeps the last values until it reports
-        // again; until then the whole surface is fair game.
+        // [reportAreas]. A fresh surface of the same size keeps the last values while they fit;
+        // with none, the whole surface is reported as both the visible and stable area.
         val whole = Rect(0, 0, surface.width, surface.height)
         val last = areas?.takeIf { (visible, stable) -> whole.contains(visible) && whole.contains(stable) }
         reportAreas(last?.first ?: whole, last?.second ?: whole)

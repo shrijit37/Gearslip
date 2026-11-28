@@ -81,12 +81,12 @@
 9. **Isolation is not build-enforced.** Everything is in one module;
    `gearslip/build.gradle.kts:239-244` declares Compose alongside protocol dependencies. Phase 0
    added `surface/ArchitectureTest.kt` to fail on View/Compose/renderer imports in core packages,
-   but the module split itself is still pending. The unused `maplibre` and `okhttp` dependencies and
-   their build-script comments were removed in Phase 0 (no `org.maplibre` or `okhttp3` imports ever
-   existed in `gearslip/src`). `androidTest` dependencies (`:252-255`) still have no source set; the
-   comment at `:252-253` is stale. Bitmap work also sits in core helpers —
-   `host/CarModels.kt:76` keeps a global `LruCache<String, Bitmap>` and `:85` returns a `Bitmap` — so
-   pure screen models need rasterization moved into the renderer.
+   but the module split itself is still pending. The unused `maplibre`/`okhttp` dependencies, their
+   comments, and the `androidTest` declarations (no source set existed) were removed in Phase 0 and
+   the Phase 4 residue cleanup (no `org.maplibre` or `okhttp3` imports ever existed in
+   `gearslip/src`). Bitmap work also sits in core helpers — `host/CarModels.kt:76` keeps a global
+   `LruCache<String, Bitmap>` and `:85` returns a `Bitmap` — so pure screen models need rasterization
+   moved into the renderer.
 
 10. **Test coverage has holes at exactly the migration seam.** `SurfacePluginTest` covers selection,
     basic routing and explicit/natural detach, and the new surface suites cover the factory path,
@@ -117,9 +117,9 @@
     many unread (`scale`, `playerTitle`, `navBarMode`, `screensaver`, `whatsNew*`, …);
     `car/CarSensors.kt`, `notify/CarNotifications.kt`, `notify/PhoneNavigation.kt` and
     `GearslipLog.version/snapshot()` remain live but undrawn. `PermissionActivity.permissionResults`
-    (`:45-48`) has no subscriber. The log-share `FileProvider` survives in the manifest with no
-    screen that calls it. This is dead weight to prune or expose deliberately in Phase 1, not to
-    carry into a plug-in SDK.
+    (`:45-48`) has no subscriber. The log-share `FileProvider` and its unused helpers were removed
+    with the Phase 4 residue cleanup. This remaining dead weight belongs in a later prune, not in a
+    plug-in SDK.
 
 ## State boundary inventory
 
