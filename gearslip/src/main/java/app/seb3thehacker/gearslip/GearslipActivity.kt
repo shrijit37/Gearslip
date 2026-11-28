@@ -349,7 +349,7 @@ class GearslipActivity : ComponentActivity() {
 
         val selection = runCatching { HeadunitSurfaces.select(this) }.getOrElse { e ->
             GearslipLog.w("surface: selection threw, running headless: ${e.message}")
-            SurfaceSelection(null, 0L, false)
+            SurfaceSelection(null, HeadunitSurfaces.generation(), false)
         }
         val runner = GearslipRunner(
             input = FileInputStream(pfd.fileDescriptor),
@@ -400,7 +400,7 @@ class GearslipActivity : ComponentActivity() {
         wirelessSocket = socket
         val selection = runCatching { HeadunitSurfaces.select(this) }.getOrElse { e ->
             GearslipLog.w("surface: selection threw, running headless: ${e.message}")
-            SurfaceSelection(null, 0L, false)
+            SurfaceSelection(null, HeadunitSurfaces.generation(), false)
         }
         val runner = GearslipRunner(
             input = socket.getInputStream(),

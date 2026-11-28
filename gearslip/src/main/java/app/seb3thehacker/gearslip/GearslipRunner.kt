@@ -165,7 +165,6 @@ class GearslipRunner(
             sessionState?.stop()
             sessionState = null
             if (!surfaceDetached) {
-                surfaceDetached = true
                 // Only mark detached when the plug-in actually released: a failed detach stays
                 // retryable instead of silently leaking the renderer's resources.
                 val detached = surface?.let { current ->
