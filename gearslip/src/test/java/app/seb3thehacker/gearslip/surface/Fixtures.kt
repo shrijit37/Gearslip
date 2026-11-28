@@ -23,7 +23,9 @@ class FakeFrameSource : FrameSource {
     var output: FrameOutput? = null
 
     override fun start(output: FrameOutput) { starts++; this.output = output }
-    override fun requestSyncFrame() = Unit
+    var syncFrames = 0
+
+    override fun requestSyncFrame() { syncFrames++ }
     override fun applyBitRate(bps: Int) { bitRate = bps }
     override fun stop() = Unit
 }
