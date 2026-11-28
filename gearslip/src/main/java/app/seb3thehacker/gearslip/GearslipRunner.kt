@@ -1365,13 +1365,21 @@ class GearslipRunner(
                     surfaceGuard.callValue("acquirePixelLease", null) { p.acquire(spec) }
                 }
                 if (lease != null) {
-                    // A re-acquire must not orphan the previous lease.
-                    pixelLease?.let { previous ->
-                        surfaceGuard.call("detachSurface") { CarServices.nav.detachSurface(previous.surface) }
-                        pixelProvider?.let { p ->
-                            surfaceGuard.call("releasePixelLease") { p.release(previous) }
+                    // A re-acquire must not orphan a previous lease whose release failed.
+                    val previous = pixelLease
+                    val oldProvider = pixelProvider
+                    if (previous != null && oldProvider != null) {
+                        val detached = surfaceGuard.callValue("detachSurface", false) {
+                            CarServices.nav.detachSurface(previous.surface); true
                         }
+                        val released = surfaceGuard.callValue("releasePixelLease", false) {
+                            oldProvider.release(previous); true
+                        }
+                        if (!detached || !released) return@synchronized
                     }
+                    // Re-check after the plug-in callbacks: a reentrant swap must not attach a
+                    // lease from a renderer that is no longer trusted or current.
+                    if (!trustedSurface || registrationStale()) return@synchronized
                     pixelDetached = false
                     pixelReleased = false
                     pixelProvider = provider
