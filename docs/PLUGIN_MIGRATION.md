@@ -15,7 +15,7 @@
 | Frame production | `surface/FrameSource.kt:25-37` (H.264 bytes into core-owned `FrameOutput`); one production implementation, `PlaceholderFrameSource.kt:19`, which feeds YUV straight into `MediaCodec`; tests add `FakeFrameSource` at `surface/Fixtures.kt:19` |
 | Registry | `surface/HeadunitSurfaces.kt:28-83` — one global slot, factory or instance, `install`/`installSurface`/`clear`; `select` captures surface, generation and trust |
 | Runner wiring | `GearslipRunner.kt:1221-1242, 1325-1331` attaches/starts a source, routes input by capability, releases on stop and EOF |
-| App wiring | `GearslipActivity.kt:29,30,117` installs the untrusted `PlaceholderSurface` at `onCreate` and selects it at 367/415 |
+| App wiring | `GearslipActivity.kt:29,30,117` installs the untrusted `PlaceholderSurface` at `onCreate` and selects it at 369/417 |
 | Hosted car apps | `host/CarAppConnection.kt` binds templated apps and lends surfaces through `attachSurface()` at `:507`; the method currently has no caller |
 | Session state | Process-wide `object`s: `SessionStatus`, `CarEnvironment`, `CarServices`, `CarKeys`, and internal `CarAlerts`/`CarToasts` flows |
 | Tests | 26 pure-JVM files (verified with `find gearslip/src/test -name "*.kt"`); `surface/SurfacePluginTest.kt:16-120` has seven plug-in tests, including a focused natural-EOF teardown case, and `surface/ArchitectureTest.kt` guards the core boundary; no instrumentation tests exist |
@@ -24,7 +24,7 @@
 ## Findings
 
 1. **Only the headless renderer is installed.** `GearslipActivity` installs `PlaceholderSurface` at
-   the composition root and selects it at lines 366 and 414. It declares no capabilities, so every
+   the composition root and selects it at lines 369 and 417. It declares no capabilities, so every
    real session still generates the placeholder frame. A real Compose/WebView renderer is still
    needed before the old car UI can live in a plug-in.
 
