@@ -26,6 +26,8 @@ import app.seb3thehacker.gearslip.car.CarSettings
 import app.seb3thehacker.gearslip.car.Prefetch
 import app.seb3thehacker.gearslip.protocol.TouchPoint
 import app.seb3thehacker.gearslip.surface.HeadunitSurfaces
+import app.seb3thehacker.gearslip.surface.PlaceholderSurface
+import app.seb3thehacker.gearslip.surface.SurfaceTrust
 import app.seb3thehacker.gearslip.surface.AppCommands
 import app.seb3thehacker.gearslip.surface.api.SurfaceCommand
 import app.seb3thehacker.gearslip.surface.SurfaceSelection
@@ -111,6 +113,10 @@ class GearslipActivity : ComponentActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        // Explicit composition-root registration: until a real renderer ships, the headless
+        // placeholder is the installed surface. It consumes no state, so it stays untrusted and
+        // never clobbers a renderer registered earlier in app init.
+        HeadunitSurfaces.installSurfaceIfAbsent(PlaceholderSurface, SurfaceTrust.UNTRUSTED)
         super.onCreate(savedInstanceState)
         // Location, calendar, the phone/contacts group, and the microphone are asked for one at
         // a time by PermissionsSetupScreen instead of here, each only after the driver taps

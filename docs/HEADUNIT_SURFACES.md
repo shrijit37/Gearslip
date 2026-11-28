@@ -1,9 +1,9 @@
 # Head-unit surfaces
 
-> **Current contract.** No surface is installed in the shipped app today, so sessions use the
-> placeholder frame source. The gap between this contract and a full plug-in system is recorded in
-> [PLUGIN_MIGRATION.md](PLUGIN_MIGRATION.md); the design target is in
-> [PLUGIN_ARCHITECTURE.md](PLUGIN_ARCHITECTURE.md).
+> **Current contract.** When nothing is registered, `GearslipActivity` installs the headless
+> `PlaceholderSurface` at `onCreate`; sessions use the placeholder until a real renderer is
+> registered. The remaining gaps are recorded in [PLUGIN_MIGRATION.md](PLUGIN_MIGRATION.md);
+> the design target is in [PLUGIN_ARCHITECTURE.md](PLUGIN_ARCHITECTURE.md).
 
 Gearslip's Android Auto Protocol (AAP) core owns the car connection, the frame clock and input
 decoding. It does **not** own any pixels. A head-unit UI is a plug-in: implement
@@ -52,8 +52,10 @@ The factory is invoked for each session, so a surface instance never outlives th
 together. No reflection or service loading is involved: a surface is a compile-time dependency plus
 one line of wiring.
 
-> **Current status:** `GearslipActivity` selects a surface with `select(this)` but never calls
-> `install(...)`. Until one is installed, every session runs the placeholder.
+> **Current status:** `GearslipActivity` installs `PlaceholderSurface` at `onCreate` only when nothing
+> is registered, through `installSurfaceIfAbsent(surface, trust)`; an existing factory or instance
+> wins and the generation is untouched. Selection goes through the fail-closed `selectSurface()`
+> wrapper, which calls `select(this)`. It declares no capabilities, so sessions stay headless.
 
 ## Known gaps
 

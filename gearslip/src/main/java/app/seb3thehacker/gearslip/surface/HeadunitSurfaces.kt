@@ -49,8 +49,17 @@ object HeadunitSurfaces {
         installed = surface
     }
 
-    /** The instance installed with [install], if any; factories are created per session. */
+    /** The instance installed with [installSurface]/[installSurfaceIfAbsent], if any; factories are per session. */
     val current: HeadunitSurface? get() = installed
+
+    /** Installs an instance only when nothing is registered, atomically with the check. */
+    fun installSurfaceIfAbsent(surface: HeadunitSurface, trust: SurfaceTrust) = synchronized(this) {
+        if (factory == null && installed == null) {
+            generationCounter.incrementAndGet()
+            this.trust = trust
+            installed = surface
+        }
+    }
 
     /**
      * Selects the surface, generation and trust in one critical section.
