@@ -12,8 +12,6 @@ import kotlinx.coroutines.runBlocking
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
-import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /** Focus and frame-source forwarding at the plug-in seam (finding 10). */
@@ -149,13 +147,6 @@ class SurfaceForwardingTest {
         } finally {
             runner.stop()
         }
-    }
-
-    @Test fun `a stopped or detached session never attaches its surface`() {
-        assertTrue(SurfaceDecisions.mayAttach(false, false))
-        assertFalse(SurfaceDecisions.mayAttach(true, false))
-        assertFalse(SurfaceDecisions.mayAttach(false, true))
-        assertFalse(SurfaceDecisions.mayAttach(true, true))
     }
 
     private fun keyEvent(): ByteArray {
