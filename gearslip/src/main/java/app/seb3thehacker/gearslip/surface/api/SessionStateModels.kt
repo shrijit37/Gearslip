@@ -176,6 +176,7 @@ data class SurfaceSnapshot(
     val frame: FrameGeometry = FrameGeometry(0, 0, 0, 0, false),
     val insets: ScreenInsets = ScreenInsets.NONE,
     val vehicle: String = "",
+    val vehicleModel: VehicleModel? = null,
     val carData: VehicleSnapshot = VehicleSnapshot(),
     val media: MediaSnapshot = MediaSnapshot(),
     val call: CallSnapshot? = null,

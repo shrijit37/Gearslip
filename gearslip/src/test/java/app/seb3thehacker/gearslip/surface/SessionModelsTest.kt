@@ -16,8 +16,12 @@ import app.seb3thehacker.gearslip.surface.api.SurfaceLeaseSnapshot
 import app.seb3thehacker.gearslip.surface.api.SurfaceSnapshot
 import app.seb3thehacker.gearslip.surface.api.ToastSnapshot
 import app.seb3thehacker.gearslip.surface.api.VehicleSnapshot
+import java.lang.reflect.GenericArrayType
 import java.lang.reflect.Modifier
-import kotlin.reflect.KClass
+import java.lang.reflect.ParameterizedType
+import java.lang.reflect.Type
+import java.lang.reflect.TypeVariable
+import java.lang.reflect.WildcardType
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -72,21 +76,46 @@ class SessionModelsTest {
     }
 
     @Test fun `no snapshot field is an Android or Compose type`() {
-        val visited = mutableSetOf<KClass<*>>()
-        fun check(type: KClass<*>, path: String) {
-            if (!visited.add(type)) return
-            val name = type.qualifiedName.orEmpty()
-            assertTrue("$path is not a pure Kotlin type: $name", !name.startsWith("android."))
-            assertTrue("$path is not a pure Kotlin type: $name", !name.startsWith("androidx."))
-            type.java.declaredFields
-                .filter { !Modifier.isStatic(it.modifiers) && !it.type.isPrimitive }
-                .forEach { field ->
-                    val component = if (field.type.isArray) field.type.componentType else field.type
-                    if (component.name.startsWith("java.") || component.name.startsWith("kotlin.")) return@forEach
-                    check(component.kotlin, "$path.${field.name}")
+        val visited = mutableSetOf<String>()
+        fun check(type: Type, path: String) {
+            when (type) {
+                is ParameterizedType -> {
+                    check(type.rawType, path)
+                    type.actualTypeArguments.forEachIndexed { i, arg -> check(arg, "$path.arg$i") }
                 }
+                is GenericArrayType -> check(type.genericComponentType, "$path.component")
+                is WildcardType -> type.upperBounds.forEach { bound -> check(bound, path) }
+                is TypeVariable<*> -> Unit // erased bounds cannot name an Android type
+                is Class<*> -> {
+                    if (type.isPrimitive) return
+                    val name = type.name
+                    // Leaves: JDK/Kotlin value types carry no view-layer dependency.
+                    if (name.startsWith("java.") || name.startsWith("kotlin.")) return
+                    assertTrue("$path is not a pure Kotlin type: $name", !name.startsWith("android."))
+                    assertTrue("$path is not a pure Kotlin type: $name", !name.startsWith("androidx."))
+                    if (!visited.add(name)) return
+                    type.superclass?.let { check(it, "$path.super") }
+                    type.declaredFields
+                        .filterNot { Modifier.isStatic(it.modifiers) }
+                        .forEach { field -> check(field.genericType, "$path.${field.name}") }
+                }
+            }
         }
-        check(SurfaceSnapshot::class, "SurfaceSnapshot")
+        check(SurfaceSnapshot::class.java, "SurfaceSnapshot")
+
+        // The graph must reach every snapshot class, so a newly added one cannot silently escape.
+        val expected = listOf(
+            "SurfaceSnapshot", "SessionSnapshot", "FrameGeometry", "ScreenInsets", "VehicleModel",
+            "VehicleLocation", "VehicleSnapshot", "MediaSnapshot", "TrackSnapshot", "CallSnapshot",
+            "CallerSnapshot", "NotificationCenterSnapshot", "NotificationSnapshot", "ChatLineSnapshot",
+            "NavigationTurnSnapshot", "SensorReadingSnapshot", "HostedAppSnapshotState",
+            "HostedAppSnapshot", "TemplateSnapshot", "AlertSnapshot", "ToastSnapshot",
+            "CatalogEntrySnapshot", "SurfaceLeaseSnapshot", "SettingsSnapshot", "SessionPhase",
+            "LinkType", "MediaPlaybackState", "CallState",
+        )
+        expected.forEach { name ->
+            assertTrue("$name is not reachable from SurfaceSnapshot", visited.any { it.endsWith(".$name") })
+        }
     }
 
     @Test fun `collections in a snapshot are read-only to consumers`() {
