@@ -125,6 +125,7 @@ class SurfaceFailureIsolationTest {
         HeadunitSurfaces.installSurfaceIfAbsent(second, SurfaceTrust.TRUSTED)
         try {
             assertSame(first, HeadunitSurfaces.current)
+            assertFalse(HeadunitSurfaces.select(null).trusted)
             assertEquals(generation, HeadunitSurfaces.generation())
         } finally {
             HeadunitSurfaces.clear()

@@ -14,7 +14,7 @@
 | State exposed | `surface/SurfaceContext.kt:16-34` — six read-only flows: session, frame, insets, night, carData, vehicle |
 | Frame production | `surface/FrameSource.kt:25-37` (H.264 bytes into core-owned `FrameOutput`); one production implementation, `PlaceholderFrameSource.kt:19`, which feeds YUV straight into `MediaCodec`; tests add `FakeFrameSource` at `surface/Fixtures.kt:19` |
 | Registry | `surface/HeadunitSurfaces.kt:28-95` — one global slot, factory or instance; `install`/`installSurface`/`installSurfaceIfAbsent`/`clear`, and `select` captures surface, generation and trust |
-| Runner wiring | `GearslipRunner.kt:1221-1242, 1325-1331` attaches/starts a source, routes input by capability, releases on stop and EOF |
+| Runner wiring | `GearslipRunner.kt:1276-1313, 161-181` attaches/starts a source, routes input by capability, releases on stop and EOF |
 | App wiring | `GearslipActivity.kt:29,30,119` installs the untrusted `PlaceholderSurface` at `onCreate` when no surface is registered, and selects it at 367/415 |
 | Hosted car apps | `host/CarAppConnection.kt` binds templated apps and lends surfaces through `attachSurface()` at `:507`; the method currently has no caller |
 | Session state | Process-wide `object`s: `SessionStatus`, `CarEnvironment`, `CarServices`, `CarKeys`, and internal `CarAlerts`/`CarToasts` flows |
