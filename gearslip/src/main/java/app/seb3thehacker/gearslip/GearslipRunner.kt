@@ -176,28 +176,25 @@ class GearslipRunner(
             if (stopped) frameSource = null
             val lease = pixelLease
             val provider = pixelProvider
-            if (lease != null && provider != null) {
-                // Detach before releasing: the host may still be drawing through the Surface.
-                if (!pixelDetached) {
-                    pixelDetached = surfaceGuard.callValue("detachSurface", false) {
-                        CarServices.nav.detachSurface(lease.surface)
-                        true
-                    }
-                }
-                // Keep the references when a step fails so only that step is retried.
-                if (pixelDetached) {
-                    if (!pixelReleased) {
+            if (lease != null && provider != null && !pixelDetached) {
+                // Detach is posted to the host's main thread; release the renderer's Surface only
+                // from its completion callback, so the nav app has stopped drawing first.
+                pixelDetached = surfaceGuard.callValue("detachSurface", false) {
+                    CarServices.nav.detachSurface(lease.surface) {
                         pixelReleased = surfaceGuard.callValue("releasePixelLease", false) {
                             provider.release(lease)
                             true
                         }
+                        synchronized(surfaceLock) {
+                            if (pixelDetached && pixelReleased) {
+                                pixelLease = null
+                                pixelProvider = null
+                                pixelDetached = false
+                                pixelReleased = false
+                            }
+                        }
                     }
-                    if (pixelReleased) {
-                        pixelLease = null
-                        pixelProvider = null
-                        pixelDetached = false
-                        pixelReleased = false
-                    }
+                    true
                 }
             }
             sessionState?.stop()
@@ -1374,17 +1371,15 @@ class GearslipRunner(
                     // the step that failed.
                     if (!pixelDetached) {
                         pixelDetached = surfaceGuard.callValue("detachSurface", false) {
-                            CarServices.nav.detachSurface(previous.surface); true
+                            CarServices.nav.detachSurface(previous.surface) {
+                                pixelReleased = surfaceGuard.callValue("releasePixelLease", false) {
+                                    oldProvider.release(previous); true
+                                }
+                            }
+                            true
                         }
                     }
-                    // Never release a Surface the host may still be drawing through.
                     if (!pixelDetached) return@synchronized
-                    if (!pixelReleased) {
-                        pixelReleased = surfaceGuard.callValue("releasePixelLease", false) {
-                            oldProvider.release(previous); true
-                        }
-                    }
-                    if (!pixelReleased) return@synchronized
                     pixelLease = null
                     pixelProvider = null
                     pixelDetached = false

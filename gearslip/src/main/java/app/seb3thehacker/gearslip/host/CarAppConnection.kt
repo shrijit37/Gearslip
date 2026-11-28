@@ -525,13 +525,15 @@ class CarAppConnection(private val context: Context, private val session: Sessio
      * Takes the Surface back, e.g. when a renderer's lease goes away. With [surface], only if
      * that is still the one lent - a replaced lease's teardown must not take back its successor's.
      */
-    fun detachSurface(surface: Surface? = null) {
+    fun detachSurface(surface: Surface? = null, onDetached: (() -> Unit)? = null) {
         main.post {
             val current = lent ?: return@post
             if (surface != null && current.surface !== surface) return@post
             lent = null
             sendSurfaceDestroyed(current)
             update { it.copy(surfaceAttached = false) }
+            // Callers release the renderer's Surface only after the host has stopped drawing.
+            onDetached?.invoke()
         }
     }
 
