@@ -1366,13 +1366,20 @@ class GearslipRunner(
                 val previous = pixelLease
                 val oldProvider = pixelProvider
                 if (previous != null && oldProvider != null) {
-                    val detached = pixelDetached || surfaceGuard.callValue("detachSurface", false) {
-                        CarServices.nav.detachSurface(previous.surface); true
+                    // Detach the host before releasing the renderer's Surface: the host may still
+                    // be drawing through it. Persist each result so a partial failure retries only
+                    // the step that failed.
+                    if (!pixelDetached) {
+                        pixelDetached = surfaceGuard.callValue("detachSurface", false) {
+                            CarServices.nav.detachSurface(previous.surface); true
+                        }
                     }
-                    val released = pixelReleased || surfaceGuard.callValue("releasePixelLease", false) {
-                        oldProvider.release(previous); true
+                    if (!pixelReleased) {
+                        pixelReleased = surfaceGuard.callValue("releasePixelLease", false) {
+                            oldProvider.release(previous); true
+                        }
                     }
-                    if (!detached || !released) return@synchronized
+                    if (!pixelDetached || !pixelReleased) return@synchronized
                     pixelLease = null
                     pixelProvider = null
                     pixelDetached = false
@@ -1384,9 +1391,9 @@ class GearslipRunner(
                 if (lease != null) {
                     // Re-check after the plug-in callbacks: a reentrant swap must not attach a
                     // lease from a renderer that is no longer trusted or current.
-                    if (!trustedSurface || registrationStale()) {
-                        surfaceGuard.call("releasePixelLease") { provider?.release(lease) }
+                    if (!trustedSurface || stopped || surfaceDetached || registrationStale()) {
                         surfaceGuard.call("detachSurface") { CarServices.nav.detachSurface(lease.surface) }
+                        surfaceGuard.call("releasePixelLease") { provider?.release(lease) }
                         return@synchronized
                     }
                     pixelDetached = false

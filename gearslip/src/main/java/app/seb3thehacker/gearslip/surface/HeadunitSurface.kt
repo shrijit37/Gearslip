@@ -42,7 +42,7 @@ interface HeadunitSurface {
      */
     fun attach(context: SurfaceContext, spec: VideoSpec): FrameSource? = null
 
-    /** A pixel-mode renderer supplies the lease the core lends to hosted car apps. */
+    /** Supplies the Surface the core lends to hosted car apps; the renderer owns the lease. */
     fun pixelLeaseProvider(): PixelLeaseProvider? = null
 
     /** The session ended; release anything the surface holds. */
