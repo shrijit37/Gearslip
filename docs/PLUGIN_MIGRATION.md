@@ -12,14 +12,14 @@
 | --- | --- |
 | Plug-in contract | `gearslip/src/main/java/app/seb3thehacker/gearslip/surface/HeadunitSurface.kt:28` — `id`, three capabilities, `attach/detach/onFocus/onTouch/onKey/onRotate` |
 | State exposed | `surface/SurfaceContext.kt:16-34` — six read-only flows: session, frame, insets, night, carData, vehicle |
-| Frame production | `surface/FrameSource.kt:25-37` (H.264 bytes into core-owned `FrameOutput`); one production implementation, `PlaceholderFrameSource.kt:19`, which feeds YUV straight into `MediaCodec`; tests add `FakeFrameSource` at `surface/SurfacePluginTest.kt:21` |
+| Frame production | `surface/FrameSource.kt:25-37` (H.264 bytes into core-owned `FrameOutput`); one production implementation, `PlaceholderFrameSource.kt:19`, which feeds YUV straight into `MediaCodec`; tests add `FakeFrameSource` at `surface/Fixtures.kt:19` |
 | Registry | `surface/HeadunitSurfaces.kt:12-31` — one volatile global slot, factory or instance, `install`/`clear` |
 | Runner wiring | `GearslipRunner.kt:1221-1242, 1325-1331` attaches/starts a source, routes input by capability, releases on stop and EOF |
 | App wiring | `GearslipActivity.kt:28,355,401` creates a surface from the registry but **never installs one** |
 | Hosted car apps | `host/CarAppConnection.kt` binds templated apps and lends surfaces through `attachSurface()` at `:507`; the method currently has no caller |
 | Session state | Process-wide `object`s: `SessionStatus`, `CarEnvironment`, `CarServices`, `CarKeys`, and internal `CarAlerts`/`CarToasts` flows |
-| Tests | 21 pure-JVM files; `surface/SurfacePluginTest.kt:73-176` has seven plug-in tests, including a focused natural-EOF teardown case; no instrumentation tests exist |
-| Modules | One Gradle module (`:gearslip`); Compose, car-app library, MapLibre and OkHttp are all declared together |
+| Tests | 23 pure-JVM files; `surface/SurfacePluginTest.kt:16-120` has seven plug-in tests, including a focused natural-EOF teardown case, and `surface/ArchitectureTest.kt` guards the core boundary; no instrumentation tests exist |
+| Modules | One Gradle module (`:gearslip`); Compose and the car-app library are declared together. MapLibre and OkHttp were removed in Phase 0 |
 
 ## Findings
 
@@ -77,17 +77,18 @@
    Keycodes are `android.view.KeyEvent` constants in `CarKeys.kt:6`, `CarPhoneStatus.kt:4` and
    `CarMedia.kt:7`. A plug-in cannot customize key maps or intercept a key before core acts on it.
 
-9. **Isolation is not build-enforced.** Everything is in one module; `gearslip/build.gradle.kts:239-244`
-   declares Compose alongside protocol dependencies, so core code could import a View today and only
-   a human review would catch it. `maplibre` and `okhttp` (`:252, :254`) are unused — no `com.maplibre`
-   or `okhttp3` imports exist in `gearslip/src` — and the comments at `:251` and `:253` that assign
-   them live purposes are stale. `androidTest` dependencies (`:256-259`) also have no source set;
-   the comment at `:256-257` is stale. Bitmap work also sits in core helpers —
+9. **Isolation is not build-enforced.** Everything is in one module;
+   `gearslip/build.gradle.kts:239-244` declares Compose alongside protocol dependencies. Phase 0
+   added `surface/ArchitectureTest.kt` to fail on View/Compose/renderer imports in core packages,
+   but the module split itself is still pending. The unused `maplibre` and `okhttp` dependencies and
+   their build-script comments were removed in Phase 0 (no `com.maplibre` or `okhttp3` imports ever
+   existed in `gearslip/src`). `androidTest` dependencies (`:252-255`) still have no source set; the
+   comment at `:252-253` is stale. Bitmap work also sits in core helpers —
    `host/CarModels.kt:76` keeps a global `LruCache<String, Bitmap>` and `:85` returns a `Bitmap` — so
    pure screen models need rasterization moved into the renderer.
 
 10. **Test coverage has holes at exactly the migration seam.** `SurfacePluginTest` covers selection,
-    basic routing, explicit detach and natural-EOF detach (`:142-147`), but not the factory install
+    basic routing, explicit detach and natural-EOF detach (`:85-90`), but not the factory install
     path, `onFocus`, `requestSyncFrame`/`applyBitRate` forwarding, attach-under-stop, a throwing
     plug-in, or a plug-in swapped mid-session. `UpdateCheckerTest` does not cover generation bumps
     or queued installs.
@@ -99,7 +100,7 @@
     `main`; it previously directed work to `experimental`. Those sections are corrected here.
     Remaining drift: `host/CarAppConnection.kt`
     comments at `:499-502`, `:539-551`, `:589-591`, `:622-626` and `:753-761`; the build-script
-    comments at `gearslip/build.gradle.kts:177,185,251,253,256-257`; empty car-UI headings in
+    comments at `gearslip/build.gradle.kts:157-158,177,185,252-253`; empty car-UI headings in
     `res/values/strings.xml:294-395`; duplicate session text at `:408-432`; unused `<queries>` for
     recognition and TTS services in `AndroidManifest.xml:121-128`.
 
@@ -203,11 +204,11 @@ and a docs update. Do not combine phases into one large PR.
 - Keep `applicationId`, shared signing, monotonic `versionCode`, ABI splits and APK naming in the
   app module, per [AGENTS.md](../AGENTS.md). Move the `-keep class androidx.car.app.**` rule with
   the car-app host module.
-- Remove only the residue left behind by the Phase 0 dependency removal (findings 9 and 11): stale
-  build-script comments for `maplibre`/`okhttp`, their MapLibre packaging config, unused `androidTest`
+- Remove the residue left behind by the Phase 0 dependency removal (findings 9 and 11): the MapLibre
+  packaging config and its stale comment at `gearslip/build.gradle.kts:185-186`, unused `androidTest`
   declarations, the Nothing-UI comments, unused recognition/TTS `<queries>`, empty car-UI string
-  headings and the orphaned log-share `FileProvider` if no screen uses it. Phase 0 owns removing the
-  dependencies themselves; this phase does not repeat that step.
+  headings and the orphaned log-share `FileProvider` if no screen uses it. Phase 0 already removed the
+  dependencies and their build-script comments; this phase does not repeat that step.
 - Update Gradle task paths in `.github/actions/gearslip-build/action.yml`,
   `.github/workflows/kotlin-checks.yml`, `.github/workflows/codeql.yml`, and the commands in
   `AGENTS.md`, `CI.md`, `README.md` and `CONTRIBUTING.md`.

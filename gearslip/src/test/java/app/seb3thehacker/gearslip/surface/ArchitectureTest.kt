@@ -37,6 +37,10 @@ class ArchitectureTest {
         assertTrue("UI imports leaked into the core:\n${violations.joinToString("\n")}", violations.isEmpty())
     }
 
+    @Test fun `the guarded packages include the surface contract itself`() {
+        assertTrue("surface/ must cover HeadunitSurface and SurfaceContext too", "surface/" in CORE_PREFIXES)
+    }
+
     @Test fun `the guard rejects view and renderer imports but allows Surface`() {
         assertTrue(forbiddenImport("import androidx.compose.material3.Text") != null)
         assertTrue(forbiddenImport("import androidx.compose.runtime.Composable") != null)
@@ -71,8 +75,13 @@ class ArchitectureTest {
         val workingDir = System.getProperty("user.dir") ?: "."
         var dir = File(workingDir).absoluteFile
         repeat(6) {
-            val candidate = File(dir, "src/main/java/app/seb3thehacker/gearslip")
-            if (candidate.isDirectory) return candidate
+            // Gradle runs unit tests from the module directory; a plain JVM launch may use the
+            // repository root. Try both layouts at each level before walking up.
+            val candidates = listOf(
+                File(dir, "src/main/java/app/seb3thehacker/gearslip"),
+                File(dir, "gearslip/src/main/java/app/seb3thehacker/gearslip"),
+            )
+            candidates.firstOrNull { it.isDirectory }?.let { return it }
             dir = dir.parentFile ?: error("Could not locate the Gearslip source root from $workingDir")
         }
         error("Could not locate the Gearslip source root from $workingDir")
@@ -80,7 +89,7 @@ class ArchitectureTest {
 
     private companion object {
         val CORE_PREFIXES = listOf(
-            "protocol/", "car/", "host/", "media/", "call/", "notify/", "update/", "surface/api/",
+            "protocol/", "car/", "host/", "media/", "call/", "notify/", "update/", "surface/",
         )
     }
 }

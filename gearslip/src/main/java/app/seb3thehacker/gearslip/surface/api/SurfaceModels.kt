@@ -15,11 +15,14 @@ enum class SessionPhase { IDLE, CONNECTING, PROJECTING, FAILED, DISCONNECTED }
 /** Which physical link a "still connecting" hint refers to. */
 enum class LinkType { CABLE, WIRELESS }
 
-/** A complete, immutable view of the session's connection state. */
+/**
+ * Structural view of the session's connection state.
+ *
+ * User-facing copy is deliberately absent: wording belongs to the renderer, which can localise it
+ * and choose how much detail to show. Only the phase and the stuck-on link hint cross the boundary.
+ */
 data class SessionSnapshot(
     val phase: SessionPhase,
-    val headline: String,
-    val detail: String,
     val stuckOn: LinkType? = null,
 )
 
