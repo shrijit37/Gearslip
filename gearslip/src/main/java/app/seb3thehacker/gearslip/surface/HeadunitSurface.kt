@@ -48,9 +48,9 @@ interface HeadunitSurface {
     fun onTouch(action: Int, actionIndex: Int, points: List<TouchPoint>) {}
 
     /**
-     * A steering-wheel or hard key edge. Return true to consume it: the core then leaves the key
-     * alone, so a renderer can own its own key map. Returning false (the default) keeps the core's
-     * media/call/screen behaviour unchanged.
+     * A steering-wheel or hard key edge. A trusted surface returning true consumes it, so the core
+     * leaves the key alone and the renderer can own its own key map. Untrusted surfaces cannot
+     * suppress core handling; returning false (the default) keeps media/call/screen behaviour.
      */
     fun onKey(keyCode: Int, down: Boolean, longPress: Boolean): Boolean = false
 
