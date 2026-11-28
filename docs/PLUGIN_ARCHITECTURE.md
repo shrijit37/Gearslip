@@ -102,7 +102,8 @@ proposes a JVM architecture test to enforce the import boundary.
 5. **Surface lease for hosted apps.** Navigation apps that draw their own maps need a `Surface`,
    lent through `CarAppConnection.attachSurface()`. The lease must be requested by the core and
    supplied by the attached plug-in, with an epoch that survives a dead surface. Today
-   `attachSurface()` has no caller, so those apps have nowhere to draw.
+   `attachSurface()` is now called for a trusted pixel-mode renderer's lease, but no such renderer
+   ships yet, so those apps still have nowhere to draw in practice.
 
 6. **Lifecycle and generations.** A plug-in instance belongs to one session: created at attach,
    detached at stop or EOF. Swapping a plug-in or its settings must bump a generation counter just
