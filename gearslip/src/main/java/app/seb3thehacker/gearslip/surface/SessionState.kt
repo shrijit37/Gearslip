@@ -1,6 +1,7 @@
 package app.seb3thehacker.gearslip.surface
 
 import app.seb3thehacker.gearslip.surface.api.FrameGeometry
+import app.seb3thehacker.gearslip.surface.api.FrameSize
 import app.seb3thehacker.gearslip.surface.api.SurfaceSnapshot
 import app.seb3thehacker.gearslip.surface.api.SurfaceLeaseSnapshot
 import kotlinx.coroutines.CoroutineScope
@@ -25,13 +26,35 @@ class SessionState(
     val generation: Long,
     private val sources: SessionSources = GlobalSources,
     /** False for external/untrusted plug-ins: they receive the redacted snapshot only. */
-    private val trusted: Boolean = true,
+    val trusted: Boolean,
 ) {
     private val job = SupervisorJob()
     private val scope = CoroutineScope(job + Dispatchers.Default)
-    private val _snapshot = MutableStateFlow(
-        SurfaceSnapshot(lease = SurfaceLeaseSnapshot(generation = generation)),
-    )
+    private val _snapshot = MutableStateFlow(initialSnapshot())
+
+    private fun initialSnapshot(): SurfaceSnapshot {
+        val value = SurfaceSnapshot(
+            session = sources.session.value,
+            frame = sources.frame.value.let { FrameGeometry(it.width, it.height, 30, it.densityDpi, false) },
+            insets = sources.insets.value,
+            night = sources.night.value,
+            vehicle = sources.vehicle.value,
+            vehicleModel = sources.vehicleModel.value,
+            carData = sources.carData.value,
+            media = sources.media.value,
+            call = sources.call.value,
+            notifications = sources.notifications.value,
+            navigation = sources.navigation.value,
+            sensors = sources.sensors.value,
+            hostedApps = sources.hostedApps.value,
+            alert = sources.alert.value,
+            toast = sources.toast.value,
+            catalog = sources.catalog.value,
+            lease = sources.lease.value.copy(generation = generation),
+            settings = sources.settings.value,
+        )
+        return if (trusted) value else value.redacted()
+    }
     /** The negotiated video format is known only to the runner, not to the geometry owner. */
     private val videoSpec = MutableStateFlow<VideoSpec?>(null)
 
@@ -44,9 +67,13 @@ class SessionState(
         // Merge geometry with the negotiated spec so frameRate and wireless are real values,
         // not placeholders invented by the source that only knows width/height/density.
         scope.launch {
-            combine(sources.frame, videoSpec) { geometry, spec ->
-                if (spec == null) geometry else FrameGeometry(
-                    spec.width, spec.height, spec.frameRate, spec.densityDpi, spec.wireless,
+            combine(sources.frame, videoSpec) { size, spec ->
+                val effective = spec?.let {
+                    FrameSize(it.width, it.height, it.densityDpi)
+                } ?: size
+                FrameGeometry(
+                    effective.width, effective.height,
+                    spec?.frameRate ?: 30, effective.densityDpi, spec?.wireless ?: false,
                 )
             }.collect { value ->
                 if (job.isActive) _snapshot.update { current ->

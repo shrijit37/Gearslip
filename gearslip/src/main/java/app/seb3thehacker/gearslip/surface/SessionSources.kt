@@ -26,7 +26,7 @@ import app.seb3thehacker.gearslip.surface.api.CallState
 import app.seb3thehacker.gearslip.surface.api.CallerSnapshot
 import app.seb3thehacker.gearslip.surface.api.CatalogEntrySnapshot
 import app.seb3thehacker.gearslip.surface.api.ChatLineSnapshot
-import app.seb3thehacker.gearslip.surface.api.FrameGeometry
+import app.seb3thehacker.gearslip.surface.api.FrameSize
 import app.seb3thehacker.gearslip.surface.api.HostedAppSnapshot
 import app.seb3thehacker.gearslip.surface.api.HostedAppSnapshotState
 import app.seb3thehacker.gearslip.surface.api.LinkType
@@ -54,7 +54,7 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.map
 import java.util.UUID
-import java.util.WeakHashMap
+import java.util.IdentityHashMap
 import androidx.car.app.model.Template
 import app.seb3thehacker.gearslip.host.CarAppConnection
 
@@ -67,7 +67,7 @@ import app.seb3thehacker.gearslip.host.CarAppConnection
  */
 interface SessionSources {
     val session: StateFlow<SessionSnapshot>
-    val frame: StateFlow<FrameGeometry>
+    val frame: StateFlow<FrameSize>
     val insets: StateFlow<ScreenInsets>
     val night: StateFlow<Boolean>
     val vehicle: StateFlow<String>
@@ -97,8 +97,8 @@ object GlobalSources : SessionSources {
     }.asState(SessionSnapshot(SessionPhase.IDLE))
 
     override val frame = CarEnvironment.frame.map { f ->
-        FrameGeometry(f.width, f.height, 0, f.densityDpi, false)
-    }.asState(FrameGeometry(800, 480, 0, 160, false))
+        FrameSize(f.width, f.height, f.densityDpi)
+    }.asState(FrameSize(800, 480, 160))
 
     override val insets = CarEnvironment.insets.map { i ->
         ScreenInsets(i.top, i.bottom, i.left, i.right)
@@ -155,7 +155,9 @@ object GlobalSources : SessionSources {
                     durationSeconds = 0,
                 )
             },
-            activeIndex = -1,
+            activeIndex = queue.indexOfFirst { row ->
+                row.queueId.toString() == now.activeQueueItemId.toString()
+            },
         )
     }.asState(MediaSnapshot())
 
@@ -230,10 +232,12 @@ object GlobalSources : SessionSources {
                     category = app.kind.id,
                 )
             },
-            template = TemplateSnapshot(
-                appPackage = host.status.app.orEmpty(),
-                title = host.status.template.orEmpty().ifBlank { host.template?.javaClass?.simpleName.orEmpty() },
-            ),
+            template = host.template?.let { active ->
+                TemplateSnapshot(
+                    appPackage = host.status.app.orEmpty(),
+                    title = host.status.template.orEmpty(),
+                )
+            },
             navigating = host.status.phase == CarAppConnection.Phase.RUNNING,
             panMode = host.panMode,
             atRoot = host.atRoot,
@@ -283,12 +287,11 @@ object GlobalSources : SessionSources {
         )
     }.asState(SettingsSnapshot())
 
-    /** Identity-based tokens: random, stable for an owner's lifetime, never recycled by the GC. */
-    private class IdentityKey(val value: Any)
-    private val ownerTokens = WeakHashMap<IdentityKey, String>()
+    /** Identity-based tokens: random and stable for an owner's lifetime, never recycled early. */
+    private val ownerTokens = IdentityHashMap<Any, String>()
 
     private fun ownerToken(owner: Any): String = synchronized(ownerTokens) {
-        ownerTokens.getOrPut(IdentityKey(owner)) { UUID.randomUUID().toString() }
+        ownerTokens.getOrPut(owner) { UUID.randomUUID().toString() }
     }
 
     private fun mediaState(now: NowPlaying) = when (now.state) {

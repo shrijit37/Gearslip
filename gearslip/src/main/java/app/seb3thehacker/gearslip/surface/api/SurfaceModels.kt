@@ -26,6 +26,9 @@ data class SessionSnapshot(
     val stuckOn: LinkType? = null,
 )
 
+/** Geometry the geometry owner knows; frame rate and link come from the negotiated spec. */
+data class FrameSize(val width: Int, val height: Int, val densityDpi: Int)
+
 /** The video format the car negotiated, including the link it travels over. */
 data class FrameGeometry(
     val width: Int,

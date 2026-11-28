@@ -206,23 +206,27 @@ data class SurfaceSnapshot(
             history = notifications.history.map { it.redacted() },
             popup = notifications.popup?.redacted(),
         ),
-        navigation = navigation?.copy(road = "", distanceText = ""),
-        media = media.copy(
-            source = "", title = "", artist = "", album = "", error = null,
-            queue = media.queue.map { it.copy(title = "", artist = "", album = "") },
-        ),
         hostedApps = hostedApps.copy(
-            apps = hostedApps.apps.map { it.copy(label = "") },
+            apps = hostedApps.apps.map { it.copy(label = "", iconToken = "") },
             template = hostedApps.template?.copy(title = "", rows = emptyList(), actions = emptyList()),
         ),
         catalog = catalog.map { it.copy(label = "") },
         carData = carData.copy(location = null),
+        alert = alert?.copy(title = "", actions = emptyList()),
+        toast = toast?.copy(text = ""),
+        sensors = sensors.map { it.copy(raw = "", typeName = "") },
+        media = media.copy(
+            source = "", title = "", artist = "", album = "", error = null, artToken = "",
+            queue = media.queue.map { it.copy(title = "", artist = "", album = "", artToken = "") },
+        ),
+        navigation = navigation?.copy(road = "", distanceText = "", key = "", arrowToken = ""),
     )
 
     private fun NotificationSnapshot.redacted() = copy(
         appLabel = "",
         title = "",
         text = "",
+        artToken = "",
         lines = emptyList(),
         canReply = false,
     )

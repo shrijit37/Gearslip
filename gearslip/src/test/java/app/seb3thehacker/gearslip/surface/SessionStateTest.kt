@@ -4,7 +4,7 @@ import app.seb3thehacker.gearslip.surface.api.AlertSnapshot
 import app.seb3thehacker.gearslip.surface.api.CallSnapshot
 import app.seb3thehacker.gearslip.surface.api.CallState
 import app.seb3thehacker.gearslip.surface.api.CallerSnapshot
-import app.seb3thehacker.gearslip.surface.api.FrameGeometry
+import app.seb3thehacker.gearslip.surface.api.FrameSize
 import app.seb3thehacker.gearslip.surface.api.NotificationSnapshot
 import app.seb3thehacker.gearslip.surface.api.HostedAppSnapshotState
 import app.seb3thehacker.gearslip.surface.api.MediaPlaybackState
@@ -34,7 +34,7 @@ import org.junit.Test
 /** Fake sources let the session boundary be tested on the JVM without Android stubs. */
 private class FakeSources : SessionSources {
     val sessionFlow = MutableStateFlow(SessionSnapshot(SessionPhase.IDLE))
-    val frameFlow = MutableStateFlow(FrameGeometry(800, 480, 30, 160, false))
+    val frameFlow = MutableStateFlow(FrameSize(800, 480, 160))
     val insetsFlow = MutableStateFlow(ScreenInsets.NONE)
     val nightFlow = MutableStateFlow(false)
     val vehicleFlow = MutableStateFlow("")
@@ -53,7 +53,7 @@ private class FakeSources : SessionSources {
     val settingsFlow = MutableStateFlow(SettingsSnapshot())
 
     override val session: StateFlow<SessionSnapshot> get() = sessionFlow
-    override val frame: StateFlow<FrameGeometry> get() = frameFlow
+    override val frame: StateFlow<FrameSize> get() = frameFlow
     override val insets: StateFlow<ScreenInsets> get() = insetsFlow
     override val night: StateFlow<Boolean> get() = nightFlow
     override val vehicle: StateFlow<String> get() = vehicleFlow
@@ -76,7 +76,7 @@ class SessionStateTest {
 
     @Test fun `a session starts with its generation and mirrors every source area`() = runBlocking {
         val sources = FakeSources()
-        val state = SessionState(42, sources)
+        val state = SessionState(42, sources, trusted = true)
         try {
             state.start()
             delay(100) // let the collectors take the initial values
@@ -123,8 +123,8 @@ class SessionStateTest {
     @Test fun `two sessions do not share state or generations`() = runBlocking {
         val firstSources = FakeSources()
         val secondSources = FakeSources()
-        val first = SessionState(1, firstSources)
-        val second = SessionState(2, secondSources)
+        val first = SessionState(1, firstSources, trusted = true)
+        val second = SessionState(2, secondSources, trusted = true)
         try {
             first.start()
             second.start()
@@ -148,7 +148,7 @@ class SessionStateTest {
 
     @Test fun `a stopped session cannot publish a later source change`() = runBlocking {
         val sources = FakeSources()
-        val state = SessionState(7, sources)
+        val state = SessionState(7, sources, trusted = true)
         state.start()
         delay(100)
         state.stop()

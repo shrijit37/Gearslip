@@ -37,6 +37,7 @@ import app.seb3thehacker.gearslip.surface.VideoSpec
 import java.io.InputStream
 import java.io.OutputStream
 import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.FutureTask
 import java.util.concurrent.RejectedExecutionException
 import java.util.concurrent.TimeUnit
@@ -131,6 +132,8 @@ class GearslipRunner(
     private val surfaceLock = Any()
     /** The session's immutable state view; replaced for each attach and cancelled on release. */
     @Volatile private var sessionState: SessionState? = null
+    /** Monotonic per-runner generation: the wall clock can repeat or move backwards. */
+    private val sessionGeneration = AtomicLong(0)
     /** Session-owned render resources; safe to call from stop() and the transport-exit finally. */
     private fun releaseSurface() {
         synchronized(surfaceLock) {
@@ -1232,7 +1235,9 @@ class GearslipRunner(
             // One state view per attach: its generation is pinned before any source publishes,
             // so a late collector from a previous session cannot write into this one.
             sessionState?.stop()
-            val state = SessionState(System.currentTimeMillis())
+            // The only renderer installed today is the app's own placeholder; external
+            // plug-ins (Phase 5) must be constructed with trusted = false.
+            val state = SessionState(sessionGeneration.incrementAndGet(), trusted = true)
             state.start()
             state.setVideoSpec(spec)
             sessionState = state
@@ -1258,7 +1263,8 @@ class GearslipRunner(
         override val night = CarEnvironment.darkOutside
         override val carData = CarData.state
         override val vehicle = CarEnvironment.vehicle
-        override val snapshot = sessionState?.snapshot ?: super.snapshot
+        // Resolve on access: a re-attach must never leave a renderer holding a cancelled flow.
+        override val snapshot get() = sessionState?.snapshot ?: super.snapshot
     }
 
     /**
