@@ -248,10 +248,6 @@ dependencies {
     implementation(libs.androidx.car.app)
     implementation(libs.androidx.car.app.projected)
     implementation(libs.androidx.media)
-    // The map behind a place list (PlaceListMapTemplate), which the host draws, not the app.
-    implementation(libs.maplibre.android)
-    // Keyless Google Directions traffic client (see traffic/VelaTrafficSource.kt).
-    implementation(libs.okhttp)
     testImplementation(libs.junit)
     // The one androidTest only uses AndroidJUnit4 and assertions; Espresso is not referenced,
     // so pulling it into every build is dead weight. Keep runner: AndroidJUnit4 needs it.

@@ -1,9 +1,10 @@
 # Plug-in migration: audit and plan
 
-> **Status: proposal.** This records the findings of a full-tree review of `main` at `e5e86e3` and
-> the plan to finish the UI-as-plug-in migration. The design target is in
-> [PLUGIN_ARCHITECTURE.md](PLUGIN_ARCHITECTURE.md). Nothing here is implemented yet; the
-> currently shipped contract is [HEADUNIT_SURFACES.md](HEADUNIT_SURFACES.md).
+> **Status: in progress.** This records the findings of a full-tree review of `main` at `e5e86e3`
+> and the plan to finish the UI-as-plug-in migration. The design target is in
+> [PLUGIN_ARCHITECTURE.md](PLUGIN_ARCHITECTURE.md). Each phase lands as its own small PR; phases
+> marked **done** below are implemented, the rest are still planned. The currently shipped contract
+> is [HEADUNIT_SURFACES.md](HEADUNIT_SURFACES.md).
 
 ## Current state, with evidence
 
@@ -142,7 +143,7 @@ app. Only their callbacks and generation need tightening, not a session-scoped r
 Each phase ends with a green `./gradlew :gearslip:testDebugUnitTest :gearslip:assembleDebug --no-daemon`
 and a docs update. Do not combine phases into one large PR.
 
-### Phase 0 — Freeze the boundary (no behavior change)
+### Phase 0 — Freeze the boundary (no behavior change) — **done**
 
 - Introduce a pure-Kotlin `surface/api` package of immutable models and command types.
 - Add a JVM architecture test that fails if a core package (`protocol`, `car`, `host`, `media`,
