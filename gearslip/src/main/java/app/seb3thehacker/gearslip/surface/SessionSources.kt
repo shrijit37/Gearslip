@@ -54,7 +54,8 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.map
 import java.util.UUID
-import java.util.IdentityHashMap
+import java.lang.ref.WeakReference
+import java.util.WeakHashMap
 import androidx.car.app.model.Template
 import app.seb3thehacker.gearslip.host.CarAppConnection
 
@@ -233,10 +234,7 @@ object GlobalSources : SessionSources {
                 )
             },
             template = host.template?.let { active ->
-                TemplateSnapshot(
-                    appPackage = host.status.app.orEmpty(),
-                    title = host.status.template.orEmpty(),
-                )
+                templateSnapshot(active, host.status.app.orEmpty())
             },
             navigating = host.status.phase == CarAppConnection.Phase.RUNNING,
             panMode = host.panMode,
@@ -287,12 +285,43 @@ object GlobalSources : SessionSources {
         )
     }.asState(SettingsSnapshot())
 
-    /** Identity-based tokens: random and stable for an owner's lifetime, never recycled early. */
-    private val ownerTokens = IdentityHashMap<Any, String>()
+    /**
+     * Identity-based tokens: random, stable while an owner lives, and collectable with it.
+     *
+     * A plain WeakHashMap would use the owner's equals/hashCode; the wrapper gives identity
+     * semantics without keeping the owner alive after its alert or toast is gone.
+     */
+    private class WeakIdentityKey(value: Any) : WeakReference<Any>(value) {
+        override fun hashCode(): Int = get()?.let(System::identityHashCode) ?: 0
+        override fun equals(other: Any?): Boolean =
+            other is WeakIdentityKey && get() != null && get() === other.get()
+    }
+
+    private val ownerTokens = WeakHashMap<WeakIdentityKey, String>()
 
     private fun ownerToken(owner: Any): String = synchronized(ownerTokens) {
-        ownerTokens.getOrPut(owner) { UUID.randomUUID().toString() }
+        ownerTokens.getOrPut(WeakIdentityKey(owner)) { UUID.randomUUID().toString() }
     }
+
+    /** Projects the templated screen into pure strings; only ListTemplate is described today. */
+    private fun templateSnapshot(active: Template, appPackage: String): TemplateSnapshot =
+        if (active is androidx.car.app.model.ListTemplate) {
+            TemplateSnapshot(
+                appPackage = appPackage,
+                title = active.title.text(),
+                rows = active.singleList?.items.orEmpty().mapNotNull { item ->
+                    (item as? androidx.car.app.model.Row)?.let { row ->
+                        listOfNotNull(row.title.text().takeIf(String::isNotBlank)).plus(
+                            row.texts.map { it.text() }.filter(String::isNotBlank),
+                        ).joinToString(" - ")
+                    }
+                },
+                actions = active.actions.map { it.title.text() },
+                isLoading = active.isLoading,
+            )
+        } else {
+            TemplateSnapshot(appPackage = appPackage)
+        }
 
     private fun mediaState(now: NowPlaying) = when (now.state) {
         PlaybackState.STATE_PLAYING -> MediaPlaybackState.PLAYING

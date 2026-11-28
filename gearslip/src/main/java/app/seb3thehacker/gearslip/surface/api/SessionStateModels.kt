@@ -116,7 +116,7 @@ data class HostedAppSnapshot(
 /** A pure description of a templated screen a hosted app supplied. */
 data class TemplateSnapshot(
     val appPackage: String,
-    val title: String,
+    val title: String = "",
     val rows: List<String> = emptyList(),
     val actions: List<String> = emptyList(),
     val isLoading: Boolean = false,
