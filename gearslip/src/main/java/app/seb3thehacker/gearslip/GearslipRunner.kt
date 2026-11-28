@@ -1228,7 +1228,7 @@ class GearslipRunner(
     }
 
     private fun startVideoSource() {
-        if (stopped) return
+        if (!SurfaceDecisions.mayAttach(stopped, surfaceDetached)) return
         lastKeyframeSentAt = System.currentTimeMillis() // frame #1 is always a keyframe
         val index = selectedConfigIndex ?: 0
         val config = videoConfigs.getOrNull(index)

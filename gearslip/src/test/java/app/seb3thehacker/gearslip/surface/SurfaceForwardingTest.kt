@@ -12,6 +12,7 @@ import kotlinx.coroutines.runBlocking
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -150,21 +151,11 @@ class SurfaceForwardingTest {
         }
     }
 
-    @Test fun `a stopped session never attaches its surface`() {
-        val surface = FakeSurface(setOf(SurfaceCapability.PROVIDES_FRAMES))
-        val runner = GearslipRunner(ByteArrayInputStream(byteArrayOf()), ByteArrayOutputStream(), ::identity, surface = surface)
-        try {
-            GearslipRunner::class.java.getDeclaredField("stopped").apply {
-                isAccessible = true
-                setBoolean(runner, true)
-            }
-            GearslipRunner::class.java.getDeclaredMethod("startVideoSource")
-                .apply { isAccessible = true }
-                .invoke(runner)
-            assertEquals(0, surface.attaches)
-        } finally {
-            runner.stop()
-        }
+    @Test fun `a stopped or detached session never attaches its surface`() {
+        assertTrue(SurfaceDecisions.mayAttach(false, false))
+        assertFalse(SurfaceDecisions.mayAttach(true, false))
+        assertFalse(SurfaceDecisions.mayAttach(false, true))
+        assertFalse(SurfaceDecisions.mayAttach(true, true))
     }
 
     private fun keyEvent(): ByteArray {
