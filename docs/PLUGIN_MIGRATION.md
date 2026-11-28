@@ -103,13 +103,13 @@
     build-script comments, empty car-UI headings, unused speech `<queries>` and the orphaned
     log-share `FileProvider` were removed with the Phase 4 residue cleanup.
 
-12. **The phone UI bypasses any command layer.** Composables call core globals directly:
+12. **Most of the phone UI still bypasses the command layer.** `AppCommands`/`SurfaceCommands` now
+    route audio choice and renderer commands, but composables still call core globals directly:
     `ui/SettingsScreen.kt:289-351,403-556`, `ui/HomeCarSettings.kt:99-435`,
     `ui/BluetoothAddressCard.kt`, `ui/WirelessButton.kt` and `ui/SetupGuideScreen.kt:335-347` mutate
     `AppSettings`, `CarSettings`, `CarBluetooth`, `WirelessLink` and `AndroidAuto`.
     `GearslipActivity.kt:125` wires `WirelessLink.sessionWaiting` to a `GearslipRunner` field, and
-    `:290,344` calls `SessionStatus.failed()` from the UI. There is no audited UI→core boundary to
-    reuse for a renderer.
+    `:290,344` calls `SessionStatus.failed()` from the UI.
 
 13. **Dead UI state still has an owner but no consumer.** `car/CarEnvironment.kt:43-48` keeps
     `phoneDark`, `display` and `battery` with no readers; `CarSettings` holds roughly 35 flows,
@@ -174,10 +174,10 @@ and a docs update. Do not combine phases into one large PR.
 
 ### Phase 2 — Plug-in contract v2 and failure isolation
 
-- Add a version field and a capability enum; support more than one surface with focus routing.
-- Add one command entry point; forbid plug-ins from calling core singletons directly. Route the
-  phone UI through it too, starting with `AudioChoiceDialog` → `CarSettings.setPipeAudio()` and the
-  activity's direct `SessionStatus`/runner access (finding 12).
+- Version field and capability enum are in place; focus routing for more than one surface is still
+  pending.
+- The command entry point (`AppCommands`/`SurfaceCommands`) is in place and `AudioChoiceDialog` now
+  uses it; the rest of the phone UI still calls core singletons directly (finding 12).
 - Wrap **every** plug-in call in `runCatching`, log it, and fall back to the placeholder: `attach`,
   `detach`, `onFocus`, `onTouch`, `onKey`, `onRotate`, `requestSyncFrame` and `applyBitRate`. Add the
   same guard to `releaseSurface()` so a bad `detach()` cannot skip cleanup.

@@ -4,6 +4,7 @@ import app.seb3thehacker.gearslip.Insets
 import app.seb3thehacker.gearslip.SessionStatus
 import app.seb3thehacker.gearslip.car.CarData
 import app.seb3thehacker.gearslip.car.CarEnvironment
+import app.seb3thehacker.gearslip.surface.api.CommandSink
 import app.seb3thehacker.gearslip.surface.api.SurfaceSnapshot
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -41,7 +42,11 @@ interface SurfaceContext {
      */
     val snapshot: StateFlow<SurfaceSnapshot> get() = EMPTY_SNAPSHOT
 
+    /** Where a renderer sends commands. The default refuses everything. */
+    val commandSink: CommandSink get() = NO_COMMANDS
+
     companion object {
         private val EMPTY_SNAPSHOT: StateFlow<SurfaceSnapshot> = MutableStateFlow(SurfaceSnapshot())
+        private val NO_COMMANDS = CommandSink {}
     }
 }

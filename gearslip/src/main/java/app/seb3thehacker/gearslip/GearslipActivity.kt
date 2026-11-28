@@ -26,6 +26,8 @@ import app.seb3thehacker.gearslip.car.CarSettings
 import app.seb3thehacker.gearslip.car.Prefetch
 import app.seb3thehacker.gearslip.protocol.TouchPoint
 import app.seb3thehacker.gearslip.surface.HeadunitSurfaces
+import app.seb3thehacker.gearslip.surface.AppCommands
+import app.seb3thehacker.gearslip.surface.api.SurfaceCommand
 import app.seb3thehacker.gearslip.surface.SurfaceSelection
 import app.seb3thehacker.gearslip.ui.GearslipApp
 import app.seb3thehacker.gearslip.ui.GearslipTheme
@@ -169,7 +171,7 @@ class GearslipActivity : ComponentActivity() {
                     }
                     app.seb3thehacker.gearslip.ui.AudioChoiceDialog(
                         onUseBluetooth = {
-                            CarSettings.setPipeAudio(false)
+                            AppCommands.submit(SurfaceCommand.SetAudioTransport(false))
                             close()
                         },
                         onKeepAsking = ::close,
