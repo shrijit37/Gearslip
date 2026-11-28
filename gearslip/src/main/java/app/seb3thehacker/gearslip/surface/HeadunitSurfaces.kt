@@ -49,7 +49,7 @@ object HeadunitSurfaces {
         installed = surface
     }
 
-    /** The instance installed with [installSurface], if any; factories are created per session. */
+    /** The instance installed with [installSurface]/[installSurfaceIfAbsent], if any; factories are per session. */
     val current: HeadunitSurface? get() = installed
 
     /** Installs an instance only when nothing is registered, atomically with the check. */
