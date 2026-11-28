@@ -47,7 +47,7 @@ class SurfacePluginTest {
 
     @Test fun `registry holds one installed surface and can be cleared`() {
         val surface = FakeSurface(emptySet())
-        HeadunitSurfaces.install(surface, SurfaceTrust.TRUSTED)
+        HeadunitSurfaces.installSurface(surface, SurfaceTrust.TRUSTED)
         assertSame(surface, HeadunitSurfaces.current)
         HeadunitSurfaces.clear()
         assertNull(HeadunitSurfaces.current)

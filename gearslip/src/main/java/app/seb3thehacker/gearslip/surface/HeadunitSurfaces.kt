@@ -18,7 +18,7 @@ data class SurfaceSelection(
  *
  * The phone app installs one factory at startup; the session asks for a fresh surface when it
  * starts. No reflection or service loading: a new UI is a compile-time implementation of
- * [HeadunitSurface] plus one line in the app. Installing null restores the headless placeholder.
+ * [HeadunitSurface] plus one line in the app. [clear] restores the headless placeholder.
  *
  * Every change bumps [generation] inside the same lock as [select]. A session pins the generation
  * and trust from one [SurfaceSelection] and re-checks the generation before publishing state, so a
@@ -42,7 +42,7 @@ object HeadunitSurfaces {
         this.factory = factory
     }
 
-    fun install(surface: HeadunitSurface?, trust: SurfaceTrust) = synchronized(this) {
+    fun installSurface(surface: HeadunitSurface?, trust: SurfaceTrust) = synchronized(this) {
         generationCounter.incrementAndGet()
         this.trust = trust
         factory = null
@@ -58,23 +58,20 @@ object HeadunitSurfaces {
      * A factory is invoked while holding the lock so a swap cannot pair the newly created surface
      * with the old generation or trust bit.
      */
-    fun select(context: Context): SurfaceSelection = synchronized(this) {
-        // Capture identity and trust BEFORE running plug-in code: a factory that re-registers
-        // itself inside the lock must not be able to pair its surface with a newer trusted slot.
+    fun select(context: Context?): SurfaceSelection = synchronized(this) {
+        // Capture identity and trust BEFORE running plug-in code. synchronized is reentrant, so a
+        // factory that installs itself from inside invoke() would otherwise pick its own trust.
         val capturedGeneration = generationCounter.get()
         val capturedTrusted = trust == SurfaceTrust.TRUSTED
+        val surface = if (context != null) factory?.invoke(context.applicationContext) ?: installed else installed
+        val changed = generationCounter.get() != capturedGeneration ||
+            (trust == SurfaceTrust.TRUSTED) != capturedTrusted
+        // A reentrant registration invalidates this selection; fail closed.
         SurfaceSelection(
-            surface = factory?.invoke(context.applicationContext) ?: installed,
-            generation = capturedGeneration,
-            trusted = capturedTrusted,
+            surface = if (changed) null else surface,
+            generation = if (changed) generationCounter.get() else capturedGeneration,
+            trusted = !changed && capturedTrusted,
         )
-    }
-
-    /** Kept for callers that only need to know whether the installed renderer is external. */
-    fun isExternal(surface: HeadunitSurface?): Boolean = synchronized(this) {
-        if (surface == null || trust == SurfaceTrust.TRUSTED) return@synchronized false
-        // An untrusted factory also makes its per-session surfaces untrusted.
-        installed === surface || factory != null
     }
 
     fun clear() = synchronized(this) {

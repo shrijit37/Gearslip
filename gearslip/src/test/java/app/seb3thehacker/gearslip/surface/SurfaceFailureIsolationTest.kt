@@ -77,7 +77,7 @@ class SurfaceFailureIsolationTest {
     @Test fun `registry generation advances on every swap`() {
         val surface = FakeSurface(emptySet())
         val before = HeadunitSurfaces.generation()
-        HeadunitSurfaces.install(surface, SurfaceTrust.TRUSTED)
+        HeadunitSurfaces.installSurface(surface, SurfaceTrust.TRUSTED)
         val installed = HeadunitSurfaces.generation()
         HeadunitSurfaces.install({ surface }, SurfaceTrust.TRUSTED)
         val factory = HeadunitSurfaces.generation()
@@ -92,14 +92,14 @@ class SurfaceFailureIsolationTest {
     @Test fun `external registrations are marked untrusted and cleared`() {
         val surface = FakeSurface(emptySet())
         val before = HeadunitSurfaces.generation()
-        HeadunitSurfaces.install(surface, SurfaceTrust.UNTRUSTED)
+        HeadunitSurfaces.installSurface(surface, SurfaceTrust.UNTRUSTED)
         try {
-            assertTrue(HeadunitSurfaces.isExternal(surface))
+            assertFalse(HeadunitSurfaces.select(null).trusted)
             assertTrue(HeadunitSurfaces.generation() > before)
         } finally {
             HeadunitSurfaces.clear()
         }
-        assertFalse(HeadunitSurfaces.isExternal(surface))
+        assertFalse(HeadunitSurfaces.select(null).trusted)
     }
 
     @Test fun `a renderer swap stops stale state publication`() = runBlocking {

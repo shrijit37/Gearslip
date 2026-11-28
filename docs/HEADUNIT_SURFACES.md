@@ -43,17 +43,17 @@ the protocol's `FrameOutput` — a surface never writes to the car transport dir
 In the phone app's composition root (today `GearslipActivity`), before a session starts:
 
 ```kotlin
-HeadunitSurfaces.install { context -> MyHeadunitSurface(context.applicationContext) }
+HeadunitSurfaces.install({ context -> MyHeadunitSurface(context.applicationContext) }, SurfaceTrust.TRUSTED)
 ```
 
 The factory is invoked for each session, so a surface instance never outlives the car connection.
-`HeadunitSurfaces.install(surface)` installs a pre-built instance instead, and
-`HeadunitSurfaces.clear()` restores the headless placeholder mode. No reflection or service
-loading is involved: adding a surface is a compile-time dependency plus one line of wiring.
+`installSurface(surface, trust)` installs a pre-built instance; `clear()` restores the headless mode.
+`select(context)` returns a `SurfaceSelection` with the surface, generation and trust captured
+together. No reflection or service loading is involved: a surface is a compile-time dependency plus
+one line of wiring.
 
-> **Current status:** `GearslipActivity` creates a surface with `HeadunitSurfaces.create(this)` but
-> does not call `install(...)`. Until a renderer is installed, every session runs in placeholder
-> mode, regardless of the wiring shown above.
+> **Current status:** `GearslipActivity` selects a surface with `select(this)` but never calls
+> `install(...)`. Until one is installed, every session runs the placeholder.
 
 ## Known gaps
 

@@ -20,6 +20,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import java.io.IOException
@@ -1302,12 +1303,20 @@ class GearslipRunner(
 
     /** A stable, read-only view of session state for whichever head-unit surface is attached. */
     private fun surfaceContext() = object : SurfaceContext {
-        override val session = SessionStatus.state
-        override val frame = CarEnvironment.frame
-        override val insets = CarEnvironment.insets
-        override val night = CarEnvironment.darkOutside
-        override val carData = CarData.state
-        override val vehicle = CarEnvironment.vehicle
+        // An untrusted renderer must not read the raw flows either: the snapshot redaction
+        // would be pointless if carData, session text or vehicle identity were still exposed.
+        override val session = if (trustedSurface) SessionStatus.state else MutableStateFlow(
+            SessionStatus.state.value.copy(headline = "", detail = ""),
+        )
+        override val frame = if (trustedSurface) CarEnvironment.frame else MutableStateFlow(
+            CarEnvironment.frame.value.copy(width = 0, height = 0, densityDpi = 0),
+        )
+        override val insets = if (trustedSurface) CarEnvironment.insets else MutableStateFlow(Insets.NONE)
+        override val night = if (trustedSurface) CarEnvironment.darkOutside else MutableStateFlow(false)
+        override val carData = if (trustedSurface) CarData.state else MutableStateFlow(
+            CarData.Snapshot(location = null),
+        )
+        override val vehicle = if (trustedSurface) CarEnvironment.vehicle else MutableStateFlow("")
         // Resolve on access: a re-attach must never leave a renderer holding a cancelled flow.
         override val snapshot get() = sessionState?.snapshot ?: super.snapshot
     }
@@ -1699,7 +1708,11 @@ class GearslipRunner(
         // derived from a failure fallback (which could clamp to 0 or 1 bps).
         fun bitRate(): Int? = surfaceGuard.callValue("frameSource.bitRate", null) { source.bitRate }
         fun fullBitRate(): Int? = surfaceGuard.callValue("frameSource.fullBitRate", null) { source.fullBitRate }
-        fun apply(bps: Int) = surfaceGuard.call("applyBitRate") { source.applyBitRate(bps) }
+        fun apply(bps: Int): Boolean {
+            var succeeded = false
+            surfaceGuard.call("applyBitRate") { source.applyBitRate(bps); succeeded = true }
+            return succeeded
+        }
 
         val before = bitRate() ?: return
         val target = videoFrameRate.toDouble()
@@ -1712,9 +1725,10 @@ class GearslipRunner(
                 if (cut != null && fps < cut.second * 1.05) {
                     // The last cut bought no frames: the car's decoder is the limit, not the
                     // link, and smaller frames would only look worse. Undo it and stop here.
-                    decoderBound = true
-                    apply(cut.first)
-                    log.i("video: a lower bitrate didn't help the car keep up - back to ${cut.first / 1000} kbps, adapting off")
+                    if (apply(cut.first)) {
+                        decoderBound = true
+                        log.i("video: a lower bitrate didn't help the car keep up - back to ${cut.first / 1000} kbps, adapting off")
+                    }
                     return
                 }
                 apply((before * 0.75).toInt())
