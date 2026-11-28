@@ -8,7 +8,7 @@ enum class SurfaceCapability {
     /** The surface produces its own frames instead of using the generated placeholder. */
     PROVIDES_FRAMES,
 
-    /** The surface draws pixels into an encoder-backed lease supplied by the core. */
+    /** The renderer supplies a Surface through [PixelLeaseProvider] for the core to lend onward. */
     PROVIDES_PIXELS,
 
     /** Head-unit touches should be forwarded with [HeadunitSurface.onTouch]. */
