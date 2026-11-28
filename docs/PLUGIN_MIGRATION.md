@@ -74,8 +74,9 @@
 
 8. **UI policy still lives in the core.** `car/CarKeys.kt:59-100` consumes media and call keys itself
    and publishes `screenKeys` to a flow with no subscriber; `CarFocus.exitToCar()` is also orphaned.
-   Keycodes are `android.view.KeyEvent` constants in `CarKeys.kt:6`, `CarPhoneStatus.kt:4` and
-   `CarMedia.kt:7`. A plug-in cannot customize key maps or intercept a key before core acts on it.
+   Keycodes are now plain `surface/api/KeyCodes.kt` integers in the core and the plug-in contract;
+   `CarMedia` still builds a `KeyEvent` only for the Android media-session Intent it must send.
+   A plug-in cannot customize key maps or intercept a key before core acts on it.
 
 9. **Isolation is not build-enforced.** Everything is in one module;
    `gearslip/build.gradle.kts:239-244` declares Compose alongside protocol dependencies. Phase 0

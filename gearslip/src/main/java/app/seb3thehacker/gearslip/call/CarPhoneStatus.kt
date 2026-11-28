@@ -1,7 +1,8 @@
 package app.seb3thehacker.gearslip.call
 
+import app.seb3thehacker.gearslip.surface.api.KeyCodes
+
 import android.os.SystemClock
-import android.view.KeyEvent
 import app.seb3thehacker.gearslip.GearslipLog
 import app.seb3thehacker.gearslip.Protobuf
 import app.seb3thehacker.gearslip.Wire
@@ -91,7 +92,7 @@ class CarPhoneStatus(
     private fun onInput(body: ByteArray) {
         val action = Wire.bytes(Wire.fields(body), 1)?.let { Wire.varint(Wire.fields(it), 1)?.toInt() }
         GearslipLog.i("phone status: <- input action=${action ?: "?"}")
-        if (action == ACTION_CALL) CarKeys.onKey(KeyEvent.KEYCODE_CALL, down = true, longPress = false)
+        if (action == ACTION_CALL) CarKeys.onKey(KeyCodes.CALL, down = true, longPress = false)
     }
 
     companion object {
