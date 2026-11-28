@@ -17,7 +17,6 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult
-import android.content.res.Configuration
 import app.seb3thehacker.gearslip.audio.AudioCaptureService
 import app.seb3thehacker.gearslip.audio.CarAudio
 import app.seb3thehacker.gearslip.car.CarEnvironment
@@ -155,7 +154,6 @@ class GearslipActivity : ComponentActivity() {
             app.seb3thehacker.gearslip.audio.ScreenShareGuard.restore(this)
         }
         Prefetch.warm(this)
-        CarEnvironment.setPhoneTheme(resources.configuration)
 
         setContent {
             GearslipTheme {
@@ -202,13 +200,6 @@ class GearslipActivity : ComponentActivity() {
 
         registerReceiver(detachReceiver, IntentFilter(UsbManager.ACTION_USB_ACCESSORY_DETACHED), RECEIVER_NOT_EXPORTED)
         handleIntent(intent)
-    }
-
-    // The manifest opts out of recreation on uiMode changes, so a light/dark switch on the phone
-    // arrives here, and the car UI follows it.
-    override fun onConfigurationChanged(newConfig: Configuration) {
-        super.onConfigurationChanged(newConfig)
-        CarEnvironment.setPhoneTheme(newConfig)
     }
 
     // Throttled inside Prefetch, so this only does work if the last run was a while ago.

@@ -115,14 +115,13 @@
     `GearslipActivity.kt:128` wires `WirelessLink.sessionWaiting` to a `GearslipRunner` field, and
     `:302,356` calls `SessionStatus.failed()` from the UI.
 
-13. **Dead UI state still has an owner but no consumer.** `car/CarEnvironment.kt:43-48` keeps
-    `phoneDark`, `display` and `battery` with no readers; `CarSettings` holds roughly 35 flows,
-    many unread (`scale`, `playerTitle`, `navBarMode`, `screensaver`, `whatsNew*`, …);
-    `car/CarSensors.kt`, `notify/CarNotifications.kt`, `notify/PhoneNavigation.kt` and
-    `GearslipLog.version/snapshot()` remain live but undrawn. `PermissionActivity.permissionResults`
-    (`:45-48`) has no subscriber. The log-share `FileProvider` and its unused helpers were removed
-    with the Phase 4 residue cleanup. This remaining dead weight belongs in a later prune, not in a
-    plug-in SDK.
+13. **Dead UI state still has an owner but no consumer.** `CarEnvironment`'s unread `phoneDark`,
+    `display` and `battery` flows and the battery receiver, and `PermissionActivity.permissionResults`,
+    were pruned; the log-share `FileProvider` went with the Phase 4 residue cleanup. `CarSettings`
+    still holds roughly 35 flows, many unread (`scale`, `playerTitle`, `navBarMode`, `screensaver`,
+    `whatsNew*`, …); `CarSensors`, `CarNotifications`, `PhoneNavigation` and
+    `GearslipLog.version/snapshot()` remain live but undrawn. This remaining dead weight belongs in
+    a later prune, not in a plug-in SDK.
 
 ## State boundary inventory
 

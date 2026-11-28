@@ -6,8 +6,6 @@ import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import android.view.Display
-import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.SharedFlow
 
 /**
  * Asks for runtime permissions on the phone's own screen, for a car screen that can't show
@@ -23,7 +21,6 @@ class PermissionActivity : Activity() {
             .orEmpty()
         if (wanted.isEmpty() || savedInstanceState != null) {
             if (wanted.isEmpty()) {
-                _permissionResults.tryEmit(Unit)
                 finish()
             }
             return
@@ -34,18 +31,12 @@ class PermissionActivity : Activity() {
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         GearslipLog.i("permissions: ${permissions.zip(grantResults.toList()).joinToString { (p, r) -> "${p.substringAfterLast('.')}=${r == 0}" }}")
-        _permissionResults.tryEmit(Unit)
         finish()
     }
 
     companion object {
         private const val EXTRA_PERMISSIONS = "permissions"
         private const val REQUEST = 1
-
-        private val _permissionResults = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
-
-        /** Fires after every permission answer, so car observers can re-check the grant. */
-        val permissionResults: SharedFlow<Unit> = _permissionResults
 
         /** Shows the permission dialog on the phone, whichever screen [context] belongs to. */
         fun ask(context: Context, permissions: Array<String>) {
