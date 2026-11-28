@@ -1,10 +1,12 @@
 package app.seb3thehacker.gearslip.media
 
+import android.view.KeyEvent
+import app.seb3thehacker.gearslip.surface.api.KeyCodes
+
 import app.seb3thehacker.gearslip.R
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
-import android.view.KeyEvent
 import android.graphics.Bitmap
 import android.media.MediaMetadata
 import android.media.Rating
@@ -871,10 +873,10 @@ class CarMedia(private val context: Context) {
             return
         }
         GearslipLog.i("media: pressing Play for ${app.label}, which isn't running")
-        for (action in listOf(KeyEvent.ACTION_DOWN, KeyEvent.ACTION_UP)) {
+        for (action in listOf(KeyCodes.ACTION_DOWN, KeyCodes.ACTION_UP)) {
             val press = Intent(Intent.ACTION_MEDIA_BUTTON)
                 .setClassName(pkg, receiver.name)
-                .putExtra(Intent.EXTRA_KEY_EVENT, KeyEvent(action, KeyEvent.KEYCODE_MEDIA_PLAY))
+                .putExtra(Intent.EXTRA_KEY_EVENT, KeyEvent(action, KeyCodes.MEDIA_PLAY))
             runCatching { context.sendBroadcast(press) }.onFailure { GearslipLog.w("media: Play for ${app.label} failed: ${it.message}") }
         }
     }

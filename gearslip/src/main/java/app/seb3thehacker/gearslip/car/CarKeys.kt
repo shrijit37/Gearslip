@@ -1,9 +1,10 @@
 package app.seb3thehacker.gearslip.car
 
+import app.seb3thehacker.gearslip.surface.api.KeyCodes
+
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
-import android.view.KeyEvent
 import app.seb3thehacker.gearslip.GearslipLog
 import app.seb3thehacker.gearslip.call.CallUiState
 import app.seb3thehacker.gearslip.call.CarCalls
@@ -13,9 +14,9 @@ import kotlinx.coroutines.flow.SharedFlow
 /**
  * The car's own buttons: steering wheel, rotary knob, D-pad and the hard keys around the screen.
  *
- * The head unit sends Android keycodes as they are, so the numbers here are android.view.KeyEvent's.
- * Media and call keys act straight away; screen keys are published for whichever head-unit UI is
- * attached, so handling a key never depends on a particular UI being present.
+ * The head unit sends the same numbers Android uses; they live as plain [KeyCodes] here so the
+ * core needs no Android UI class. Media and call keys act straight away; screen keys are published
+ * for whichever head-unit UI is attached, so handling a key never depends on a particular UI.
  */
 object CarKeys {
 
@@ -32,8 +33,8 @@ object CarKeys {
 
     /** The keys that act on the media app. */
     private val MEDIA_KEYS = setOf(
-        KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE, KeyEvent.KEYCODE_MEDIA_PLAY, KeyEvent.KEYCODE_MEDIA_PAUSE,
-        KeyEvent.KEYCODE_MEDIA_STOP, KeyEvent.KEYCODE_MEDIA_NEXT, KeyEvent.KEYCODE_MEDIA_PREVIOUS,
+        KeyCodes.MEDIA_PLAY_PAUSE, KeyCodes.MEDIA_PLAY, KeyCodes.MEDIA_PAUSE,
+        KeyCodes.MEDIA_STOP, KeyCodes.MEDIA_NEXT, KeyCodes.MEDIA_PREVIOUS,
     )
 
     /**
@@ -42,12 +43,12 @@ object CarKeys {
      * this is what's asked for instead.
      */
     val WANTED = listOf(
-        KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE, KeyEvent.KEYCODE_MEDIA_PLAY, KeyEvent.KEYCODE_MEDIA_PAUSE,
-        KeyEvent.KEYCODE_MEDIA_NEXT, KeyEvent.KEYCODE_MEDIA_PREVIOUS, KeyEvent.KEYCODE_MEDIA_STOP,
-        KeyEvent.KEYCODE_CALL, KeyEvent.KEYCODE_ENDCALL,
-        KeyEvent.KEYCODE_BACK, KeyEvent.KEYCODE_HOME,
-        KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN, KeyEvent.KEYCODE_DPAD_LEFT,
-        KeyEvent.KEYCODE_DPAD_RIGHT, KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER,
+        KeyCodes.MEDIA_PLAY_PAUSE, KeyCodes.MEDIA_PLAY, KeyCodes.MEDIA_PAUSE,
+        KeyCodes.MEDIA_NEXT, KeyCodes.MEDIA_PREVIOUS, KeyCodes.MEDIA_STOP,
+        KeyCodes.CALL, KeyCodes.ENDCALL,
+        KeyCodes.BACK, KeyCodes.HOME,
+        KeyCodes.DPAD_UP, KeyCodes.DPAD_DOWN, KeyCodes.DPAD_LEFT,
+        KeyCodes.DPAD_RIGHT, KeyCodes.DPAD_CENTER, KeyCodes.ENTER,
         KEYCODE_ROTARY_CONTROLLER, KEYCODE_MEDIA, KEYCODE_NAVIGATION, KEYCODE_TEL,
     )
 
@@ -69,15 +70,15 @@ object CarKeys {
             return true
         }
         when (keyCode) {
-            KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> media?.togglePlay()
-            KeyEvent.KEYCODE_MEDIA_PLAY -> if (media != null && !media.now.value.playing) media.togglePlay()
-            KeyEvent.KEYCODE_MEDIA_PAUSE, KeyEvent.KEYCODE_MEDIA_STOP -> if (media != null && media.now.value.playing) media.togglePlay()
-            KeyEvent.KEYCODE_MEDIA_NEXT -> media?.next()
-            KeyEvent.KEYCODE_MEDIA_PREVIOUS -> media?.previous()
-            KeyEvent.KEYCODE_CALL -> call()
-            KeyEvent.KEYCODE_ENDCALL -> endCall()
-            KeyEvent.KEYCODE_BACK -> screen(ScreenKey.BACK)
-            KeyEvent.KEYCODE_HOME -> screen(ScreenKey.HOME)
+            KeyCodes.MEDIA_PLAY_PAUSE -> media?.togglePlay()
+            KeyCodes.MEDIA_PLAY -> if (media != null && !media.now.value.playing) media.togglePlay()
+            KeyCodes.MEDIA_PAUSE, KeyCodes.MEDIA_STOP -> if (media != null && media.now.value.playing) media.togglePlay()
+            KeyCodes.MEDIA_NEXT -> media?.next()
+            KeyCodes.MEDIA_PREVIOUS -> media?.previous()
+            KeyCodes.CALL -> call()
+            KeyCodes.ENDCALL -> endCall()
+            KeyCodes.BACK -> screen(ScreenKey.BACK)
+            KeyCodes.HOME -> screen(ScreenKey.HOME)
             KEYCODE_NAVIGATION -> screen(ScreenKey.MAP)
             KEYCODE_MEDIA -> screen(ScreenKey.MEDIA)
             KEYCODE_TEL -> screen(ScreenKey.PHONE)
@@ -107,7 +108,7 @@ object CarKeys {
     const val KEYCODE_TEL = 65540
 
     private val FOCUS_KEYS = setOf(
-        KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN, KeyEvent.KEYCODE_DPAD_LEFT,
-        KeyEvent.KEYCODE_DPAD_RIGHT, KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER,
+        KeyCodes.DPAD_UP, KeyCodes.DPAD_DOWN, KeyCodes.DPAD_LEFT,
+        KeyCodes.DPAD_RIGHT, KeyCodes.DPAD_CENTER, KeyCodes.ENTER,
     )
 }
