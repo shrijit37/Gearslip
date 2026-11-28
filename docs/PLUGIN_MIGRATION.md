@@ -28,11 +28,11 @@
    real session still generates the placeholder frame. A real Compose/WebView renderer is still
    needed before the old car UI can live in a plug-in.
 
-2. **Hosted navigation apps have nowhere to draw.** `CarAppConnection.attachSurface()` (`:507`) is
+2. **Hosted navigation apps have nowhere to draw.** `CarAppConnection.attachSurface()` (`:508`) is
    now called when an installed renderer declares `PROVIDES_PIXELS` and supplies a lease; no such
    renderer ships yet, so it stays effectively unused. `detachSurface` is released with the lease,
-   but `replaceDeadSurface`, `reportAreas` and the gesture methods at `:622-642` still have no
-   callers. The host's `template` (`:87`), `trip` (`:689`), `panMode`/`atRoot` (`:462-473`) and
+   but `replaceDeadSurface`, `reportAreas` and the gesture methods at `:623-643` still have no
+   callers. The host's `template` (`:88`), `trip` (`:692`), `panMode`/`atRoot` (`:465-473`) and
    `surfaceEpoch` have no external reader: templates arrive and are dropped, while
    [BUILDING_APPS.md](BUILDING_APPS.md#drawing-a-map) promises a lent surface nobody supplies.
 

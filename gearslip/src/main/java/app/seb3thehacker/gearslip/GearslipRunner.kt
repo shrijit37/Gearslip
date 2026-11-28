@@ -1373,6 +1373,10 @@ class GearslipRunner(
                         oldProvider.release(previous); true
                     }
                     if (!detached || !released) return@synchronized
+                    pixelLease = null
+                    pixelProvider = null
+                    pixelDetached = false
+                    pixelReleased = false
                 }
                 val lease = provider?.let { p ->
                     surfaceGuard.callValue("acquirePixelLease", null) { p.acquire(spec) }
