@@ -92,7 +92,8 @@
     basic routing and detach; `SurfaceFailureIsolationTest` covers the factory path, throwing plug-ins
     and generation swaps; `SurfaceForwardingTest` covers focus and bitrate forwarding; and
     `UpdateDecisionTest` covers generation bumps and queued installs. Still untested:
-    attach-under-stop and the factory-selected surface's exact frame-source routing.
+    attach-under-stop, `requestSyncFrame` forwarding, and the factory-selected surface's exact
+    frame-source routing.
 
 11. **Docs and comments were stale about rendering.** [BUILDING_APPS.md](BUILDING_APPS.md#drawing-a-map)
     described a virtual display and chrome overlays that no longer exist, said Gearslip renders
