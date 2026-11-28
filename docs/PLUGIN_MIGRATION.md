@@ -133,7 +133,7 @@ app. Only their callbacks and generation need tightening, not a session-scoped r
 | Current owner | State it holds | Destination |
 | --- | --- | --- |
 | `SessionStatus` | phase, headlines, stuck-on link | Immutable session snapshot; user-facing text belongs to the renderer |
-| `CarEnvironment` | frame, insets, night, vehicle, plus unread `phoneDark`/`display`/`battery` | Snapshot; prune unread fields |
+| `CarEnvironment` | frame, insets, night, vehicle | Snapshot; unread fields already pruned |
 | `CarData`, `CarSensors` | decoded vehicle readings | Snapshot |
 | `CarServices`, `CarAppConnection`, `CarModels` | nav/browse/media connections, templates, trip state, surface lease, icon bitmaps | Session-scoped host service; pure template models; rasterization in renderer |
 | `CarKeys`, `CarFocus` | key policy, screen keys, focus request | Command/intent layer; plain key codes instead of `KeyEvent` constants |
