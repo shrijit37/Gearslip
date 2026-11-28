@@ -6,7 +6,6 @@ import app.seb3thehacker.gearslip.SelfSignedCert
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /** Focus and frame-source forwarding at the plug-in seam (finding 10). */
@@ -56,14 +55,18 @@ class SurfaceForwardingTest {
     }
 
     @Test fun `a throwing detach does not stop the runner`() {
+        var attempts = 0
         val surface = object : HeadunitSurface {
             override val id = "throwing-detach"
             override val capabilities = emptySet<SurfaceCapability>()
-            override fun detach() = throw IllegalStateException("detach")
+            override fun detach() {
+                attempts++
+                throw IllegalStateException("detach")
+            }
         }
         val runner = GearslipRunner(ByteArrayInputStream(byteArrayOf()), ByteArrayOutputStream(), ::identity, surface = surface)
         runner.stop() // guarded: must not propagate
-        assertTrue(true)
+        assertEquals(1, attempts) // the call really happened, and was contained
     }
 
     private fun invoke(runner: GearslipRunner, name: String, arg: Int) {
