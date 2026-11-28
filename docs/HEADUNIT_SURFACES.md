@@ -43,26 +43,26 @@ the protocol's `FrameOutput` — a surface never writes to the car transport dir
 In the phone app's composition root (today `GearslipActivity`), before a session starts:
 
 ```kotlin
-HeadunitSurfaces.install { context -> MyHeadunitSurface(context.applicationContext) }
+HeadunitSurfaces.install({ context -> MyHeadunitSurface(context.applicationContext) }, SurfaceTrust.TRUSTED)
 ```
 
 The factory is invoked for each session, so a surface instance never outlives the car connection.
-`HeadunitSurfaces.install(surface)` installs a pre-built instance instead, and
-`HeadunitSurfaces.clear()` restores the headless placeholder mode. No reflection or service
-loading is involved: adding a surface is a compile-time dependency plus one line of wiring.
+`installSurface(surface, trust)` installs a pre-built instance; `clear()` restores the headless mode.
+`select(context)` returns a `SurfaceSelection` with the surface, generation and trust captured
+together. No reflection or service loading is involved: a surface is a compile-time dependency plus
+one line of wiring.
 
-> **Current status:** `GearslipActivity` creates a surface with `HeadunitSurfaces.create(this)` but
-> does not call `install(...)`. Until a renderer is installed, every session runs in placeholder
-> mode, regardless of the wiring shown above.
+> **Current status:** `GearslipActivity` selects a surface with `select(this)` but never calls
+> `install(...)`. Until one is installed, every session runs the placeholder.
 
 ## Known gaps
 
-This contract is a first step, not a complete plug-in system. It has no version negotiation, no
-generation counter for a surface swapped mid-session, no failure isolation around plug-in callbacks,
-and no way for a renderer to see hosted-app templates, alerts, toasts, media or calls. It also has
-no pixel-based frame mode, so every renderer must produce H.264 itself, and no way to lend a
-`Surface` to a navigation app: `CarAppConnection.attachSurface()` currently has no caller. See
-[PLUGIN_MIGRATION.md](PLUGIN_MIGRATION.md) for the findings and the plan.
+This contract is a first step, not a complete plug-in system. It has no version negotiation and no
+multi-surface routing, though `HeadunitSurfaces.generation()` detects a swap and `SurfaceGuard`
+isolates plug-in callbacks. `SurfaceContext.snapshot` now exposes hosted-app templates, alerts,
+toasts, media and calls, but there is still no pixel-based frame mode, so every renderer must
+produce H.264 itself, and no way to lend a `Surface` to a navigation app: `attachSurface()` still
+has no caller. See [PLUGIN_MIGRATION.md](PLUGIN_MIGRATION.md) for the findings and the plan.
 
 ## Rules
 
