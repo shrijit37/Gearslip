@@ -98,11 +98,10 @@
     third-party screens in Compose, and claimed Gearslip draws its own keyboard and media UI.
     [CONTRIBUTING.md](../CONTRIBUTING.md#pull-requests) now reflects that feature PRs land on
     `main`; it previously directed work to `experimental`. Those sections are corrected here.
-    Remaining drift: `host/CarAppConnection.kt`
-    comments at `:499-502`, `:539-551`, `:589-591`, `:622-626` and `:753-761`; the build-script
-    comments at `gearslip/build.gradle.kts:157-158,177,185,252-253`; empty car-UI headings in
-    `res/values/strings.xml:294-395`; duplicate session text at `:408-432`; unused `<queries>` for
-    recognition and TTS services in `AndroidManifest.xml:121-128`.
+    Remaining drift: `host/CarAppConnection.kt` comments at `:499-502`, `:539-551`, `:589-591`,
+    `:622-626` and `:753-761`, and duplicate session text in `res/values/strings.xml`. The stale
+    build-script comments, empty car-UI headings, unused speech `<queries>` and the orphaned
+    log-share `FileProvider` were removed with the Phase 4 residue cleanup.
 
 12. **The phone UI bypasses any command layer.** Composables call core globals directly:
     `ui/SettingsScreen.kt:289-351,403-556`, `ui/HomeCarSettings.kt:99-435`,
@@ -204,12 +203,11 @@ and a docs update. Do not combine phases into one large PR.
 - Keep `applicationId`, shared signing, monotonic `versionCode`, ABI splits and APK naming in the
   app module, per [AGENTS.md](../AGENTS.md). Move the `-keep class androidx.car.app.**` rule with
   the car-app host module.
-- Remove the residue left behind by the Phase 0 dependency removal (findings 9 and 11): the stale
-  MapLibre ABI-split comment at `gearslip/build.gradle.kts:157-158`, the MapLibre packaging config and
-  its stale comment at `gearslip/build.gradle.kts:185-186`, unused `androidTest`
-  declarations, the Nothing-UI comments, unused recognition/TTS `<queries>`, empty car-UI string
-  headings and the orphaned log-share `FileProvider` if no screen uses it. Phase 0 already removed the
-  dependencies and their build-script comments; this phase does not repeat that step.
+- **Done:** residue from the Phase 0 dependency removal was cleaned up: the MapLibre ABI-split and
+  packaging comments/config, the unused `androidTest` declarations, the Nothing-UI comment, unused
+  recognition/TTS `<queries>`, empty car-UI string headings and the orphaned log-share
+  `FileProvider` (no screen calls `GearslipLog.shareableFile`). Phase 0 removed the dependencies
+  themselves; this phase does not repeat that step.
 - Update Gradle task paths in `.github/actions/gearslip-build/action.yml`,
   `.github/workflows/kotlin-checks.yml`, `.github/workflows/codeql.yml`, and the commands in
   `AGENTS.md`, `CI.md`, `README.md` and `CONTRIBUTING.md`.

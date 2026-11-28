@@ -118,14 +118,6 @@
     <intent>
         <action android:name="android.media.browse.MediaBrowserService" />
     </intent>
-    <!-- Speech: without these, Android hides the recognizer and the voice from us and
-         SpeechRecognizer reports none installed even when one is. -->
-    <intent>
-        <action android:name="android.speech.RecognitionService" />
-    </intent>
-    <intent>
-        <action android:name="android.intent.action.TTS_SERVICE" />
-    </intent>
 </queries>
 
 <application
@@ -147,17 +139,6 @@
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
             </intent-filter>
         </receiver>
-
-        <provider
-            android:name="androidx.core.content.FileProvider"
-            android:authorities="${applicationId}.logshare"
-            android:exported="false"
-            android:grantUriPermissions="true">
-            <meta-data
-                android:name="android.support.FILE_PROVIDER_PATHS"
-                android:resource="@xml/share_paths" />
-        </provider>
-
 
         <!--
           singleTop: the head unit can re-attach while we are already foregrounded, which

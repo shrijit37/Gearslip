@@ -168,11 +168,9 @@
     <!-- Car screen size -->
     <string name="save">Save</string>
 
-    <!--  -->
 
     <!-- Help -->
 
-    <!--  -->
 
     <!-- Updates -->
     <string name="settings_updates">Updates</string>
@@ -208,7 +206,6 @@
     <!-- About and support -->
     <string name="close">Close</string>
 
-    <!--  -->
 
     <!-- Certificate setup -->
     <string name="certsetup_title">Certificate Setup</string>
@@ -219,18 +216,15 @@
     <string name="certsetup_import_sub">A .p12 file with its private key. Use your own when your car rejects the aasdk certificate.</string>
     <string name="certsetup_skip">Skip car connection setup</string>
 
-    <!--  -->
     <string name="certsetup_loaded">Cars accept only Google-issued certificates, and you have one loaded.</string>
     <string name="certsetup_choose">Cars accept only Google-issued certificates. Gearslip doesn\'t include one, so choose where yours comes from.</string>
     <string name="certsetup_aasdk_sub">The open-source aasdk project publishes this certificate at github.com/opencardev/aasdk. Most cars accept it. Some from around 2020 on reject it, and then you need to import your own.</string>
 
     <!-- Storage -->
 
-    <!--  -->
 
     <!-- Donate prompt -->
 
-    <!--  -->
 
     <!-- Wireless -->
     <string name="wireless_needs_permission">Gearslip needs Bluetooth and nearby Wi-Fi access for this.</string>
@@ -248,13 +242,11 @@
 
     <!-- Voice models -->
 
-    <!--  -->
 
     <!-- Home -->
     <string name="home_disconnect">Disconnect</string>
     <string name="home_bt_title">Bluetooth isn\'t connected</string>
 
-    <!--  -->
     <string name="home_debug_build">%1$s · debug build</string>
     <string name="home_bt_body">Music plays over Bluetooth, but your phone isn\'t connected to the car. Connect it here or from the car\'s Bluetooth menu.</string>
     <string name="home_location_title">Keep the car\'s map on GPS</string>
@@ -270,7 +262,6 @@
     <string name="audio_mic_title">Car audio needs the microphone permission</string>
     <string name="audio_open_settings">Open app settings</string>
 
-    <!--  -->
     <string name="audio_bt_body">Android treats the music Gearslip sends to the car like sharing your screen, so it asks every drive, over a cable or wireless. Over Bluetooth it never asks. You can change this later in Settings.</string>
     <string name="audio_keep_usb">Or keep the sound going through Gearslip and stop the question for good: plug the phone into a computer with USB debugging on, and run this once.</string>
     <string name="audio_mic_body">Android lets an app send other apps\' sound to the car only if it has the microphone permission. It\'s turned off for Gearslip, so music plays on the phone. Turn it on under Permissions, then Microphone.</string>
@@ -280,32 +271,25 @@
     <!-- Copyable command -->
     <string name="command_tap_copy">Tap to copy</string>
 
-    <!--  -->
     <string name="command_copied">Command copied</string>
 
-    <!--  -->
 
     <!-- Car settings screen -->
     <string name="off">Off</string>
     <string name="on">On</string>
 
-    <!--  -->
 
     <!-- Car media app -->
 
-    <!--  -->
 
     <!-- Car media browsing -->
 
-    <!--  -->
 
     <!-- Player controls -->
 
-    <!--  -->
 
     <!-- Car home -->
 
-    <!--  -->
 
     <!-- Breadcrumbs -->
     <string name="crumb_apps">Apps</string>
@@ -314,7 +298,6 @@
 
     <!-- Message popup -->
 
-    <!--  -->
     <!-- The voice assistant, over the bottom of the car screen -->
     <!-- The quoted phrases are commands the assistant understands only in English: keep them in English. -->
 
@@ -325,30 +308,24 @@
 
     <!-- Car overlays -->
 
-    <!--  -->
 
     <!-- Weather -->
 
     <!-- Weather screen -->
 
-    <!--  -->
 
     <!-- Dashboard -->
 
-    <!--  -->
 
     <!-- Phone dialer -->
     <!-- %1$s is how long ago, such as "5 min. ago" -->
 
-    <!--  -->
 
     <!-- Car screen -->
 
-    <!--  -->
 
     <!-- Nav bar -->
 
-    <!--  -->
 
     <!-- Browser -->
 
@@ -356,11 +333,9 @@
 
     <!-- Messages -->
 
-    <!--  -->
 
     <!-- Car app navigation -->
 
-    <!--  -->
     <plurals name="nav_lane_left">
         <item quantity="one">Use the left lane</item>
         <item quantity="other">Use the left %d lanes</item>
@@ -374,7 +349,6 @@
 
     <!-- Car app screens -->
 
-    <!--  -->
 
     <!-- Car app screens, more -->
 
@@ -384,7 +358,6 @@
 
     <!-- What's new in the car -->
 
-    <!--  -->
 
     <!-- Car keyboard -->
 
@@ -394,10 +367,8 @@
 
     <!-- Spoken directions -->
 
-    <!--  -->
     <string name="certsetup_installed_hint">If your car won\'t connect, it may reject this certificate. Import your own in Settings, under Certificate.</string>
 
-    <!--  -->
     <string name="cert_downloaded_footer">Car won\'t connect? Some cars from around 2020 on reject the aasdk certificate, so import your own instead. Changes take effect on the next connection.</string>
 
     <!-- Cluster screen -->
