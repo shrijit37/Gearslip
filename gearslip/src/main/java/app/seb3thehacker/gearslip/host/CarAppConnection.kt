@@ -527,12 +527,13 @@ class CarAppConnection(private val context: Context, private val session: Sessio
      */
     fun detachSurface(surface: Surface? = null, onDetached: (() -> Unit)? = null) {
         main.post {
-            val current = lent ?: return@post
-            if (surface != null && current.surface !== surface) return@post
-            lent = null
-            sendSurfaceDestroyed(current)
-            update { it.copy(surfaceAttached = false) }
-            // Callers release the renderer's Surface only after the host has stopped drawing.
+            val current = lent
+            if (current != null && (surface == null || current.surface === surface)) {
+                lent = null
+                sendSurfaceDestroyed(current)
+                update { it.copy(surfaceAttached = false) }
+            }
+            // Always complete the caller, even when there was no matching lease to detach.
             onDetached?.invoke()
         }
     }
