@@ -99,10 +99,10 @@
     third-party screens in Compose, and claimed Gearslip draws its own keyboard and media UI.
     [CONTRIBUTING.md](../CONTRIBUTING.md#pull-requests) now reflects that feature PRs land on
     `main`; it previously directed work to `experimental`. Those sections are corrected here.
-    Remaining drift: `host/CarAppConnection.kt` comments at `:499-502`, `:539-551`, `:589-591`,
-    `:622-626` and `:753-761`, and duplicate session text in `res/values/strings.xml`. The stale
-    build-script comments, empty car-UI headings, unused speech `<queries>` and the orphaned
-    log-share `FileProvider` were removed with the Phase 4 residue cleanup.
+    Earlier drift in `host/CarAppConnection.kt` comments about a Presentation/VirtualDisplay stage,
+    empty string headings and duplicate session text has been corrected. The stale build-script
+    comments, unused speech `<queries>` and the orphaned log-share `FileProvider` were removed with
+    the Phase 4 residue cleanup. No stale rendering claims remain in the tree.
 
 12. **Most of the phone UI still bypasses the command layer.** `AppCommands`/`SurfaceCommands` now
     route audio choice and renderer commands, but composables still call core globals directly:
