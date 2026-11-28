@@ -92,9 +92,9 @@
 10. **Test coverage has holes at exactly the migration seam.** `SurfacePluginTest` covers selection,
     basic routing and detach; `SurfaceFailureIsolationTest` covers the factory path, throwing plug-ins
     and generation swaps; `SurfaceForwardingTest` covers focus, bitrate forwarding and trusted vs
-    untrusted key interception and sync-frame forwarding; and `UpdateDecisionTest` covers generation
-    bumps and queued installs. Still untested: attach-under-stop and the factory-selected surface's
-    exact frame-source routing.
+    untrusted key interception, sync-frame forwarding and attach-under-stop; and `UpdateDecisionTest`
+    covers generation bumps and queued installs. The only untested seam left is the factory-selected
+    surface's exact frame-source routing.
 
 11. **Docs and comments were stale about rendering.** [BUILDING_APPS.md](BUILDING_APPS.md#drawing-a-map)
     described a virtual display and chrome overlays that no longer exist, said Gearslip renders
