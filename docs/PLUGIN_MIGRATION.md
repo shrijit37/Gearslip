@@ -45,14 +45,14 @@
    (`music/playback/MusicPlayer.kt`) are all session state a renderer cannot see. Rebuilding the old
    car UI as a plug-in is impossible without widening this boundary.
 
-4. **Plug-in callbacks are not failure-isolated.** `GearslipRunner.kt:970-971, 1004-1005, 1325, 1331`
-   and `releaseSurface()` at `:134-138` call plug-in code without `runCatching`. `attach()` is called
-   by `FrameSources.choose` without a guard, and `requestSyncFrame`/`applyBitRate` at `:1104`,
-   `:1344`, `:1603` and `:1642-1658` can also propagate. An exception from a WebView bridge or a
-   renderer can reach the `run()` catch-all at `:213-217`, be reported as `"transport failed"` and
-   tear down the session. The only `FrameOutput` implementation is the anonymous object at `:1209`
-   (no test fake implements it), so nothing else stands between the plug-in and the transport. A
-   plug-in must never be able to end a drive.
+4. **Plug-in callbacks are failure-isolated.** `SurfaceGuard` wraps every surface and frame-source
+   call, including capability reads, `attach`, `detach`, focus, input, keyframe requests, bitrate
+   reads and writes, `start` and `stop`; a failure is logged and dropped instead of reaching the
+   `run()` catch-all. A reusable throwing-plug-in suite lives in
+   `surface/SurfaceFailureIsolationTest.kt`. The remaining gap is `FrameOutput`: the only
+   implementation is the anonymous object at `:1209` (no test fake implements it), so a plug-in
+   that writes bytes directly into the encoder still has no buffer between it and the transport.
+   A plug-in must never be able to end a drive.
 
 5. **Session state is process-global, not session-scoped.** `object SessionStatus`,
    `object CarEnvironment`, `object CarServices`, `object CarKeys`, `object CarData`,
@@ -64,9 +64,9 @@
    That is acceptable for one headless session but blocks multiple plug-ins, parallel sessions and
    clean tests. State needs a session owner with a generation.
 
-6. **The plug-in registry has no generation or swap semantics.** `HeadunitSurfaces.kt:12-31` holds one
-   volatile slot. There is no version negotiation, no multi-surface routing, and no equivalent of the
-   updater's `generation` counter (`update/UpdateChecker.kt:90-130`) for a late renderer to re-check.
+6. **The registry has a generation but no swap routing.** `HeadunitSurfaces.generation()` now bumps
+   on every install/clear and a `SessionState` pins it at attach, stopping publication after a swap.
+   There is still no version negotiation and no multi-surface focus routing, so one surface owns the
 
 7. **Only encoded frames are accepted.** `FrameSource` requires the plug-in to produce H.264 and to
    understand bitrate limits and keyframe resync. A WebView or Compose renderer needs an easier mode

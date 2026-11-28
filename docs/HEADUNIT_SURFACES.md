@@ -57,12 +57,12 @@ loading is involved: adding a surface is a compile-time dependency plus one line
 
 ## Known gaps
 
-This contract is a first step, not a complete plug-in system. It has no version negotiation, no
-generation counter for a surface swapped mid-session, no failure isolation around plug-in callbacks,
-and no way for a renderer to see hosted-app templates, alerts, toasts, media or calls. It also has
-no pixel-based frame mode, so every renderer must produce H.264 itself, and no way to lend a
-`Surface` to a navigation app: `CarAppConnection.attachSurface()` currently has no caller. See
-[PLUGIN_MIGRATION.md](PLUGIN_MIGRATION.md) for the findings and the plan.
+This contract is a first step, not a complete plug-in system. It has no version negotiation and no
+multi-surface routing, though `HeadunitSurfaces.generation()` detects a swap and `SurfaceGuard`
+isolates plug-in callbacks. `SurfaceContext.snapshot` now exposes hosted-app templates, alerts,
+toasts, media and calls, but there is still no pixel-based frame mode, so every renderer must
+produce H.264 itself, and no way to lend a `Surface` to a navigation app: `attachSurface()` still
+has no caller. See [PLUGIN_MIGRATION.md](PLUGIN_MIGRATION.md) for the findings and the plan.
 
 ## Rules
 

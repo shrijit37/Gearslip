@@ -1630,7 +1630,7 @@ class GearslipRunner(
                     log.i(
                         "video: ${"%.1f".format(fps)} fps over 5s | sent=$sent waited=${waited}ms " +
                             "acked=$acksSeen inFlight=$inFlight split=$splitMessages " +
-                            "kbps=${(frameSource?.bitRate ?: 0) / 1000}",
+                            "kbps=${surfaceGuard.callValue("frameSource.bitRate", 0) { frameSource?.bitRate ?: 0 } / 1000}",
                     )
                     adaptBitRate(fps, waited)
 
@@ -1670,10 +1670,14 @@ class GearslipRunner(
         val source = frameSource ?: return
         // A plug-in-owned source may throw from any of these reads or writes. Each is isolated
         // separately: one bad bitrate decision must never escape into the transport loop.
-        fun bitRate(): Int = surfaceGuard.callValue("frameSource.bitRate", 0) { source.bitRate }
-        fun fullBitRate(): Int = surfaceGuard.callValue("frameSource.fullBitRate", 0) { source.fullBitRate }
+        // A failed read yields null: skipping this window is safer than applying a bitrate
+        // derived from a failure fallback (which could clamp to 0 or 1 bps).
+        fun bitRate(): Int? = surfaceGuard.callValue("frameSource.bitRate", null) { source.bitRate }
+        fun fullBitRate(): Int? = surfaceGuard.callValue("frameSource.fullBitRate", null) { source.fullBitRate }
         fun apply(bps: Int) = surfaceGuard.call("applyBitRate") { source.applyBitRate(bps) }
 
+        val before = bitRate() ?: return
+        val full = fullBitRate() ?: return
         val target = videoFrameRate.toDouble()
         val behind = waitedMs > ADAPT_WINDOW_MS / 2 && fps < target * 0.8
         val easy = waitedMs < ADAPT_WINDOW_MS / 10
@@ -1689,21 +1693,20 @@ class GearslipRunner(
                     log.i("video: a lower bitrate didn't help the car keep up - back to ${cut.first / 1000} kbps, adapting off")
                     return
                 }
-                val before = bitRate()
                 apply((before * 0.75).toInt())
-                val after = bitRate()
+                val after = bitRate() ?: return
                 if (after != before) {
                     lastCut = before to fps
                     log.i("video: car falling behind - bitrate ${before / 1000} -> ${after / 1000} kbps")
                 }
             }
-            easy && bitRate() < fullBitRate() -> {
+            easy && before < full -> {
                 lastCut = null
                 if (++smoothWindows >= 2) {
                     smoothWindows = 0
-                    val before = bitRate()
                     apply((before * 1.1).toInt() + 1)
-                    log.i("video: keeping up - bitrate ${before / 1000} -> ${bitRate() / 1000} kbps")
+                    val after = bitRate() ?: return
+                    log.i("video: keeping up - bitrate ${before / 1000} -> ${after / 1000} kbps")
                 }
             }
             else -> smoothWindows = 0
