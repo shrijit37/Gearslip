@@ -22,9 +22,9 @@ session will drive it. The core contains no Compose, View or drawing code.
   only when `PROVIDES_FRAMES` is declared.
 - `detach()` — called when the session ends; release everything here.
 - `onFocus(projected: Boolean)` — the car took its screen back, or handed it over again.
-- `onTouch(action, actionIndex, points)` / `onKey(keyCode, down, longPress)` / `onRotate(delta)` —
-  head-unit input, in frame coordinates. Callbacks may arrive off the main thread; a UI
-  implementation must dispatch to its own main thread.
+- `onTouch(action, actionIndex, points)` / `onRotate(delta)` — head-unit touch and knob input, in
+  frame coordinates. `onKey(keyCode, down, longPress): Boolean` returns true to consume the key and
+  stop core handling; the default false preserves it. Untrusted renderers cannot consume keys.
 
 `SurfaceContext` exposes read-only `StateFlow`s for connection phase, frame geometry, crop insets,
 day/night, decoded vehicle data and the matched vehicle profile. Nothing can be pushed back into

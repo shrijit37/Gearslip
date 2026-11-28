@@ -1046,13 +1046,17 @@ class GearslipRunner(
             val down = Wire.varint(fields, 2) == 1L
             val longPress = Wire.varint(fields, 4) == 1L
             log.i("<- key event: keycode=$keycode ${if (down) "down" else "up"}${if (longPress) " long" else ""}")
-            val consumed = surface?.let { current ->
+            // Only a trusted renderer may consume a hard key. An untrusted one can still observe
+            // the edge, but must never suppress core call/media/screen handling.
+            // Always deliver the edge to the surface; only a trusted one may consume it.
+            val handled = surface?.let { current ->
                 if (registrationStale()) return@let false
                 surfaceGuard.callValue("onKey", false) {
                     SurfaceCapability.KEYS in current.capabilities &&
                         current.onKey(keycode, down, longPress)
-                } ?: false
+                }
             } ?: false
+            val consumed = trustedSurface && handled
             if (!consumed && !CarKeys.onKey(keycode, down, longPress) && down) {
                 log.i("unhandled keycode=$keycode")
             }
