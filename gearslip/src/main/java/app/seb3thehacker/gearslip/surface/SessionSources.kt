@@ -1,6 +1,7 @@
 package app.seb3thehacker.gearslip.surface
 
 import android.media.session.PlaybackState
+import android.os.SystemClock
 import app.seb3thehacker.gearslip.Insets
 import app.seb3thehacker.gearslip.SessionStatus
 import app.seb3thehacker.gearslip.call.CallUiState
@@ -48,7 +49,12 @@ import app.seb3thehacker.gearslip.surface.api.VehicleModel
 import app.seb3thehacker.gearslip.surface.api.VehicleSnapshot
 import app.seb3thehacker.gearslip.surface.StateFlows.startingWith
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
+import java.util.UUID
+import java.util.WeakHashMap
+import androidx.car.app.model.Template
+import app.seb3thehacker.gearslip.host.CarAppConnection
 
 /**
  * Pure, API-typed inputs for one session's snapshot.
@@ -120,9 +126,14 @@ object GlobalSources : SessionSources {
         )
     }.asState(VehicleSnapshot())
 
-    override val media = CarServices.media.now.map { now ->
+    override val media = combine(
+        CarServices.media.now,
+        CarServices.media.modes,
+        CarServices.media.queue,
+        CarServices.mediaApp,
+    ) { now, modes, queue, app ->
         MediaSnapshot(
-            source = CarServices.mediaApp.value?.label.orEmpty(),
+            source = app?.label.orEmpty(),
             title = now.title,
             artist = now.artist,
             album = now.album,
@@ -130,10 +141,10 @@ object GlobalSources : SessionSources {
             state = mediaState(now),
             positionMs = now.positionMs,
             durationMs = now.durationMs,
-            shuffle = CarServices.media.modes.value.shuffle != 0,
-            repeat = CarServices.media.modes.value.repeat,
+            shuffle = modes.shuffle != 0,
+            repeat = modes.repeat,
             error = now.error,
-            queue = CarServices.media.queue.value.map { row ->
+            queue = queue.map { row ->
                 TrackSnapshot(
                     id = row.queueId.toString(),
                     title = row.title,
@@ -146,24 +157,31 @@ object GlobalSources : SessionSources {
         )
     }.asState(MediaSnapshot())
 
-    override val call = CarCalls.state.map { state ->
+    override val call = combine(CarCalls.state, CarCalls.muted) { state, muted ->
         when (state) {
             CallUiState.None -> null
             is CallUiState.Ringing -> CallSnapshot(CallState.INCOMING, caller(state.caller))
             is CallUiState.Active -> CallSnapshot(
-                if (CarCalls.muted.value) CallState.MUTED else CallState.ACTIVE,
+                if (muted) CallState.MUTED else CallState.ACTIVE,
                 state.caller?.let(::caller) ?: CallerSnapshot(),
-                ((System.currentTimeMillis() - state.since).coerceAtLeast(0) / 1000),
+                // CarCalls stamps `since` with uptimeMillis; wall-clock subtraction would be
+                // off by the epoch and show a nonsensical duration from the first frame.
+                ((SystemClock.uptimeMillis() - state.since).coerceAtLeast(0) / 1000),
             )
         }
     }.asState(null)
 
-    override val notifications = CarNotifications.history.map { history ->
+    override val notifications = combine(
+        CarNotifications.history,
+        CarNotifications.popup,
+        CarNotifications.unread,
+        CarNotifications.listening,
+    ) { history, popup, unread, listening ->
         NotificationCenterSnapshot(
             history = history.map(::notification),
-            popup = CarNotifications.popup.value?.let(::notification),
-            unread = CarNotifications.unread.value,
-            listening = CarNotifications.listening.value,
+            popup = popup?.let(::notification),
+            unread = unread,
+            listening = listening,
         )
     }.asState(NotificationCenterSnapshot())
 
@@ -177,10 +195,25 @@ object GlobalSources : SessionSources {
         rows.map { r -> SensorReadingSnapshot(r.typeId, r.typeName, r.raw, r.updatedAtMs) }
     }.asState(emptyList())
 
-    override val hostedApps = CarServices.nav.status.map { status ->
-        val template = CarServices.nav.template.value
+    private data class HostState(
+        val status: CarAppConnection.Status,
+        val template: Template?,
+        val panMode: Boolean,
+        val atRoot: Boolean,
+        val surfaceEpoch: Int,
+    )
+
+    override val hostedApps = combine(
+        CarServices.nav.status,
+        CarServices.nav.template,
+        CarServices.nav.panMode,
+        CarServices.nav.atRoot,
+        CarServices.nav.surfaceEpoch,
+    ) { status, template, panMode, atRoot, epoch ->
+        HostState(status, template, panMode, atRoot, epoch)
+    }.combine(CustomCarApps.state) { host, apps ->
         HostedAppSnapshotState(
-            apps = CustomCarApps.state.value.orEmpty().map { app ->
+            apps = apps.orEmpty().map { app ->
                 HostedAppSnapshot(
                     packageName = app.packageName,
                     label = app.packageName.substringAfterLast('.'),
@@ -188,13 +221,13 @@ object GlobalSources : SessionSources {
                 )
             },
             template = TemplateSnapshot(
-                appPackage = status.app.orEmpty(),
-                title = status.template.orEmpty().ifBlank { template?.javaClass?.simpleName.orEmpty() },
+                appPackage = host.status.app.orEmpty(),
+                title = host.status.template.orEmpty().ifBlank { host.template?.javaClass?.simpleName.orEmpty() },
             ),
-            navigating = status.phase == app.seb3thehacker.gearslip.host.CarAppConnection.Phase.RUNNING,
-            panMode = CarServices.nav.panMode.value,
-            atRoot = CarServices.nav.atRoot.value,
-            surfaceEpoch = CarServices.nav.surfaceEpoch.value,
+            navigating = host.status.phase == CarAppConnection.Phase.RUNNING,
+            panMode = host.panMode,
+            atRoot = host.atRoot,
+            surfaceEpoch = host.surfaceEpoch,
         )
     }.asState(HostedAppSnapshotState())
 
@@ -202,7 +235,7 @@ object GlobalSources : SessionSources {
         shown?.let {
             AlertSnapshot(
                 id = it.alert.id,
-                ownerToken = System.identityHashCode(it.owner).toString(),
+                ownerToken = ownerToken(it.owner),
                 title = it.alert.title.text(),
                 actions = it.alert.actions.map { action -> action.title.text() },
                 durationMs = it.alert.durationMillis,
@@ -210,9 +243,9 @@ object GlobalSources : SessionSources {
         }
     }.asState(null)
 
-    override val toast = CarToasts.message.map { message ->
+    override val toast = combine(CarToasts.message, CarToasts.waiting) { message, waiting ->
         message?.let {
-            ToastSnapshot(it.text, it.durationMs, System.identityHashCode(it.owner).toString(), CarToasts.waiting.value)
+            ToastSnapshot(it.text, it.durationMs, ownerToken(it.owner), waiting)
         }
     }.asState(null)
 
@@ -222,21 +255,31 @@ object GlobalSources : SessionSources {
         }
     }.asState(emptyList())
 
-    override val lease = CarServices.nav.status.map { status ->
-        SurfaceLeaseSnapshot(
-            granted = status.surfaceAttached,
-            epoch = CarServices.nav.surfaceEpoch.value,
-        )
+    override val lease = combine(CarServices.nav.status, CarServices.nav.surfaceEpoch) { status, epoch ->
+        SurfaceLeaseSnapshot(granted = status.surfaceAttached, epoch = epoch)
     }.asState(SurfaceLeaseSnapshot())
 
-    override val settings = CarSettings.nightMode.map { mode ->
+    override val settings = combine(
+        CarSettings.nightMode,
+        CarSettings.scale,
+        CarSettings.adaptiveVideoEnabled,
+        CarSettings.pipeAudio,
+    ) { mode, scale, adaptiveVideo, pipeAudio ->
         SettingsSnapshot(
             night = mode == NightMode.NIGHT,
-            scale = CarSettings.scale.value,
-            adaptiveVideo = CarSettings.adaptiveVideoEnabled.value,
-            pipeAudio = CarSettings.pipeAudio.value,
+            scale = scale,
+            adaptiveVideo = adaptiveVideo,
+            pipeAudio = pipeAudio,
         )
     }.asState(SettingsSnapshot())
+
+    /** Identity-based tokens: random, stable for an owner's lifetime, never recycled by the GC. */
+    private class IdentityKey(val value: Any)
+    private val ownerTokens = WeakHashMap<IdentityKey, String>()
+
+    private fun ownerToken(owner: Any): String = synchronized(ownerTokens) {
+        ownerTokens.getOrPut(IdentityKey(owner)) { UUID.randomUUID().toString() }
+    }
 
     private fun mediaState(now: NowPlaying) = when (now.state) {
         PlaybackState.STATE_PLAYING -> MediaPlaybackState.PLAYING

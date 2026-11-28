@@ -3,7 +3,9 @@ package app.seb3thehacker.gearslip.surface
 import app.seb3thehacker.gearslip.surface.api.AlertSnapshot
 import app.seb3thehacker.gearslip.surface.api.CallSnapshot
 import app.seb3thehacker.gearslip.surface.api.CallState
+import app.seb3thehacker.gearslip.surface.api.CallerSnapshot
 import app.seb3thehacker.gearslip.surface.api.FrameGeometry
+import app.seb3thehacker.gearslip.surface.api.NotificationSnapshot
 import app.seb3thehacker.gearslip.surface.api.HostedAppSnapshotState
 import app.seb3thehacker.gearslip.surface.api.MediaPlaybackState
 import app.seb3thehacker.gearslip.surface.api.MediaSnapshot
@@ -16,6 +18,7 @@ import app.seb3thehacker.gearslip.surface.api.SessionSnapshot
 import app.seb3thehacker.gearslip.surface.api.SettingsSnapshot
 import app.seb3thehacker.gearslip.surface.api.SurfaceLeaseSnapshot
 import app.seb3thehacker.gearslip.surface.api.ToastSnapshot
+import app.seb3thehacker.gearslip.surface.api.VehicleLocation
 import app.seb3thehacker.gearslip.surface.api.VehicleModel
 import app.seb3thehacker.gearslip.surface.api.VehicleSnapshot
 import kotlinx.coroutines.delay
@@ -153,4 +156,32 @@ class SessionStateTest {
         assertEquals(frozen, state.snapshot.value)
         assertNull(state.snapshot.value.call)
     }
+    @Test fun `an untrusted session gets caller, message and location details removed`() = runBlocking {
+        val sources = FakeSources()
+        sources.callFlow.value = CallSnapshot(CallState.INCOMING, CallerSnapshot("Alice", "+1 555"))
+        sources.notificationsFlow.value = NotificationCenterSnapshot(
+            history = listOf(
+                NotificationSnapshot(
+                    key = "k", id = 1, packageName = "chat", appLabel = "Chat",
+                    title = "Alice", text = "private message", postedAt = 0,
+                ),
+            ),
+        )
+        sources.dataFlow.value = VehicleSnapshot(location = VehicleLocation(1.0, 2.0, 3f, 4.0, 5f, 6f))
+        val state = SessionState(9, sources, trusted = false)
+        try {
+            state.start()
+            delay(100)
+            val view = state.snapshot.value
+            assertEquals(CallState.INCOMING, view.call?.state)
+            assertEquals("", view.call?.caller?.name)
+            assertEquals("", view.call?.caller?.number)
+            assertEquals("", view.notifications.history.first().text)
+            assertTrue(view.notifications.history.first().lines.isEmpty())
+            assertNull(view.carData.location)
+        } finally {
+            state.stop()
+        }
+    }
+
 }

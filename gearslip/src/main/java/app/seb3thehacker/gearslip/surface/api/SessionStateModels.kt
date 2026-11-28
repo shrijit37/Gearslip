@@ -191,4 +191,27 @@ data class SurfaceSnapshot(
     val catalog: List<CatalogEntrySnapshot> = emptyList(),
     val lease: SurfaceLeaseSnapshot = SurfaceLeaseSnapshot(),
     val settings: SettingsSnapshot = SettingsSnapshot(),
-)
+) {
+    /**
+     * The view an untrusted plug-in may see.
+     *
+     * Caller identity, message bodies and precise location are removed; structural state (that a
+     * call is ringing, that a notification arrived, that navigation is active) remains so a
+     * third-party renderer can still lay out a useful screen. External plug-ins in Phase 5 must
+     * construct their [SessionState] with `trusted = false`.
+     */
+    fun redacted(): SurfaceSnapshot = copy(
+        call = call?.copy(caller = CallerSnapshot()),
+        notifications = notifications.copy(
+            history = notifications.history.map { it.redacted() },
+            popup = notifications.popup?.redacted(),
+        ),
+        carData = carData.copy(location = null),
+    )
+
+    private fun NotificationSnapshot.redacted() = copy(
+        text = "",
+        lines = emptyList(),
+        canReply = false,
+    )
+}

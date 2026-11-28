@@ -22,6 +22,8 @@ import kotlinx.coroutines.launch
 class SessionState(
     val generation: Long,
     private val sources: SessionSources = GlobalSources,
+    /** False for external/untrusted plug-ins: they receive the redacted snapshot only. */
+    private val trusted: Boolean = true,
 ) {
     private val job = SupervisorJob()
     private val scope = CoroutineScope(job + Dispatchers.Default)
@@ -59,14 +61,15 @@ class SessionState(
         job.cancel()
     }
 
-    internal fun publish(block: (SurfaceSnapshot) -> SurfaceSnapshot) {
-        if (job.isActive) _snapshot.update(block)
-    }
-
     private fun <T> mirror(flow: StateFlow<T>, updateWith: SurfaceSnapshot.(T) -> SurfaceSnapshot) {
         scope.launch {
             flow.collect { value ->
-                if (job.isActive) _snapshot.update { current -> current.updateWith(value) }
+                if (job.isActive) {
+                    _snapshot.update { current ->
+                        val next = current.updateWith(value)
+                        if (trusted) next else next.redacted()
+                    }
+                }
             }
         }
     }
