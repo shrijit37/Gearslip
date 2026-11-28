@@ -26,6 +26,7 @@ import java.io.IOException
 import app.seb3thehacker.gearslip.protocol.InputProtocol
 import app.seb3thehacker.gearslip.protocol.TouchPoint
 import app.seb3thehacker.gearslip.surface.AppCommands
+import app.seb3thehacker.gearslip.surface.api.CommandSink
 import app.seb3thehacker.gearslip.surface.FrameOutput
 import app.seb3thehacker.gearslip.surface.FrameSources
 import app.seb3thehacker.gearslip.surface.FrameSource
@@ -166,6 +167,7 @@ class GearslipRunner(
             sessionState?.stop()
             sessionState = null
             AppCommands.syncFrame = {}
+            AppCommands.guard = SurfaceGuard { _, _ -> }
             if (!surfaceDetached) {
                 // Only mark detached when the plug-in actually released: a failed detach stays
                 // retryable instead of silently leaking the renderer's resources.
@@ -1293,6 +1295,7 @@ class GearslipRunner(
             state.setVideoSpec(spec)
             sessionState = state
             AppCommands.syncFrame = { surfaceGuard.call("requestSyncFrame") { frameSource?.requestSyncFrame() } }
+            AppCommands.guard = surfaceGuard
             val source = FrameSources.choose(
                 surface, surfaceContext(), spec,
                 PlaceholderFrameSource(width, height, videoFrameRate, wireless),
@@ -1321,7 +1324,12 @@ class GearslipRunner(
         // Resolve on access: a re-attach must never leave a renderer holding a cancelled flow.
         override val snapshot get() = sessionState?.snapshot ?: super.snapshot
         // An untrusted renderer gets the no-op sink; it cannot change audio routing or focus.
-        override val commandSink get() = if (trustedSurface) AppCommands else super.commandSink
+        // Per-session authority: the global sink is only reachable while this session is live.
+        override val commandSink get() = CommandSink { command ->
+            if (trustedSurface && !registrationStale() && !stopped && !surfaceDetached && sessionState != null) {
+                AppCommands.submit(command)
+            }
+        }
     }
 
     /**

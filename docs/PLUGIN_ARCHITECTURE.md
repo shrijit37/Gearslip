@@ -72,9 +72,9 @@ proposes a JVM architecture test to enforce the import boundary.
 ## Contract pieces
 
 1. **Version and capabilities.** A plug-in declares a protocol version and what it handles:
-   frames or pixels, touch, keys, hosted app surfaces, its own settings page. Unknown capabilities
-   are ignored; mismatched versions are refused. Today only three booleans exist (`PROVIDES_FRAMES`,
-   `TOUCH`, `KEYS`) and there is no version field.
+   frames or pixels, touch, keys, hosted app surfaces, its own settings page. `HeadunitSurface`
+   now exposes a default `version = 1` and three capabilities (`PROVIDES_FRAMES`, `TOUCH`, `KEYS`);
+   version negotiation, mismatch refusal and the remaining capabilities are still pending.
 
 2. **State snapshots.** Everything a renderer needs is an immutable, pure-Kotlin value produced by
    the core: session phase, frame geometry, crop insets, day/night, vehicle data and profile, plus
