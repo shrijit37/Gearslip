@@ -16,8 +16,12 @@ internal object FrameSources {
         fallback: FrameSource,
         guard: SurfaceGuard? = null,
     ): FrameSource {
-        val provided = guard?.callValue("attach", null) { surface?.attach(context, spec) }
-            ?: if (guard == null) surface?.attach(context, spec) else null
+        // Exactly one attach call whether or not a failure guard was supplied.
+        val provided = if (guard != null) {
+            guard.callValue("attach", null) { surface?.attach(context, spec) }
+        } else {
+            surface?.attach(context, spec)
+        }
         return if (provided != null && surface?.capabilities?.contains(SurfaceCapability.PROVIDES_FRAMES) == true) {
             provided
         } else {
