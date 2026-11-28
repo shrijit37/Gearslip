@@ -133,6 +133,23 @@ class SurfaceForwardingTest {
         }
     }
 
+    @Test fun `regaining projected focus asks the frame source to resync`() {
+        val runner = GearslipRunner(ByteArrayInputStream(byteArrayOf()), ByteArrayOutputStream(), ::identity)
+        val source = FakeFrameSource()
+        val cls = GearslipRunner::class.java
+        try {
+            cls.getDeclaredField("frameSource").apply { isAccessible = true; set(runner, source) }
+            cls.getDeclaredField("videoStarted").apply { isAccessible = true; setBoolean(runner, true) }
+            cls.getDeclaredField("videoProjected").apply { isAccessible = true; setBoolean(runner, false) }
+            cls.getDeclaredMethod("onVideoFocus", Int::class.javaPrimitiveType)
+                .apply { isAccessible = true }
+                .invoke(runner, 1) // VIDEO_FOCUS_PROJECTED
+            assertEquals(1, source.syncFrames)
+        } finally {
+            runner.stop()
+        }
+    }
+
     private fun keyEvent(): ByteArray {
         val key = Protobuf.varintField(1, 4) + Protobuf.varintField(2, 1) // BACK down
         return Protobuf.bytesField(1, key)
