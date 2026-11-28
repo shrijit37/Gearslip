@@ -81,7 +81,7 @@
    `gearslip/build.gradle.kts:239-244` declares Compose alongside protocol dependencies. Phase 0
    added `surface/ArchitectureTest.kt` to fail on View/Compose/renderer imports in core packages,
    but the module split itself is still pending. The unused `maplibre` and `okhttp` dependencies and
-   their build-script comments were removed in Phase 0 (no `com.maplibre` or `okhttp3` imports ever
+   their build-script comments were removed in Phase 0 (no `org.maplibre` or `okhttp3` imports ever
    existed in `gearslip/src`). `androidTest` dependencies (`:252-255`) still have no source set; the
    comment at `:252-253` is stale. Bitmap work also sits in core helpers —
    `host/CarModels.kt:76` keeps a global `LruCache<String, Bitmap>` and `:85` returns a `Bitmap` — so
@@ -204,8 +204,9 @@ and a docs update. Do not combine phases into one large PR.
 - Keep `applicationId`, shared signing, monotonic `versionCode`, ABI splits and APK naming in the
   app module, per [AGENTS.md](../AGENTS.md). Move the `-keep class androidx.car.app.**` rule with
   the car-app host module.
-- Remove the residue left behind by the Phase 0 dependency removal (findings 9 and 11): the MapLibre
-  packaging config and its stale comment at `gearslip/build.gradle.kts:185-186`, unused `androidTest`
+- Remove the residue left behind by the Phase 0 dependency removal (findings 9 and 11): the stale
+  MapLibre ABI-split comment at `gearslip/build.gradle.kts:157-158`, the MapLibre packaging config and
+  its stale comment at `gearslip/build.gradle.kts:185-186`, unused `androidTest`
   declarations, the Nothing-UI comments, unused recognition/TTS `<queries>`, empty car-UI string
   headings and the orphaned log-share `FileProvider` if no screen uses it. Phase 0 already removed the
   dependencies and their build-script comments; this phase does not repeat that step.

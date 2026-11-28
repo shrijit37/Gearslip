@@ -46,6 +46,8 @@ class ArchitectureTest {
         assertTrue(forbiddenImport("import androidx.compose.runtime.Composable") != null)
         assertTrue(forbiddenImport("import android.view.View") != null)
         assertTrue(forbiddenImport("import android.view.ViewGroup") != null)
+        assertTrue(forbiddenImport("import android.view.ViewGroup.LayoutParams") != null)
+        assertTrue(forbiddenImport("import android.view.ViewGroup.*") != null)
         assertTrue(forbiddenImport("import android.widget.Button") != null)
         assertTrue(forbiddenImport("import app.seb3thehacker.gearslip.ui.HomeScreen") != null)
         assertTrue(forbiddenImport("import app.seb3thehacker.gearslip.renderer.ComposeSurface") != null)
@@ -62,7 +64,8 @@ class ArchitectureTest {
         val name = trimmed.removePrefix("import ").substringBefore(" as ").trim()
         return when {
             name.startsWith("androidx.compose.") -> name
-            name == "android.view.View" || name == "android.view.ViewGroup" -> name
+            name == "android.view.View" || name == "android.view.ViewGroup" ||
+                name.startsWith("android.view.View.") || name.startsWith("android.view.ViewGroup.") -> name
             name.startsWith("android.widget.") -> name
             name.startsWith("app.seb3thehacker.gearslip.ui.") -> name
             name.startsWith("app.seb3thehacker.gearslip.renderer.") -> name
