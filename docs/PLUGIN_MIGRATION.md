@@ -88,10 +88,10 @@
    pure screen models need rasterization moved into the renderer.
 
 10. **Test coverage has holes at exactly the migration seam.** `SurfacePluginTest` covers selection,
-    basic routing, explicit detach and natural-EOF detach (`:85-90`), but not the factory install
-    path, `onFocus`, `requestSyncFrame`/`applyBitRate` forwarding or attach-under-stop. Throwing and
-    swapped plug-ins are now covered by `surface/SurfaceFailureIsolationTest.kt`.
-    `UpdateCheckerTest` does not cover generation bumps or queued installs.
+    basic routing and explicit/natural detach, and the new surface suites cover the factory path,
+    throwing plug-ins and generation swaps. Still untested: `onFocus`, `requestSyncFrame`/
+    `applyBitRate` forwarding and attach-under-stop. `UpdateCheckerTest` does not cover generation
+    bumps or queued installs.
 
 11. **Docs and comments were stale about rendering.** [BUILDING_APPS.md](BUILDING_APPS.md#drawing-a-map)
     described a virtual display and chrome overlays that no longer exist, said Gearslip renders

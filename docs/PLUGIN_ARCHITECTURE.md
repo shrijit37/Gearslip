@@ -43,7 +43,7 @@ Two extension boundaries serve different audiences:
 
 | Boundary | Who uses it | Status |
 | --- | --- | --- |
-| `HeadunitSurface` (in-process Kotlin) | A renderer compiled into the app or supplied by a library module | Contract exists; no surface is installed in the app today |
+| `HeadunitSurface` (in-process Kotlin) | A renderer compiled into the app or supplied by a library module | Contract exists; the headless placeholder is installed at the composition root |
 | Gearslip apps (binder/AIDL, JSON screen models) | Third-party APKs that cannot be compiled into Gearslip | Specified in [BUILDING_APPS.md](BUILDING_APPS.md); not implemented |
 
 The second boundary should be built **on top of** the first, not instead of it: an external app's

@@ -1,9 +1,9 @@
 # Head-unit surfaces
 
 > **Current contract.** When nothing is registered, `GearslipActivity` installs the headless
-> `PlaceholderSurface` at `onCreate`; sessions use the placeholder until a real renderer is registered.
-> [PLUGIN_MIGRATION.md](PLUGIN_MIGRATION.md); the design target is in
-> [PLUGIN_ARCHITECTURE.md](PLUGIN_ARCHITECTURE.md).
+> `PlaceholderSurface` at `onCreate`; sessions use the placeholder until a real renderer is
+> registered. The remaining gaps are recorded in [PLUGIN_MIGRATION.md](PLUGIN_MIGRATION.md);
+> the design target is in [PLUGIN_ARCHITECTURE.md](PLUGIN_ARCHITECTURE.md).
 
 Gearslip's Android Auto Protocol (AAP) core owns the car connection, the frame clock and input
 decoding. It does **not** own any pixels. A head-unit UI is a plug-in: implement
