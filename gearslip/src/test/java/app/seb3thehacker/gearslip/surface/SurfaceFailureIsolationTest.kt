@@ -1,5 +1,7 @@
 package app.seb3thehacker.gearslip.surface
 
+import app.seb3thehacker.gearslip.car.InMemoryContext
+
 import app.seb3thehacker.gearslip.surface.SurfaceTrust
 
 import app.seb3thehacker.gearslip.surface.api.CallSnapshot
@@ -100,6 +102,18 @@ class SurfaceFailureIsolationTest {
             HeadunitSurfaces.clear()
         }
         assertFalse(HeadunitSurfaces.select(null).trusted)
+    }
+
+    @Test fun `a factory registration creates a surface and captures its trust`() {
+        val created = FakeSurface(emptySet())
+        HeadunitSurfaces.install({ created }, SurfaceTrust.UNTRUSTED)
+        try {
+            val selection = HeadunitSurfaces.select(InMemoryContext())
+            assertSame(created, selection.surface)
+            assertFalse(selection.trusted)
+        } finally {
+            HeadunitSurfaces.clear()
+        }
     }
 
     @Test fun `a renderer swap stops stale state publication`() = runBlocking {

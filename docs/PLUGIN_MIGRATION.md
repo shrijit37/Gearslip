@@ -23,10 +23,10 @@
 
 ## Findings
 
-1. **No renderer is installed.** `GearslipActivity` imports `HeadunitSurfaces` and calls `select()`
-   at lines 359 and 407, but never calls `install(...)`. Every real session runs the placeholder.
-   [HEADUNIT_SURFACES.md](HEADUNIT_SURFACES.md#registering-a-surface) describes an install call that
-   is not in the code.
+1. **Only the headless renderer is installed.** `GearslipActivity` installs `PlaceholderSurface` at
+   the composition root and selects it at lines 366 and 414. It declares no capabilities, so every
+   real session still generates the placeholder frame. A real Compose/WebView renderer is still
+   needed before the old car UI can live in a plug-in.
 
 2. **Hosted navigation apps have nowhere to draw.** `CarAppConnection.attachSurface()` (`:507`) is
    dead code; its comment still describes a `SurfaceView` in a `Presentation` that was deleted.

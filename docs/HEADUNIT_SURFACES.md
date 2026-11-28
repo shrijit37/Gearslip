@@ -52,8 +52,8 @@ The factory is invoked for each session, so a surface instance never outlives th
 together. No reflection or service loading is involved: a surface is a compile-time dependency plus
 one line of wiring.
 
-> **Current status:** `GearslipActivity` selects a surface with `select(this)` but never calls
-> `install(...)`. Until one is installed, every session runs the placeholder.
+> **Current status:** `GearslipActivity` installs `PlaceholderSurface` at `onCreate` and selects it
+> with `select(this)`. It declares no capabilities, so sessions remain headless until a real renderer is installed.
 
 ## Known gaps
 
