@@ -175,6 +175,8 @@ data class SurfaceSnapshot(
     val session: SessionSnapshot = SessionSnapshot(SessionPhase.IDLE),
     val frame: FrameGeometry = FrameGeometry(0, 0, 0, 0, false),
     val insets: ScreenInsets = ScreenInsets.NONE,
+    /** The car's night sensor (or its time-of-day fallback), not the user's night-mode setting. */
+    val night: Boolean = false,
     val vehicle: String = "",
     val vehicleModel: VehicleModel? = null,
     val carData: VehicleSnapshot = VehicleSnapshot(),

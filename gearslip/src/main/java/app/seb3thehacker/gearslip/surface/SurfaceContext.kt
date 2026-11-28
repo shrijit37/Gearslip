@@ -4,6 +4,8 @@ import app.seb3thehacker.gearslip.Insets
 import app.seb3thehacker.gearslip.SessionStatus
 import app.seb3thehacker.gearslip.car.CarData
 import app.seb3thehacker.gearslip.car.CarEnvironment
+import app.seb3thehacker.gearslip.surface.api.SurfaceSnapshot
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
 /**
@@ -31,4 +33,15 @@ interface SurfaceContext {
 
     /** Matched vehicle profile name, for per-car tuning. */
     val vehicle: StateFlow<String>
+
+    /**
+     * The whole session as one immutable value: media, calls, notifications, turns, sensors,
+     * hosted-app templates, alerts, toasts, catalog, lease and settings. A renderer should read
+     * this rather than the individual flows; those remain for existing surfaces during migration.
+     */
+    val snapshot: StateFlow<SurfaceSnapshot> get() = EMPTY_SNAPSHOT
+
+    companion object {
+        private val EMPTY_SNAPSHOT: StateFlow<SurfaceSnapshot> = MutableStateFlow(SurfaceSnapshot())
+    }
 }
