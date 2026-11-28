@@ -116,6 +116,21 @@ class SurfaceFailureIsolationTest {
         }
     }
 
+    @Test fun `installSurfaceIfAbsent preserves an existing registration`() {
+        val first = FakeSurface(emptySet())
+        val second = FakeSurface(emptySet())
+        HeadunitSurfaces.clear()
+        HeadunitSurfaces.installSurfaceIfAbsent(first, SurfaceTrust.UNTRUSTED)
+        val generation = HeadunitSurfaces.generation()
+        HeadunitSurfaces.installSurfaceIfAbsent(second, SurfaceTrust.TRUSTED)
+        try {
+            assertSame(first, HeadunitSurfaces.current)
+            assertEquals(generation, HeadunitSurfaces.generation())
+        } finally {
+            HeadunitSurfaces.clear()
+        }
+    }
+
     @Test fun `a renderer swap stops stale state publication`() = runBlocking {
         val sources = FakeSources()
         var swapped = false

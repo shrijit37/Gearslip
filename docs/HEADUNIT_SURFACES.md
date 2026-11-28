@@ -1,7 +1,7 @@
 # Head-unit surfaces
 
-> **Current contract.** `GearslipActivity` installs the headless `PlaceholderSurface` at `onCreate`,
-> so sessions use the placeholder frame source until a real renderer is installed.
+> **Current contract.** When nothing is registered, `GearslipActivity` installs the headless
+> `PlaceholderSurface` at `onCreate`; sessions use the placeholder until a real renderer is registered.
 > [PLUGIN_MIGRATION.md](PLUGIN_MIGRATION.md); the design target is in
 > [PLUGIN_ARCHITECTURE.md](PLUGIN_ARCHITECTURE.md).
 
@@ -52,8 +52,8 @@ The factory is invoked for each session, so a surface instance never outlives th
 together. No reflection or service loading is involved: a surface is a compile-time dependency plus
 one line of wiring.
 
-> **Current status:** `GearslipActivity` installs `PlaceholderSurface` at `onCreate` and selects it
-> with `select(this)`. It declares no capabilities, so sessions remain headless until a real renderer is installed.
+> **Current status:** `GearslipActivity` installs `PlaceholderSurface` at `onCreate` only when nothing
+> is registered, and selects through the fail-closed `selectSurface()` wrapper, which calls `select(this)`.
 
 ## Known gaps
 

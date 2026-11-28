@@ -53,7 +53,16 @@ object HeadunitSurfaces {
     val current: HeadunitSurface? get() = installed
 
     /** True when a factory or instance has been registered; used to avoid clobbering app init. */
-    val hasRegistration: Boolean get() = factory != null || installed != null
+    val hasRegistration: Boolean get() = synchronized(this) { factory != null || installed != null }
+
+    /** Installs an instance only when nothing is registered, atomically with the check. */
+    fun installSurfaceIfAbsent(surface: HeadunitSurface, trust: SurfaceTrust) = synchronized(this) {
+        if (factory == null && installed == null) {
+            generationCounter.incrementAndGet()
+            this.trust = trust
+            installed = surface
+        }
+    }
 
     /**
      * Selects the surface, generation and trust in one critical section.
