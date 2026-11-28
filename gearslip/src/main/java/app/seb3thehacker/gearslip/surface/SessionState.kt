@@ -57,6 +57,13 @@ class SessionState(
     }
     /** The negotiated video format is known only to the runner, not to the geometry owner. */
     private val videoSpec = MutableStateFlow<VideoSpec?>(null)
+    /** True once the renderer registration this session attached to has been replaced. */
+    @Volatile private var generationStale: () -> Boolean = { false }
+
+    /** Pins the registration generation; a swap stops this session before it publishes again. */
+    fun watchGeneration(isStale: () -> Boolean) {
+        generationStale = isStale
+    }
 
     /** The complete session view. Every emission is an immutable value. */
     val snapshot: StateFlow<SurfaceSnapshot> = _snapshot.asStateFlow()
@@ -76,7 +83,7 @@ class SessionState(
                     spec?.frameRate ?: 30, effective.densityDpi, spec?.wireless ?: false,
                 )
             }.collect { value ->
-                if (job.isActive) _snapshot.update { current ->
+                if (publishable()) _snapshot.update { current ->
                     val next = current.copy(frame = value)
                     if (trusted) next else next.redacted()
                 }
@@ -110,10 +117,18 @@ class SessionState(
         job.cancel()
     }
 
+    /** Re-checks liveness and the pinned generation before any state can be published. */
+    private fun publishable(): Boolean {
+        if (!job.isActive) return false
+        if (!generationStale()) return true
+        stop()
+        return false
+    }
+
     private fun <T> mirror(flow: StateFlow<T>, updateWith: SurfaceSnapshot.(T) -> SurfaceSnapshot) {
         scope.launch {
             flow.collect { value ->
-                if (job.isActive) {
+                if (publishable()) {
                     _snapshot.update { current ->
                         val next = current.updateWith(value)
                         if (trusted) next else next.redacted()

@@ -29,10 +29,12 @@ import app.seb3thehacker.gearslip.surface.FrameOutput
 import app.seb3thehacker.gearslip.surface.FrameSources
 import app.seb3thehacker.gearslip.surface.FrameSource
 import app.seb3thehacker.gearslip.surface.HeadunitSurface
+import app.seb3thehacker.gearslip.surface.HeadunitSurfaces
 import app.seb3thehacker.gearslip.surface.PlaceholderFrameSource
 import app.seb3thehacker.gearslip.surface.SurfaceCapability
 import app.seb3thehacker.gearslip.surface.SurfaceContext
 import app.seb3thehacker.gearslip.surface.SessionState
+import app.seb3thehacker.gearslip.surface.SurfaceGuard
 import app.seb3thehacker.gearslip.surface.VideoSpec
 import java.io.InputStream
 import java.io.OutputStream
@@ -72,6 +74,10 @@ class GearslipRunner(
     private val surface: HeadunitSurface? = null,
 ) {
     private val log = GearslipLog.tagged("PROTO")
+    /** A renderer failure is logged and dropped; it never reaches the transport or installer. */
+    private val surfaceGuard = SurfaceGuard { where, error ->
+        log.w("surface $where threw: ${error.javaClass.simpleName}: ${error.message}")
+    }
 
     private enum class State { WAIT_VERSION, TLS_HANDSHAKE, WAIT_AUTH, WAIT_SDR, DONE }
 
@@ -137,13 +143,13 @@ class GearslipRunner(
     /** Session-owned render resources; safe to call from stop() and the transport-exit finally. */
     private fun releaseSurface() {
         synchronized(surfaceLock) {
-            frameSource?.stop()
+            surfaceGuard.call("frameSource.stop") { frameSource?.stop() }
             frameSource = null
             sessionState?.stop()
             sessionState = null
             if (!surfaceDetached) {
                 surfaceDetached = true
-                surface?.detach()
+                surface?.let { current -> surfaceGuard.call("detach") { current.detach() } }
             }
         }
     }
@@ -975,8 +981,10 @@ class GearslipRunner(
         }
         // Time the next frame against this tap: see [reportTouchLatency].
         if (action == ACTION_DOWN || action == ACTION_UP) touchAtUs = System.nanoTime() / 1000
-        if (surface != null && SurfaceCapability.TOUCH in surface.capabilities) {
-            surface.onTouch(action, actionIndex, points)
+        surface?.let { current ->
+            if (SurfaceCapability.TOUCH in current.capabilities) {
+                surfaceGuard.call("onTouch") { current.onTouch(action, actionIndex, points) }
+            }
         }
     }
 
@@ -1009,8 +1017,10 @@ class GearslipRunner(
             val down = Wire.varint(fields, 2) == 1L
             val longPress = Wire.varint(fields, 4) == 1L
             log.i("<- key event: keycode=$keycode ${if (down) "down" else "up"}${if (longPress) " long" else ""}")
-            if (surface != null && SurfaceCapability.KEYS in surface.capabilities) {
-                surface.onKey(keycode, down, longPress)
+            surface?.let { current ->
+                if (SurfaceCapability.KEYS in current.capabilities) {
+                    surfaceGuard.call("onKey") { current.onKey(keycode, down, longPress) }
+                }
             }
             if (!CarKeys.onKey(keycode, down, longPress) && down) log.i("unhandled keycode=$keycode")
         }
@@ -1027,7 +1037,11 @@ class GearslipRunner(
             // int32, so a turn the other way arrives as a 64-bit two's complement varint.
             val delta = Wire.varint(fields, 2)?.toInt() ?: continue
             log.i("<- relative event: keycode=$keycode delta=$delta")
-            if (surface != null && SurfaceCapability.KEYS in surface.capabilities) surface.onRotate(delta)
+            surface?.let { current ->
+                if (SurfaceCapability.KEYS in current.capabilities) {
+                    surfaceGuard.call("onRotate") { current.onRotate(delta) }
+                }
+            }
         }
     }
 
@@ -1109,7 +1123,7 @@ class GearslipRunner(
                 log.i("<- UpdateUiConfigRequest (${body.size} bytes) - sending the stream's start again")
                 log.hex("   ui config", body, limit = 64)
                 lastCodecConfig?.let { send(MSG_MEDIA_CODEC_CONFIG, it, encrypted = true, channel = videoChannelId) }
-                frameSource?.requestSyncFrame()
+                surfaceGuard.call("requestSyncFrame") { frameSource?.requestSyncFrame() }
             }
 
             else -> log.i("<- unhandled video message id=$messageId (${body.size} bytes)")
@@ -1238,16 +1252,19 @@ class GearslipRunner(
             // The only renderer installed today is the app's own placeholder; external
             // plug-ins (Phase 5) must be constructed with trusted = false.
             val state = SessionState(sessionGeneration.incrementAndGet(), trusted = true)
+            val pinnedGeneration = HeadunitSurfaces.generation()
+            state.watchGeneration { HeadunitSurfaces.generation() != pinnedGeneration }
             state.start()
             state.setVideoSpec(spec)
             sessionState = state
             val source = FrameSources.choose(
                 surface, surfaceContext(), spec,
                 PlaceholderFrameSource(width, height, videoFrameRate, wireless),
+                surfaceGuard,
             )
             frameSource = source
             runCatching {
-                source.start(output)
+                surfaceGuard.call("frameSource.start") { source.start(output) }
                 SessionStatus.projecting()
                 BluetoothAudioCheck.onProjecting()
                 LocationCheck.onProjecting()
@@ -1341,13 +1358,13 @@ class GearslipRunner(
             CarFocus.request = ::requestNativeFocus
             log.i("PHASE A COMPLETE - video focus granted; starting video source")
             startVideoSource()
-            surface?.onFocus(true)
+            surface?.let { current -> surfaceGuard.call("onFocus") { current.onFocus(true) } }
             return
         }
         if (projected == videoProjected) return
         videoProjected = projected
         CarFocus.set(projected)
-        surface?.onFocus(projected)
+        surface?.let { current -> surfaceGuard.call("onFocus") { current.onFocus(projected) } }
         if (projected) {
             log.i("the car handed its screen back - restarting the stream")
             // Frames sent just before the car took over may never be acked.
@@ -1360,7 +1377,7 @@ class GearslipRunner(
             send(MSG_MEDIA_START, start, encrypted = true, channel = videoChannelId)
             log.i("-> Start(session_id=$SESSION_ID)")
             lastCodecConfig?.let { send(MSG_MEDIA_CODEC_CONFIG, it, encrypted = true, channel = videoChannelId) }
-            frameSource?.requestSyncFrame()
+            surfaceGuard.call("requestSyncFrame") { frameSource?.requestSyncFrame() }
         } else {
             // A phone ends the stream when the car takes its screen. LIVI switches on the focus
             // answer alone, but the 2018 Uconnect kept showing our last frame until it got Stop.
@@ -1619,7 +1636,7 @@ class GearslipRunner(
                     // some other path - a real decoder desync should never outlive this.
                     val idleSinceKeyframe = System.currentTimeMillis() - lastKeyframeSentAt
                     if (idleSinceKeyframe > PERIODIC_KEYFRAME_MS) {
-                        frameSource?.requestSyncFrame()
+                        surfaceGuard.call("requestSyncFrame") { frameSource?.requestSyncFrame() }
                     }
                 }
             }
@@ -1647,6 +1664,12 @@ class GearslipRunner(
     private fun adaptBitRate(fps: Double, waitedMs: Long) {
         if (!adaptiveVideo) return
         val source = frameSource ?: return
+        // A plug-in-owned source may throw from any of these reads or writes. Each is isolated
+        // separately: one bad bitrate decision must never escape into the transport loop.
+        fun bitRate(): Int = surfaceGuard.callValue("frameSource.bitRate", 0) { source.bitRate }
+        fun fullBitRate(): Int = surfaceGuard.callValue("frameSource.fullBitRate", 0) { source.fullBitRate }
+        fun apply(bps: Int) = surfaceGuard.call("applyBitRate") { source.applyBitRate(bps) }
+
         val target = videoFrameRate.toDouble()
         val behind = waitedMs > ADAPT_WINDOW_MS / 2 && fps < target * 0.8
         val easy = waitedMs < ADAPT_WINDOW_MS / 10
@@ -1658,24 +1681,25 @@ class GearslipRunner(
                     // The last cut bought no frames: the car's decoder is the limit, not the
                     // link, and smaller frames would only look worse. Undo it and stop here.
                     decoderBound = true
-                    source.applyBitRate(cut.first)
+                    apply(cut.first)
                     log.i("video: a lower bitrate didn't help the car keep up - back to ${cut.first / 1000} kbps, adapting off")
                     return
                 }
-                val before = source.bitRate
-                source.applyBitRate((before * 0.75).toInt())
-                if (source.bitRate != before) {
+                val before = bitRate()
+                apply((before * 0.75).toInt())
+                val after = bitRate()
+                if (after != before) {
                     lastCut = before to fps
-                    log.i("video: car falling behind - bitrate ${before / 1000} -> ${source.bitRate / 1000} kbps")
+                    log.i("video: car falling behind - bitrate ${before / 1000} -> ${after / 1000} kbps")
                 }
             }
-            easy && source.bitRate < source.fullBitRate -> {
+            easy && bitRate() < fullBitRate() -> {
                 lastCut = null
                 if (++smoothWindows >= 2) {
                     smoothWindows = 0
-                    val before = source.bitRate
-                    source.applyBitRate((before * 1.1).toInt() + 1)
-                    log.i("video: keeping up - bitrate ${before / 1000} -> ${source.bitRate / 1000} kbps")
+                    val before = bitRate()
+                    apply((before * 1.1).toInt() + 1)
+                    log.i("video: keeping up - bitrate ${before / 1000} -> ${bitRate() / 1000} kbps")
                 }
             }
             else -> smoothWindows = 0

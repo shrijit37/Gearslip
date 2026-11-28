@@ -32,7 +32,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /** Fake sources let the session boundary be tested on the JVM without Android stubs. */
-private class FakeSources : SessionSources {
+class FakeSources : SessionSources {
     val sessionFlow = MutableStateFlow(SessionSnapshot(SessionPhase.IDLE))
     val frameFlow = MutableStateFlow(FrameSize(800, 480, 160))
     val insetsFlow = MutableStateFlow(ScreenInsets.NONE)
