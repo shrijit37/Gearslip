@@ -8,25 +8,29 @@ import app.seb3thehacker.gearslip.surface.api.CommandSink
 import app.seb3thehacker.gearslip.surface.api.SurfaceCommand
 
 /**
- * App-level command sink: the only place the phone UI and trusted renderers go through to change
- * core state. Transport-affecting changes (audio routing, focus) stay auditable here, and a failing
- * core action is contained so it cannot escape into a UI callback or a renderer.
+ * Builds the app-level command sinks. Each session gets its own sink: no global mutable state can
+ * let a released session disable or redirect a live one.
+ *
+ * `RequestFocus` is deliberately not wired to `CarFocus.projected` — that flag is controlled by the
+ * head unit's video-focus protocol, and a renderer overriding it would contradict the car.
  */
-object AppCommands : CommandSink {
+object AppCommands {
 
-    var syncFrame: () -> Unit = {}
-    var guard: SurfaceGuard = SurfaceGuard { where, error ->
+    private val logGuard = SurfaceGuard { where, error ->
         GearslipLog.w("command $where threw: ${error.javaClass.simpleName}: ${error.message}")
     }
 
-    override fun submit(command: SurfaceCommand) {
-        SurfaceCommands(
-            setAudioTransport = { CarSettings.setPipeAudio(it) },
-            exitToCar = { CarFocus.exitToCar() },
-            requestFocus = { CarFocus.set(it) },
-            sendKey = { code, down, long -> CarKeys.onKey(code, down, long) },
-            syncFrame = { syncFrame() },
-            guard = guard,
-        ).submit(command)
-    }
+    /** Sink for the phone UI, which has no session-owned sync-frame handler. */
+    val uiSink: CommandSink = buildSink(logGuard) {}
+
+    fun forSession(guard: SurfaceGuard, syncFrame: () -> Unit): CommandSink = buildSink(guard, syncFrame)
+
+    private fun buildSink(guard: SurfaceGuard, syncFrame: () -> Unit) = SurfaceCommands(
+        setAudioTransport = { CarSettings.setPipeAudio(it) },
+        exitToCar = { CarFocus.exitToCar() },
+        requestFocus = { _, -> }, // focus follows the car's video-focus messages, not a renderer
+        sendKey = { code, down, long -> CarKeys.onKey(code, down, long) },
+        syncFrame = syncFrame,
+        guard = guard,
+    )
 }

@@ -171,7 +171,7 @@ class GearslipActivity : ComponentActivity() {
                     }
                     app.seb3thehacker.gearslip.ui.AudioChoiceDialog(
                         onUseBluetooth = {
-                            AppCommands.submit(SurfaceCommand.SetAudioTransport(false))
+                            AppCommands.uiSink.submit(SurfaceCommand.SetAudioTransport(false))
                             close()
                         },
                         onKeepAsking = ::close,

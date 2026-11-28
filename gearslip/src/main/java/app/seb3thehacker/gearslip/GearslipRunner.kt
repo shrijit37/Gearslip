@@ -152,6 +152,8 @@ class GearslipRunner(
     private val pinnedGeneration: Long =
         if (selectionGeneration >= 0) selectionGeneration else HeadunitSurfaces.generation()
     private val trustedSurface = selectionTrusted
+    /** Bound once per attach and refused once the session is released. */
+    @Volatile private var sessionCommands: CommandSink = CommandSink {}
 
     /** True once the registry generation this runner was selected at has been replaced. */
     private fun registrationStale(): Boolean = HeadunitSurfaces.generation() != pinnedGeneration
@@ -166,8 +168,7 @@ class GearslipRunner(
             if (stopped) frameSource = null
             sessionState?.stop()
             sessionState = null
-            AppCommands.syncFrame = {}
-            AppCommands.guard = SurfaceGuard { _, _ -> }
+            sessionCommands = CommandSink {}
             if (!surfaceDetached) {
                 // Only mark detached when the plug-in actually released: a failed detach stays
                 // retryable instead of silently leaking the renderer's resources.
@@ -1294,8 +1295,9 @@ class GearslipRunner(
             state.start()
             state.setVideoSpec(spec)
             sessionState = state
-            AppCommands.syncFrame = { surfaceGuard.call("requestSyncFrame") { frameSource?.requestSyncFrame() } }
-            AppCommands.guard = surfaceGuard
+            sessionCommands = AppCommands.forSession(surfaceGuard) {
+                surfaceGuard.call("requestSyncFrame") { frameSource?.requestSyncFrame() }
+            }
             val source = FrameSources.choose(
                 surface, surfaceContext(), spec,
                 PlaceholderFrameSource(width, height, videoFrameRate, wireless),
@@ -1327,7 +1329,7 @@ class GearslipRunner(
         // Per-session authority: the global sink is only reachable while this session is live.
         override val commandSink get() = CommandSink { command ->
             if (trustedSurface && !registrationStale() && !stopped && !surfaceDetached && sessionState != null) {
-                AppCommands.submit(command)
+                sessionCommands.submit(command)
             }
         }
     }
