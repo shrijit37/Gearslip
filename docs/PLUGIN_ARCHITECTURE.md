@@ -79,9 +79,9 @@ proposes a JVM architecture test to enforce the import boundary.
 2. **State snapshots.** Everything a renderer needs is an immutable, pure-Kotlin value produced by
    the core: session phase, frame geometry, crop insets, day/night, vehicle data and profile, plus
    the parts not exposed yet — media playback, calls, notifications, hosted-app templates and
-   status, alert/toast queues, car-app catalog and surface leases. `SurfaceContext` currently
-   exposes six `StateFlow`s; it must cover the whole session view model before a real renderer can
-   replace the old UI.
+   status, alert/toast queues, car-app catalog and surface leases. `SurfaceContext` now exposes
+   the aggregate `snapshot` flow alongside the original flows; commands travel back through
+   `commandSink` rather than by calling core singletons.
 
 3. **Commands.** One sealed-command entry point (`mediaCommand`, `navigateTo`, `launchApp`,
    `dismissAlert`, `requestTextInput`, `setInsets`, `focus`, `finish`, …) replaces direct calls into

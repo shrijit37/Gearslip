@@ -21,14 +21,18 @@ object AppCommands {
     }
 
     /** Sink for the phone UI, which has no session-owned sync-frame handler. */
-    val uiSink: CommandSink = buildSink(logGuard) {}
+    internal val uiSink: CommandSink = buildSink(logGuard) {}
 
-    fun forSession(guard: SurfaceGuard, syncFrame: () -> Unit): CommandSink = buildSink(guard, syncFrame)
+    internal fun forSession(guard: SurfaceGuard, syncFrame: () -> Unit): CommandSink = buildSink(guard, syncFrame)
 
     private fun buildSink(guard: SurfaceGuard, syncFrame: () -> Unit) = SurfaceCommands(
         setAudioTransport = { CarSettings.setPipeAudio(it) },
         exitToCar = { CarFocus.exitToCar() },
-        requestFocus = { _, -> }, // focus follows the car's video-focus messages, not a renderer
+        requestFocus = { _ ->
+            // Deliberately ignored, with a log: focus follows the car's video-focus messages.
+            // Letting a renderer write CarFocus.projected contradicts the head unit's own state.
+            GearslipLog.i("command: focus request ignored; the car owns video focus")
+        },
         sendKey = { code, down, long -> CarKeys.onKey(code, down, long) },
         syncFrame = syncFrame,
         guard = guard,

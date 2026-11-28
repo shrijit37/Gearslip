@@ -108,8 +108,8 @@
     `ui/SettingsScreen.kt:289-351,403-556`, `ui/HomeCarSettings.kt:99-435`,
     `ui/BluetoothAddressCard.kt`, `ui/WirelessButton.kt` and `ui/SetupGuideScreen.kt:335-347` mutate
     `AppSettings`, `CarSettings`, `CarBluetooth`, `WirelessLink` and `AndroidAuto`.
-    `GearslipActivity.kt:125` wires `WirelessLink.sessionWaiting` to a `GearslipRunner` field, and
-    `:290,344` calls `SessionStatus.failed()` from the UI.
+    `GearslipActivity.kt:128` wires `WirelessLink.sessionWaiting` to a `GearslipRunner` field, and
+    `:302,356` calls `SessionStatus.failed()` from the UI.
 
 13. **Dead UI state still has an owner but no consumer.** `car/CarEnvironment.kt:43-48` keeps
     `phoneDark`, `display` and `battery` with no readers; `CarSettings` holds roughly 35 flows,

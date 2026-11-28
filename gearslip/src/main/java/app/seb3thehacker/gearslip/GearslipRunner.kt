@@ -1328,8 +1328,15 @@ class GearslipRunner(
         // An untrusted renderer gets the no-op sink; it cannot change audio routing or focus.
         // Per-session authority: the global sink is only reachable while this session is live.
         override val commandSink get() = CommandSink { command ->
-            if (trustedSurface && !registrationStale() && !stopped && !surfaceDetached && sessionState != null) {
-                sessionCommands.submit(command)
+            // Same lock and generation check as releaseSurface: a swap cannot slip between the
+            // authority check and the command.
+            synchronized(surfaceLock) {
+                val sink = sessionCommands
+                if (trustedSurface && !registrationStale() && !stopped && !surfaceDetached &&
+                    sessionState != null && HeadunitSurfaces.generation() == pinnedGeneration
+                ) {
+                    sink.submit(command)
+                }
             }
         }
     }
