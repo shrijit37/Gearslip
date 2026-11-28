@@ -25,6 +25,8 @@ import kotlinx.coroutines.launch
 import java.io.IOException
 import app.seb3thehacker.gearslip.protocol.InputProtocol
 import app.seb3thehacker.gearslip.protocol.TouchPoint
+import app.seb3thehacker.gearslip.surface.AppCommands
+import app.seb3thehacker.gearslip.surface.api.CommandSink
 import app.seb3thehacker.gearslip.surface.FrameOutput
 import app.seb3thehacker.gearslip.surface.FrameSources
 import app.seb3thehacker.gearslip.surface.FrameSource
@@ -150,6 +152,8 @@ class GearslipRunner(
     private val pinnedGeneration: Long =
         if (selectionGeneration >= 0) selectionGeneration else HeadunitSurfaces.generation()
     private val trustedSurface = selectionTrusted
+    /** Bound once per attach and refused once the session is released. */
+    @Volatile private var sessionCommands: CommandSink = CommandSink {}
 
     /** True once the registry generation this runner was selected at has been replaced. */
     private fun registrationStale(): Boolean = HeadunitSurfaces.generation() != pinnedGeneration
@@ -164,6 +168,7 @@ class GearslipRunner(
             if (stopped) frameSource = null
             sessionState?.stop()
             sessionState = null
+            sessionCommands = CommandSink {}
             if (!surfaceDetached) {
                 // Only mark detached when the plug-in actually released: a failed detach stays
                 // retryable instead of silently leaking the renderer's resources.
@@ -1290,6 +1295,9 @@ class GearslipRunner(
             state.start()
             state.setVideoSpec(spec)
             sessionState = state
+            sessionCommands = AppCommands.forSession(surfaceGuard) {
+                surfaceGuard.call("requestSyncFrame") { frameSource?.requestSyncFrame() }
+            }
             val source = FrameSources.choose(
                 surface, surfaceContext(), spec,
                 PlaceholderFrameSource(width, height, videoFrameRate, wireless),
@@ -1317,6 +1325,20 @@ class GearslipRunner(
         override val vehicle = if (trustedSurface) CarEnvironment.vehicle else RedactedFlows.vehicle(CarEnvironment.vehicle)
         // Resolve on access: a re-attach must never leave a renderer holding a cancelled flow.
         override val snapshot get() = sessionState?.snapshot ?: super.snapshot
+        // An untrusted renderer gets the no-op sink; it cannot change audio routing or focus.
+        // Per-session authority: the global sink is only reachable while this session is live.
+        override val commandSink get() = CommandSink { command ->
+            // Same lock and generation check as releaseSurface: a swap cannot slip between the
+            // authority check and the command.
+            synchronized(surfaceLock) {
+                val sink = sessionCommands
+                if (trustedSurface && !registrationStale() && !stopped && !surfaceDetached &&
+                    sessionState != null && HeadunitSurfaces.generation() == pinnedGeneration
+                ) {
+                    sink.submit(command)
+                }
+            }
+        }
     }
 
     /**

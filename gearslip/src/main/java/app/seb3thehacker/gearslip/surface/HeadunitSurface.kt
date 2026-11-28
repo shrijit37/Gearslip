@@ -26,6 +26,9 @@ enum class SurfaceCapability {
  * must dispatch to their own main thread; the core deliberately knows nothing about handlers.
  */
 interface HeadunitSurface {
+    /** Contract version for a future negotiation step; no refusal logic exists yet. */
+    val version: Int get() = 1
+
     val id: String
     val capabilities: Set<SurfaceCapability>
 
