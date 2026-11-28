@@ -29,11 +29,11 @@
    needed before the old car UI can live in a plug-in.
 
 2. **Hosted navigation apps have nowhere to draw.** `CarAppConnection.attachSurface()` (`:507`) is
-   dead code: no renderer requests a pixel-mode lease yet. Its comment and `surfaceEpoch` (`:540`)
-   now describe that future lease model rather than the deleted Presentation stage. `detachSurface`,
-   `replaceDeadSurface`, `reportAreas` and the gesture methods at `:622-642` have no callers either.
-   The host's `template` (`:87`), `trip` (`:689`), `panMode`/`atRoot` (`:462-473`) and `surfaceEpoch`
-   have no external reader: templates arrive and are dropped, while
+   now called when an installed renderer declares `PROVIDES_PIXELS` and supplies a lease; no such
+   renderer ships yet, so it stays effectively unused. `detachSurface` is released with the lease,
+   but `replaceDeadSurface`, `reportAreas` and the gesture methods at `:622-642` still have no
+   callers. The host's `template` (`:87`), `trip` (`:689`), `panMode`/`atRoot` (`:462-473`) and
+   `surfaceEpoch` have no external reader: templates arrive and are dropped, while
    [BUILDING_APPS.md](BUILDING_APPS.md#drawing-a-map) promises a lent surface nobody supplies.
 
 3. **`SurfaceContext` is not a complete view model.** It exposes six flows, implemented inline in
@@ -68,9 +68,9 @@
    every install/clear; a `SessionState` pins it at attach and stops publishing after a swap. There
    is still no version negotiation or multi-surface routing: one surface owns the screen end to end.
 
-7. **Only encoded frames are accepted.** `FrameSource` requires the plug-in to produce H.264 and to
-   understand bitrate limits and keyframe resync. A WebView or Compose renderer needs an easier mode
-   where the core lends an encoder-backed `Surface` and the plug-in only draws pixels.
+7. **Only encoded frames are accepted by default.** `FrameSource` still requires the plug-in to
+   produce H.264. `PROVIDES_PIXELS` and `PixelLeaseProvider` now let a renderer borrow an encoder
+   surface that the core lends to hosted apps, but no encoder-backed pixel frame source ships yet.
 
 8. **UI policy still lives in the core.** `car/CarKeys.kt:59-100` consumes media and call keys itself
    and publishes `screenKeys` to a flow with no subscriber; `CarFocus.exitToCar()` is also orphaned.

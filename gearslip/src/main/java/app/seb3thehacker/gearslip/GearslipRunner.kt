@@ -33,6 +33,8 @@ import app.seb3thehacker.gearslip.surface.FrameSource
 import app.seb3thehacker.gearslip.surface.HeadunitSurface
 import app.seb3thehacker.gearslip.surface.HeadunitSurfaces
 import app.seb3thehacker.gearslip.surface.PlaceholderFrameSource
+import app.seb3thehacker.gearslip.surface.pixel.PixelLease
+import app.seb3thehacker.gearslip.surface.pixel.PixelLeaseProvider
 import app.seb3thehacker.gearslip.surface.RedactedFlows
 import app.seb3thehacker.gearslip.surface.SurfaceCapability
 import app.seb3thehacker.gearslip.surface.SurfaceContext
@@ -145,6 +147,9 @@ class GearslipRunner(
     private val surfaceLock = Any()
     /** The session's immutable state view; replaced for each attach and cancelled on release. */
     @Volatile private var sessionState: SessionState? = null
+    /** Pixel-mode lease and its provider, released with the surface. */
+    @Volatile private var pixelLease: PixelLease? = null
+    @Volatile private var pixelProvider: PixelLeaseProvider? = null
     /** Monotonic per-runner generation: the wall clock can repeat or move backwards. */
     private val sessionGeneration = AtomicLong(0)
     /** Pinned at construction so a swap during the handshake is detected too. */
@@ -166,6 +171,16 @@ class GearslipRunner(
             }
             // A failed stop must not drop the reference: leave it for a later best-effort retry.
             if (stopped) frameSource = null
+            pixelLease?.let { lease ->
+                surfaceGuard.call("detachSurface") {
+                    CarServices.nav.detachSurface(lease.surface)
+                }
+                pixelProvider?.let { provider ->
+                    surfaceGuard.call("releasePixelLease") { provider.release(lease) }
+                }
+            }
+            pixelLease = null
+            pixelProvider = null
             sessionState?.stop()
             sessionState = null
             sessionCommands = CommandSink {}
@@ -1315,6 +1330,26 @@ class GearslipRunner(
                 BluetoothAudioCheck.onProjecting()
                 LocationCheck.onProjecting()
             }.onFailure { e -> log.e("encoder start failed", e) }
+
+            // A pixel-mode renderer lends an encoder-backed Surface. The car-app host can now
+            // lend that same Surface to a templated navigation app; with no pixel surface
+            // installed this block is inert and the placeholder stays the frame source.
+            val current = surface
+            if (current != null && SurfaceCapability.PROVIDES_PIXELS in current.capabilities) {
+                val provider = surfaceGuard.callValue("pixelLeaseProvider", null) {
+                    current.pixelLeaseProvider()
+                }
+                val lease = provider?.let { p ->
+                    surfaceGuard.callValue("acquirePixelLease", null) { p.acquire(spec) }
+                }
+                if (lease != null) {
+                    pixelProvider = provider
+                    pixelLease = lease
+                    surfaceGuard.call("attachSurface") {
+                        CarServices.nav.attachSurface(lease.surface, lease.width, lease.height, lease.densityDpi)
+                    }
+                }
+            }
         }
     }
 

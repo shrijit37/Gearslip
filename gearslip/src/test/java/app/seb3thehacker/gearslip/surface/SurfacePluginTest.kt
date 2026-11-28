@@ -45,6 +45,12 @@ class SurfacePluginTest {
         )
     }
 
+    @Test fun `pixel capability is opt-in with no default lease provider`() {
+        val surface = FakeSurface(emptySet())
+        assertNull(surface.pixelLeaseProvider())
+        assertTrue(SurfaceCapability.PROVIDES_PIXELS.ordinal >= 0)
+    }
+
     @Test fun `registry holds one installed surface and can be cleared`() {
         val surface = FakeSurface(emptySet())
         HeadunitSurfaces.installSurface(surface, SurfaceTrust.TRUSTED)

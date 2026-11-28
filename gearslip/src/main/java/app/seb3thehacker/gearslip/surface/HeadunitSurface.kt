@@ -1,11 +1,15 @@
 package app.seb3thehacker.gearslip.surface
 
 import app.seb3thehacker.gearslip.protocol.TouchPoint
+import app.seb3thehacker.gearslip.surface.pixel.PixelLeaseProvider
 
 /** What a surface can accept, declared up front so the core never assumes a renderer exists. */
 enum class SurfaceCapability {
     /** The surface produces its own frames instead of using the generated placeholder. */
     PROVIDES_FRAMES,
+
+    /** The surface draws pixels into an encoder-backed lease supplied by the core. */
+    PROVIDES_PIXELS,
 
     /** Head-unit touches should be forwarded with [HeadunitSurface.onTouch]. */
     TOUCH,
@@ -37,6 +41,9 @@ interface HeadunitSurface {
      * is declared; the returned source is started and stopped by the session.
      */
     fun attach(context: SurfaceContext, spec: VideoSpec): FrameSource? = null
+
+    /** A pixel-mode renderer supplies the lease the core lends to hosted car apps. */
+    fun pixelLeaseProvider(): PixelLeaseProvider? = null
 
     /** The session ended; release anything the surface holds. */
     fun detach() {}
