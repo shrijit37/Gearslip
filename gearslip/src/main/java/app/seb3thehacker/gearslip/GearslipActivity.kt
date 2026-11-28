@@ -240,6 +240,15 @@ class GearslipActivity : ComponentActivity() {
     }
 
     /** Launches the system dialog that offers Gearslip the call-screening role, if it isn't held already. */
+
+    /** Fail closed if a plug-in factory throws while being selected. */
+    private fun selectSurface(): SurfaceSelection = runCatching { HeadunitSurfaces.select(this) }
+        .getOrElse { e ->
+            GearslipLog.w("surface: selection threw, running headless: ${e.message}")
+            SurfaceSelection(null, HeadunitSurfaces.generation(), false)
+        }
+
+
     private fun requestCallScreeningRole() {
         val roleManager = getSystemService(android.app.role.RoleManager::class.java)
         if (roleManager == null || !roleManager.isRoleAvailable(android.app.role.RoleManager.ROLE_CALL_SCREENING)) {
@@ -347,10 +356,7 @@ class GearslipActivity : ComponentActivity() {
         }
         descriptor = pfd
 
-        val selection = runCatching { HeadunitSurfaces.select(this) }.getOrElse { e ->
-            GearslipLog.w("surface: selection threw, running headless: ${e.message}")
-            SurfaceSelection(null, HeadunitSurfaces.generation(), false)
-        }
+        val selection = selectSurface()
         val runner = GearslipRunner(
             input = FileInputStream(pfd.fileDescriptor),
             output = FileOutputStream(pfd.fileDescriptor),
@@ -398,10 +404,7 @@ class GearslipActivity : ComponentActivity() {
         }
         GearslipLog.i("wireless: starting a session over Wi-Fi to ${socket.inetAddress?.hostAddress}:${socket.port}")
         wirelessSocket = socket
-        val selection = runCatching { HeadunitSurfaces.select(this) }.getOrElse { e ->
-            GearslipLog.w("surface: selection threw, running headless: ${e.message}")
-            SurfaceSelection(null, HeadunitSurfaces.generation(), false)
-        }
+        val selection = selectSurface()
         val runner = GearslipRunner(
             input = socket.getInputStream(),
             output = socket.getOutputStream(),

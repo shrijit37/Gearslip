@@ -24,8 +24,15 @@ internal object RedactedFlows {
     private val sharing = SharingStarted.WhileSubscribed(5_000)
 
     fun session(source: StateFlow<SessionStatus.Snapshot>): StateFlow<SessionStatus.Snapshot> {
-        val initial = source.value.copy(headline = "", detail = "")
-        return source.map { it.copy(headline = "", detail = "") }.stateIn(scope, sharing, initial)
+        // Allowlist: only structural phase and link hint are safe to expose. A new field on the
+        // core snapshot is absent here until someone deliberately adds it.
+        fun safe(value: SessionStatus.Snapshot) = SessionStatus.Snapshot(
+            phase = value.phase,
+            headline = "",
+            detail = "",
+            stuckOn = value.stuckOn,
+        )
+        return source.map(::safe).stateIn(scope, sharing, safe(source.value))
     }
 
     fun frame(source: StateFlow<CarEnvironment.Frame>): StateFlow<CarEnvironment.Frame> = source
