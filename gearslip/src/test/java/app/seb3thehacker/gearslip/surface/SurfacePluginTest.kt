@@ -10,6 +10,7 @@ import app.seb3thehacker.gearslip.protocol.TouchPoint
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
@@ -43,6 +44,15 @@ class SurfacePluginTest {
             fallback,
             FrameSources.choose(null, FakeContext(), VideoSpec(800, 480, 30, 160, false), fallback),
         )
+    }
+
+    @Test fun `only a trusted current pixel surface may lend a lease`() {
+        val pixels = setOf(SurfaceCapability.PROVIDES_PIXELS)
+        assertTrue(SurfaceDecisions.mayLendPixels(true, false, pixels))
+        assertFalse(SurfaceDecisions.mayLendPixels(false, false, pixels))
+        assertFalse(SurfaceDecisions.mayLendPixels(true, true, pixels))
+        assertFalse(SurfaceDecisions.mayLendPixels(true, false, emptySet()))
+        assertNull(FakeSurface(pixels).pixelLeaseProvider())
     }
 
     @Test fun `registry holds one installed surface and can be cleared`() {

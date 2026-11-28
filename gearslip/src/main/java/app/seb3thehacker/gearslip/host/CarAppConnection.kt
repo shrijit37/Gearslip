@@ -498,8 +498,9 @@ class CarAppConnection(private val context: Context, private val session: Sessio
      * Navigation apps render their own map rather than describing it as a template, so the host
      * has to give them somewhere to draw. In the target architecture the surface comes from the
      * attached renderer's pixel-mode lease, which composites it into the encoded frame; the old
-     * Presentation/VirtualDisplay car UI no longer exists. No renderer requests a lease yet, so
-     * this method currently has no caller.
+     * Presentation/VirtualDisplay car UI no longer exists. `GearslipRunner` calls it for a trusted
+     * renderer that declares `PROVIDES_PIXELS`; the encoder-backed pixel frame source for that
+     * renderer is still pending.
      *
      * Safe to call before the app has asked for a surface - whichever of the two arrives second
      * completes the handoff.
@@ -524,13 +525,16 @@ class CarAppConnection(private val context: Context, private val session: Sessio
      * Takes the Surface back, e.g. when a renderer's lease goes away. With [surface], only if
      * that is still the one lent - a replaced lease's teardown must not take back its successor's.
      */
-    fun detachSurface(surface: Surface? = null) {
+    fun detachSurface(surface: Surface? = null, onDetached: (() -> Unit)? = null) {
         main.post {
-            val current = lent ?: return@post
-            if (surface != null && current.surface !== surface) return@post
-            lent = null
-            sendSurfaceDestroyed(current)
-            update { it.copy(surfaceAttached = false) }
+            val current = lent
+            if (current != null && (surface == null || current.surface === surface)) {
+                lent = null
+                sendSurfaceDestroyed(current)
+                update { it.copy(surfaceAttached = false) }
+            }
+            // Always complete the caller, even when there was no matching lease to detach.
+            onDetached?.invoke()
         }
     }
 

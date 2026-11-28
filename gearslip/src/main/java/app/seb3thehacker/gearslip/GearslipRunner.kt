@@ -33,10 +33,13 @@ import app.seb3thehacker.gearslip.surface.FrameSource
 import app.seb3thehacker.gearslip.surface.HeadunitSurface
 import app.seb3thehacker.gearslip.surface.HeadunitSurfaces
 import app.seb3thehacker.gearslip.surface.PlaceholderFrameSource
+import app.seb3thehacker.gearslip.surface.pixel.PixelLease
+import app.seb3thehacker.gearslip.surface.pixel.PixelLeaseProvider
 import app.seb3thehacker.gearslip.surface.RedactedFlows
 import app.seb3thehacker.gearslip.surface.SurfaceCapability
 import app.seb3thehacker.gearslip.surface.SurfaceContext
 import app.seb3thehacker.gearslip.surface.SessionState
+import app.seb3thehacker.gearslip.surface.SurfaceDecisions
 import app.seb3thehacker.gearslip.surface.SurfaceGuard
 import app.seb3thehacker.gearslip.surface.VideoSpec
 import java.io.InputStream
@@ -145,6 +148,11 @@ class GearslipRunner(
     private val surfaceLock = Any()
     /** The session's immutable state view; replaced for each attach and cancelled on release. */
     @Volatile private var sessionState: SessionState? = null
+    /** Pixel-mode lease and its provider, released with the surface. */
+    @Volatile private var pixelLease: PixelLease? = null
+    @Volatile private var pixelProvider: PixelLeaseProvider? = null
+    @Volatile private var pixelDetached = false
+    @Volatile private var pixelReleased = false
     /** Monotonic per-runner generation: the wall clock can repeat or move backwards. */
     private val sessionGeneration = AtomicLong(0)
     /** Pinned at construction so a swap during the handshake is detected too. */
@@ -166,6 +174,32 @@ class GearslipRunner(
             }
             // A failed stop must not drop the reference: leave it for a later best-effort retry.
             if (stopped) frameSource = null
+            val lease = pixelLease
+            val provider = pixelProvider
+            if (lease != null && provider != null && !pixelDetached) {
+                // Detach is posted to the host's main thread; release the renderer's Surface only
+                // from its completion callback, so the nav app has stopped drawing first.
+                pixelDetached = surfaceGuard.callValue("detachSurface", false) {
+                    CarServices.nav.detachSurface(lease.surface) {
+                        val released = surfaceGuard.callValue("releasePixelLease", false) {
+                            provider.release(lease)
+                            true
+                        }
+                        if (released) {
+                            synchronized(surfaceLock) {
+                                if (pixelDetached) {
+                                    pixelReleased = true
+                                    pixelLease = null
+                                    pixelProvider = null
+                                    pixelDetached = false
+                                    pixelReleased = false
+                                }
+                            }
+                        }
+                    }
+                    true
+                }
+            }
             sessionState?.stop()
             sessionState = null
             sessionCommands = CommandSink {}
@@ -1315,6 +1349,72 @@ class GearslipRunner(
                 BluetoothAudioCheck.onProjecting()
                 LocationCheck.onProjecting()
             }.onFailure { e -> log.e("encoder start failed", e) }
+
+            // A pixel-mode renderer lends an encoder-backed Surface. The car-app host can now
+            // lend that same Surface to a templated navigation app; with no pixel surface
+            // installed this block is inert and the placeholder stays the frame source.
+            val current = surface
+            val capabilities = current?.let { c ->
+                surfaceGuard.callValue("capabilities", emptySet<SurfaceCapability>()) { c.capabilities }
+            }.orEmpty()
+            if (current != null && SurfaceDecisions.mayLendPixels(
+                    trustedSurface, registrationStale(), capabilities,
+                )
+            ) {
+                val provider = surfaceGuard.callValue("pixelLeaseProvider", null) {
+                    current.pixelLeaseProvider()
+                }
+                // Release the old lease before acquiring a new one: if that fails, do not
+                // acquire at all, so no lease is orphaned.
+                val previous = pixelLease
+                val oldProvider = pixelProvider
+                if (previous != null && oldProvider != null) {
+                    // Detach the host before releasing the renderer's Surface: the host may still
+                    // be drawing through it. Persist each result so a partial failure retries only
+                    // the step that failed.
+                    if (!pixelDetached) {
+                        pixelDetached = surfaceGuard.callValue("detachSurface", false) {
+                            CarServices.nav.detachSurface(previous.surface) {
+                                pixelReleased = surfaceGuard.callValue("releasePixelLease", false) {
+                                    oldProvider.release(previous); true
+                                }
+                            }
+                            true
+                        }
+                    }
+                    if (!pixelDetached) return@synchronized
+                    pixelLease = null
+                    pixelProvider = null
+                    pixelDetached = false
+                    pixelReleased = false
+                }
+                val lease = provider?.let { p ->
+                    surfaceGuard.callValue("acquirePixelLease", null) { p.acquire(spec) }
+                }
+                if (lease != null) {
+                    // Re-check after the plug-in callbacks: a reentrant swap must not attach a
+                    // lease from a renderer that is no longer trusted or current.
+                    if (!trustedSurface || stopped || surfaceDetached || registrationStale()) {
+                        surfaceGuard.call("detachSurface") {
+                            CarServices.nav.detachSurface(lease.surface) {
+                                val released = surfaceGuard.callValue("releasePixelLease", false) {
+                                    provider?.release(lease)
+                                    true
+                                }
+                                if (released) synchronized(surfaceLock) { pixelReleased = true }
+                            }
+                        }
+                        return@synchronized
+                    }
+                    pixelDetached = false
+                    pixelReleased = false
+                    pixelProvider = provider
+                    pixelLease = lease
+                    surfaceGuard.call("attachSurface") {
+                        CarServices.nav.attachSurface(lease.surface, lease.width, lease.height, lease.densityDpi)
+                    }
+                }
+            }
         }
     }
 

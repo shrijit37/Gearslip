@@ -10,15 +10,15 @@
 
 | Area | Today |
 | --- | --- |
-| Plug-in contract | `gearslip/src/main/java/app/seb3thehacker/gearslip/surface/HeadunitSurface.kt:28` — `id`, three capabilities, `attach/detach/onFocus/onTouch/onKey/onRotate` |
+| Plug-in contract | `gearslip/src/main/java/app/seb3thehacker/gearslip/surface/HeadunitSurface.kt:32` — `id`, four capabilities, `attach/detach/onFocus/onTouch/onKey/onRotate` |
 | State exposed | `surface/SurfaceContext.kt:16-34` — six read-only flows: session, frame, insets, night, carData, vehicle |
 | Frame production | `surface/FrameSource.kt:25-37` (H.264 bytes into core-owned `FrameOutput`); one production implementation, `PlaceholderFrameSource.kt:19`, which feeds YUV straight into `MediaCodec`; tests add `FakeFrameSource` at `surface/Fixtures.kt:19` |
 | Registry | `surface/HeadunitSurfaces.kt:28-92` — one global slot, factory or instance; `install`/`installSurface`/`installSurfaceIfAbsent`/`clear`, and `select` captures surface, generation and trust |
-| Runner wiring | `GearslipRunner.kt:1276-1313, 161-181` attaches/starts a source, routes input by capability, releases on stop and EOF |
+| Runner wiring | `GearslipRunner.kt:1300-1400, 161-195` attaches/starts a source, routes input by capability, releases on stop and EOF |
 | App wiring | `GearslipActivity.kt:29,30,119` installs the untrusted `PlaceholderSurface` at `onCreate` when no surface is registered, and selects it at 367/415 |
-| Hosted car apps | `host/CarAppConnection.kt` binds templated apps and lends surfaces through `attachSurface()` at `:507`; the method currently has no caller |
+| Hosted car apps | `host/CarAppConnection.kt` binds templated apps and lends surfaces through `attachSurface()` at `:508`; called for a trusted pixel-mode lease |
 | Session state | Process-wide `object`s: `SessionStatus`, `CarEnvironment`, `CarServices`, `CarKeys`, and internal `CarAlerts`/`CarToasts` flows |
-| Tests | 26 pure-JVM files (verified with `find gearslip/src/test -name "*.kt"`); `surface/SurfacePluginTest.kt:16-120` has seven plug-in tests, including a focused natural-EOF teardown case, and `surface/ArchitectureTest.kt` guards the core boundary; no instrumentation tests exist |
+| Tests | 26 pure-JVM files (verified with `find gearslip/src/test -name "*.kt"`); `surface/SurfacePluginTest.kt:16-130` has eight plug-in tests, including a focused natural-EOF teardown case, and `surface/ArchitectureTest.kt` guards the core boundary; no instrumentation tests exist |
 | Modules | One Gradle module (`:gearslip`); Compose and the car-app library are declared together. MapLibre and OkHttp were removed in Phase 0 |
 
 ## Findings
@@ -28,12 +28,12 @@
    real session still generates the placeholder frame. A real Compose/WebView renderer is still
    needed before the old car UI can live in a plug-in.
 
-2. **Hosted navigation apps have nowhere to draw.** `CarAppConnection.attachSurface()` (`:507`) is
-   dead code: no renderer requests a pixel-mode lease yet. Its comment and `surfaceEpoch` (`:540`)
-   now describe that future lease model rather than the deleted Presentation stage. `detachSurface`,
-   `replaceDeadSurface`, `reportAreas` and the gesture methods at `:622-642` have no callers either.
-   The host's `template` (`:87`), `trip` (`:689`), `panMode`/`atRoot` (`:462-473`) and `surfaceEpoch`
-   have no external reader: templates arrive and are dropped, while
+2. **Hosted navigation apps have nowhere to draw.** `CarAppConnection.attachSurface()` (`:508`) is
+   now called when an installed renderer declares `PROVIDES_PIXELS` and supplies a lease; no such
+   renderer ships yet, so it stays effectively unused. `detachSurface` is released with the lease,
+   but `replaceDeadSurface`, `reportAreas` and the gesture methods at `:623-643` still have no
+   callers. The host's `template` (`:88`), `trip` (`:692`), `panMode`/`atRoot` (`:465-473`) and
+   `surfaceEpoch` have no external reader: templates arrive and are dropped, while
    [BUILDING_APPS.md](BUILDING_APPS.md#drawing-a-map) promises a lent surface nobody supplies.
 
 3. **`SurfaceContext` is not a complete view model.** It exposes six flows, implemented inline in
@@ -68,9 +68,9 @@
    every install/clear; a `SessionState` pins it at attach and stops publishing after a swap. There
    is still no version negotiation or multi-surface routing: one surface owns the screen end to end.
 
-7. **Only encoded frames are accepted.** `FrameSource` requires the plug-in to produce H.264 and to
-   understand bitrate limits and keyframe resync. A WebView or Compose renderer needs an easier mode
-   where the core lends an encoder-backed `Surface` and the plug-in only draws pixels.
+7. **Only encoded frames are accepted by default.** `FrameSource` still requires the plug-in to
+   produce H.264. `PROVIDES_PIXELS` and `PixelLeaseProvider` now let a renderer supply a Surface that
+   the core lends to hosted apps, but no encoder-backed pixel frame source ships yet.
 
 8. **UI policy still lives in the core.** `car/CarKeys.kt:59-100` consumes media and call keys itself
    and publishes `screenKeys` to a flow with no subscriber; `CarFocus.exitToCar()` is also orphaned.

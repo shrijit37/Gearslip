@@ -146,9 +146,9 @@ A navigation app draws its own pixels. The host keeps a surface-lease API
 (`CarAppConnection.attachSurface()`), so a head-unit renderer can lend your map a `Surface` that
 reaches the car through the video pipe; Gearslip never reads those pixels back.
 
-That lease is **not wired in the headless build**: no renderer supplies a surface today, so an app
-that needs one cannot draw. The plan to supply the lease from the attached plug-in, rather than from
-a `SurfaceView` in a deleted virtual display, is in
+The lease is now wired for a trusted renderer that declares `PROVIDES_PIXELS` and supplies a
+`PixelLeaseProvider`; the headless build has no such renderer, so an app that needs one still cannot
+draw. The plan to replace the deleted virtual-display `SurfaceView` is in
 [PLUGIN_MIGRATION.md](PLUGIN_MIGRATION.md).
 
 When a renderer that supports app surfaces is installed, it reports which part of that surface

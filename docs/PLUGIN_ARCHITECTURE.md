@@ -73,8 +73,8 @@ proposes a JVM architecture test to enforce the import boundary.
 
 1. **Version and capabilities.** A plug-in declares a protocol version and what it handles:
    frames or pixels, touch, keys, hosted app surfaces, its own settings page. `HeadunitSurface`
-   now exposes a default `version = 1` and three capabilities (`PROVIDES_FRAMES`, `TOUCH`, `KEYS`);
-   version negotiation, mismatch refusal and the remaining capabilities are still pending.
+   now exposes a default `version = 1` and four capabilities (`PROVIDES_FRAMES`, `PROVIDES_PIXELS`,
+   `TOUCH`, `KEYS`); version negotiation and mismatch refusal are still pending.
 
 2. **State snapshots.** Everything a renderer needs is an immutable, pure-Kotlin value produced by
    the core: session phase, frame geometry, crop insets, day/night, vehicle data and profile, plus
@@ -92,9 +92,9 @@ proposes a JVM architecture test to enforce the import boundary.
 4. **Frame production.** Two modes, both owned by the session:
    - `PROVIDES_FRAMES` — the plug-in returns a `FrameSource` that writes H.264 bytes to a core-owned
      `FrameOutput`. Lowest latency, but the plug-in owns an encoder.
-   - `PROVIDES_PIXELS` *(proposed)* — the core lends a `Surface` backed by the encoder and the plug-in
-     draws into it. This is the cheap path for Compose or WebView renderers and avoids asking every
-     plug-in to reimplement bitrate control, keyframe resync and ack handling.
+   - `PROVIDES_PIXELS` — the renderer supplies a `Surface` through `PixelLeaseProvider` that the core
+     lends to hosted apps. The encoder-backed pixel frame source is still pending; the cheap path
+     for Compose/WebView renderers is not shippable yet.
 
    The existing placeholder is a `FrameSource` that feeds YUV buffers straight into `MediaCodec`
    without a drawing surface. It stays the fallback for a session with no plug-in.
@@ -102,7 +102,8 @@ proposes a JVM architecture test to enforce the import boundary.
 5. **Surface lease for hosted apps.** Navigation apps that draw their own maps need a `Surface`,
    lent through `CarAppConnection.attachSurface()`. The lease must be requested by the core and
    supplied by the attached plug-in, with an epoch that survives a dead surface. Today
-   `attachSurface()` has no caller, so those apps have nowhere to draw.
+   `attachSurface()` is now called for a trusted pixel-mode renderer's lease, but no such renderer
+   ships yet, so those apps still have nowhere to draw in practice.
 
 6. **Lifecycle and generations.** A plug-in instance belongs to one session: created at attach,
    detached at stop or EOF. Swapping a plug-in or its settings must bump a generation counter just
