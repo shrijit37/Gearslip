@@ -249,9 +249,9 @@ silently dropped; each names the work that is actually blocking it.
 - **External plug-ins and WebView renderer (Phase 5).** The binder spec, permission/signing
   allowlist and WebView reference renderer need a security decision about which external callers may
   receive the redacted snapshot and submit commands. That decision is the blocker for implementation.
-- **Last test seam (finding 10).** Only the factory-selected surface's exact frame-source routing
-  lacks a test. Driving the successful start path needs Android's main looper, so it needs an
-  instrumentation test rather than another pure-JVM case.
+- **Remaining test seams (finding 10).** Attach-under-stop and the factory-selected surface's exact
+  frame-source routing still lack tests. Driving the successful start path needs Android's main
+  looper, so covering the routing case needs an instrumentation test, not another pure-JVM case.
 
 ## Risks and gates
 
