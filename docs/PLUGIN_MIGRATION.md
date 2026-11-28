@@ -226,6 +226,33 @@ and a docs update. Do not combine phases into one large PR.
 - Measure frame pacing, touch latency and memory with this renderer before treating it as shippable.
 - **Exit:** an external plug-in and a WebView plug-in both render and take input with no core changes.
 
+## Remaining gaps and blockers
+
+These items are still open after the incremental phases above. They are recorded here rather than
+silently dropped; each names the work that is actually blocking it.
+
+- **Session-owned state (Phase 1 / finding 5).** The renderer now gets a session-scoped, redacted
+  snapshot, but `SessionStatus`, `CarServices`, `CarKeys`, `CarData` and the alert/notification
+  owners are still process-wide. Moving them needs a session owner that owns mutation and a
+  generation, so parallel sessions and clean tests remain blocked until that refactor lands.
+- **Multi-surface routing and negotiation (Phase 2).** One surface still owns focus and input for
+  the whole session; `version` exists but no negotiation or mismatch refusal is implemented, and
+  renderers cannot supply their own key maps (finding 8).
+- **Encoder-backed pixel frames (Phase 3 / finding 7).** The lease API and `attachSurface` caller
+  exist, but no `FrameSource` consumes the renderer's pixels into H.264. That needs a MediaCodec
+  input-surface implementation and frame-pacing measurements on a device; it cannot be validated by
+  the pure-JVM suite.
+- **Module split (Phase 4).** Moving `:core-api`, `:protocol-core`, `:car-app-host` and the two
+  renderer modules must keep one application id, signing key and monotonic version code, and must
+  update every CI task path in the same change. This is a coordinated build/CI change, not a small
+  PR, and is blocked on scheduling that window.
+- **External plug-ins and WebView renderer (Phase 5).** The binder spec, permission/signing
+  allowlist and WebView reference renderer need a security decision about which external callers may
+  receive the redacted snapshot and submit commands. That decision is the blocker for implementation.
+- **Remaining test seams (finding 10).** Attach-under-stop and the factory-selected surface's exact
+  frame-source routing still lack tests. Driving the successful start path needs Android's main
+  looper, so covering the routing case needs an instrumentation test, not another pure-JVM case.
+
 ## Risks and gates
 
 - **Performance:** a real renderer pays for composition and pixel copies; the placeholder numbers do
