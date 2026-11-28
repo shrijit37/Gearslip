@@ -55,8 +55,12 @@ class FakeSurface(
         touches += Triple(action, actionIndex, points)
     }
 
-    override fun onKey(keyCode: Int, down: Boolean, longPress: Boolean) {
+    /** When true, a trusted runner keeps the key from the core handler. */
+    var consumeKeys = false
+
+    override fun onKey(keyCode: Int, down: Boolean, longPress: Boolean): Boolean {
         keys += Triple(keyCode, down, longPress)
+        return consumeKeys
     }
 
     override fun onRotate(delta: Int) { rotations += delta }

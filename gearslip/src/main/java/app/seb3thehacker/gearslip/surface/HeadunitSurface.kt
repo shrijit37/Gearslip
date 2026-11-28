@@ -47,8 +47,12 @@ interface HeadunitSurface {
     /** A head-unit touch, in negotiated frame coordinates. */
     fun onTouch(action: Int, actionIndex: Int, points: List<TouchPoint>) {}
 
-    /** A steering-wheel or hard key edge. */
-    fun onKey(keyCode: Int, down: Boolean, longPress: Boolean) {}
+    /**
+     * A steering-wheel or hard key edge. A trusted surface returning true consumes it, so the core
+     * leaves the key alone and the renderer can own its own key map. Untrusted surfaces cannot
+     * suppress core handling; returning false (the default) keeps media/call/screen behaviour.
+     */
+    fun onKey(keyCode: Int, down: Boolean, longPress: Boolean): Boolean = false
 
     /** One rotary-knob click; positive turns clockwise. */
     fun onRotate(delta: Int) {}
