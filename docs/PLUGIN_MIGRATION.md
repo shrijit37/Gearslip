@@ -29,11 +29,11 @@
    needed before the old car UI can live in a plug-in.
 
 2. **Hosted navigation apps have nowhere to draw.** `CarAppConnection.attachSurface()` (`:507`) is
-   dead code; its comment still describes a `SurfaceView` in a `Presentation` that was deleted.
-   `surfaceEpoch` (`:537`) expects a "stage" that no longer exists. `detachSurface`,
-   `replaceDeadSurface`, `reportAreas` and the gesture methods at `:622-642` have no callers either.
-   The host's `template` (`:87`), `trip` (`:689`), `panMode`/`atRoot` (`:462-473`) and `surfaceEpoch`
-   have no external reader: templates arrive and are dropped. [BUILDING_APPS.md](BUILDING_APPS.md#drawing-a-map)
+   dead code: no renderer requests a pixel-mode lease yet. Its comment and `surfaceEpoch` (`:537`)
+   now describe that future lease model rather than the deleted Presentation stage.
+   `detachSurface`, `replaceDeadSurface`, `reportAreas` and the gesture methods at `:622-642` have no
+   callers either. The host's `template` (`:87`), `trip` (`:689`), `panMode`/`atRoot` (`:462-473`)
+   and `surfaceEpoch` have no external reader: templates arrive and are dropped.
    promises a lent surface that nobody supplies.
 
 3. **`SurfaceContext` is not a complete view model.** It exposes six flows, implemented inline in
@@ -99,10 +99,10 @@
     third-party screens in Compose, and claimed Gearslip draws its own keyboard and media UI.
     [CONTRIBUTING.md](../CONTRIBUTING.md#pull-requests) now reflects that feature PRs land on
     `main`; it previously directed work to `experimental`. Those sections are corrected here.
-    Earlier drift in `host/CarAppConnection.kt` comments about a Presentation/VirtualDisplay stage,
-    empty string headings and duplicate session text has been corrected. The stale build-script
-    comments, unused speech `<queries>` and the orphaned log-share `FileProvider` were removed with
-    the Phase 4 residue cleanup. No stale rendering claims remain in the tree.
+    The `host/CarAppConnection.kt` comments about a Presentation/VirtualDisplay stage were
+    corrected in this change to describe the renderer lease model. The stale build-script comments,
+    empty car-UI string headings, unused speech `<queries>` and the orphaned log-share `FileProvider`
+    were removed with the earlier Phase 4 residue cleanup.
 
 12. **Most of the phone UI still bypasses the command layer.** `AppCommands`/`SurfaceCommands` now
     route audio choice and renderer commands, but composables still call core globals directly:
