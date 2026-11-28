@@ -175,6 +175,8 @@ class SessionStateTest {
         sources.dataFlow.value = VehicleSnapshot(location = VehicleLocation(1.0, 2.0, 3f, 4.0, 5f, 6f))
         sources.mediaFlow.value = MediaSnapshot(title = "Private track")
         sources.navigationFlow.value = NavigationTurnSnapshot("k", "map", "500 m", "Home", 1)
+        sources.alertFlow.value = AlertSnapshot(1, "owner-a", "Private alert", listOf("Reply"))
+        sources.toastFlow.value = ToastSnapshot("Private toast", 4_000, "owner-b")
         val state = SessionState(9, sources, trusted = false)
         try {
             state.start()
@@ -189,6 +191,11 @@ class SessionStateTest {
             assertNull(view.carData.location)
             assertEquals("", view.media.title)
             assertEquals("", view.navigation?.road)
+            assertEquals("", view.alert?.title)
+            assertTrue(view.alert?.actions?.isEmpty() == true)
+            assertEquals("", view.alert?.ownerToken)
+            assertEquals("", view.toast?.text)
+            assertEquals("", view.toast?.ownerToken)
         } finally {
             state.stop()
         }

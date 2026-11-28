@@ -212,8 +212,8 @@ data class SurfaceSnapshot(
         ),
         catalog = catalog.map { it.copy(label = "") },
         carData = carData.copy(location = null),
-        alert = alert?.copy(title = "", actions = emptyList()),
-        toast = toast?.copy(text = ""),
+        alert = alert?.copy(title = "", actions = emptyList(), ownerToken = ""),
+        toast = toast?.copy(text = "", ownerToken = ""),
         sensors = sensors.map { it.copy(raw = "", typeName = "") },
         media = media.copy(
             source = "", title = "", artist = "", album = "", error = null, artToken = "",

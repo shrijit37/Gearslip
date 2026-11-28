@@ -54,8 +54,7 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.map
 import java.util.UUID
-import java.lang.ref.WeakReference
-import java.util.WeakHashMap
+import java.util.IdentityHashMap
 import androidx.car.app.model.Template
 import app.seb3thehacker.gearslip.host.CarAppConnection
 
@@ -244,6 +243,8 @@ object GlobalSources : SessionSources {
     }.asState(HostedAppSnapshotState())
 
     override val alert = CarAlerts.shown.map { shown ->
+        alertOwner = shown?.owner
+        pruneOwnerTokens()
         shown?.let {
             AlertSnapshot(
                 id = it.alert.id,
@@ -256,6 +257,8 @@ object GlobalSources : SessionSources {
     }.asState(null)
 
     override val toast = combine(CarToasts.message, CarToasts.waiting) { message, waiting ->
+        toastOwner = message?.owner
+        pruneOwnerTokens()
         message?.let {
             ToastSnapshot(it.text, it.durationMs, ownerToken(it.owner), waiting)
         }
@@ -286,21 +289,26 @@ object GlobalSources : SessionSources {
     }.asState(SettingsSnapshot())
 
     /**
-     * Identity-based tokens: random, stable while an owner lives, and collectable with it.
+     * Identity-based tokens, stable while an alert or toast is showing.
      *
-     * A plain WeakHashMap would use the owner's equals/hashCode; the wrapper gives identity
-     * semantics without keeping the owner alive after its alert or toast is gone.
+     * The map is bounded to the two owners currently on screen: when one is dismissed its token is
+     * dropped, so a long-running process cannot retain every owner it has ever seen. A weak map
+     * cannot be used here because a wrapped key would be collected while its owner is still live,
+     * changing the token between emissions.
      */
-    private class WeakIdentityKey(value: Any) : WeakReference<Any>(value) {
-        override fun hashCode(): Int = get()?.let(System::identityHashCode) ?: 0
-        override fun equals(other: Any?): Boolean =
-            other is WeakIdentityKey && get() != null && get() === other.get()
-    }
-
-    private val ownerTokens = WeakHashMap<WeakIdentityKey, String>()
+    private val ownerTokens = IdentityHashMap<Any, String>()
+    @Volatile private var alertOwner: Any? = null
+    @Volatile private var toastOwner: Any? = null
 
     private fun ownerToken(owner: Any): String = synchronized(ownerTokens) {
-        ownerTokens.getOrPut(WeakIdentityKey(owner)) { UUID.randomUUID().toString() }
+        ownerTokens.getOrPut(owner) { UUID.randomUUID().toString() }
+    }
+
+    private fun pruneOwnerTokens() {
+        synchronized(ownerTokens) {
+            val live = setOfNotNull(alertOwner, toastOwner)
+            ownerTokens.keys.removeAll { it !in live }
+        }
     }
 
     /** Projects the templated screen into pure strings; only ListTemplate is described today. */
