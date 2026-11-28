@@ -55,7 +55,7 @@ class FakeSurface(
         touches += Triple(action, actionIndex, points)
     }
 
-    /** When true, the surface consumes the key so the core must not handle it. */
+    /** When true, a trusted runner keeps the key from the core handler. */
     var consumeKeys = false
 
     override fun onKey(keyCode: Int, down: Boolean, longPress: Boolean): Boolean {

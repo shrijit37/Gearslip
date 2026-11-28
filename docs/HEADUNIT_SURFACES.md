@@ -24,7 +24,8 @@ session will drive it. The core contains no Compose, View or drawing code.
 - `onFocus(projected: Boolean)` — the car took its screen back, or handed it over again.
 - `onTouch(action, actionIndex, points)` / `onRotate(delta)` — head-unit touch and knob input in
   frame coordinates. `onKey(keyCode, down, longPress): Boolean` returns true to consume the key and
-  stop core handling (trusted surfaces only); false preserves it. Callbacks may arrive off main.
+  stop core handling (trusted surfaces only); false preserves it. Callbacks may arrive off the main
+  thread; a UI implementation must dispatch to its own main thread.
 
 `SurfaceContext` exposes read-only `StateFlow`s for connection phase, frame geometry, crop insets,
 day/night, decoded vehicle data and the matched vehicle profile. Nothing can be pushed back into
