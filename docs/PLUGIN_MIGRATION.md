@@ -91,7 +91,8 @@
 
 10. **Test coverage has holes at exactly the migration seam.** `SurfacePluginTest` covers selection,
     basic routing and detach; `SurfaceFailureIsolationTest` covers the factory path, throwing plug-ins
-    and generation swaps; `SurfaceForwardingTest` covers focus and bitrate forwarding; and
+    and generation swaps; `SurfaceForwardingTest` covers focus, bitrate forwarding and trusted vs
+    untrusted key interception; and
     `UpdateDecisionTest` covers generation bumps and queued installs. Still untested:
     attach-under-stop, `requestSyncFrame` forwarding, and the factory-selected surface's exact
     frame-source routing.
