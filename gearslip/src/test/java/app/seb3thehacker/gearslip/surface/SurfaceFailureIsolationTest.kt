@@ -6,6 +6,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -84,6 +85,19 @@ class SurfaceFailureIsolationTest {
         assertTrue(installed > before)
         assertTrue(factory > installed)
         assertTrue(cleared > factory)
+    }
+
+    @Test fun `external registrations are marked untrusted and cleared`() {
+        val surface = FakeSurface(emptySet())
+        val before = HeadunitSurfaces.generation()
+        HeadunitSurfaces.install(surface, externallyProvided = true)
+        try {
+            assertTrue(HeadunitSurfaces.isExternal(surface))
+            assertTrue(HeadunitSurfaces.generation() > before)
+        } finally {
+            HeadunitSurfaces.clear()
+        }
+        assertFalse(HeadunitSurfaces.isExternal(surface))
     }
 
     @Test fun `a renderer swap stops stale state publication`() = runBlocking {

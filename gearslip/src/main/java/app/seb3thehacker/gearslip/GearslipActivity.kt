@@ -346,13 +346,15 @@ class GearslipActivity : ComponentActivity() {
         }
         descriptor = pfd
 
+        val (selectedSurface, selectedGeneration) = HeadunitSurfaces.createWithGeneration(this)
         val runner = GearslipRunner(
             input = FileInputStream(pfd.fileDescriptor),
             output = FileOutputStream(pfd.fileDescriptor),
             identityProvider = { CertProvider.load(this) },
             vehicleProfileFor = { info -> VehicleProfiles.find(VehicleProfiles.load(this), info) },
             phoneIcons = { PhoneIcons.pngs(this) },
-            surface = HeadunitSurfaces.create(this),
+            surface = selectedSurface,
+            selectionGeneration = selectedGeneration,
         )
         this.runner = runner
         CarServices.init(applicationContext)
@@ -391,6 +393,7 @@ class GearslipActivity : ComponentActivity() {
         }
         GearslipLog.i("wireless: starting a session over Wi-Fi to ${socket.inetAddress?.hostAddress}:${socket.port}")
         wirelessSocket = socket
+        val (selectedSurface, selectedGeneration) = HeadunitSurfaces.createWithGeneration(this)
         val runner = GearslipRunner(
             input = socket.getInputStream(),
             output = socket.getOutputStream(),
@@ -398,7 +401,8 @@ class GearslipActivity : ComponentActivity() {
             vehicleProfileFor = { info -> VehicleProfiles.find(VehicleProfiles.load(this), info) },
             wireless = true,
             phoneIcons = { PhoneIcons.pngs(this) },
-            surface = HeadunitSurfaces.create(this),
+            surface = selectedSurface,
+            selectionGeneration = selectedGeneration,
         )
         this.runner = runner
         CarServices.init(applicationContext)

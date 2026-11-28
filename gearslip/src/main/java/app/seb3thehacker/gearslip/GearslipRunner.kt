@@ -72,6 +72,8 @@ class GearslipRunner(
      * knows what, if anything, is drawing on the car screen.
      */
     private val surface: HeadunitSurface? = null,
+    /** Generation read by the caller at the same time it selected [surface]. */
+    selectionGeneration: Long = -1L,
 ) {
     private val log = GearslipLog.tagged("PROTO")
     /** A renderer failure is logged and dropped; it never reaches the transport or installer. */
@@ -141,7 +143,10 @@ class GearslipRunner(
     /** Monotonic per-runner generation: the wall clock can repeat or move backwards. */
     private val sessionGeneration = AtomicLong(0)
     /** Pinned at construction so a swap during the handshake is detected too. */
-    private val pinnedGeneration = HeadunitSurfaces.generation()
+    /** Generation captured atomically with the surface this runner was handed. */
+    private val pinnedGeneration: Long =
+        if (selectionGeneration >= 0) selectionGeneration else HeadunitSurfaces.generation()
+    private val externalSurface = HeadunitSurfaces.isExternal(surface)
     /** Session-owned render resources; safe to call from stop() and the transport-exit finally. */
     private fun releaseSurface() {
         synchronized(surfaceLock) {
@@ -1257,8 +1262,11 @@ class GearslipRunner(
             sessionState?.stop()
             // The only renderer installed today is the app's own placeholder; external
             // plug-ins (Phase 5) must be constructed with trusted = false.
-            val state = SessionState(sessionGeneration.incrementAndGet(), trusted = true)
-            state.watchGeneration { HeadunitSurfaces.generation() != pinnedGeneration }
+            val state = SessionState(sessionGeneration.incrementAndGet(), trusted = !externalSurface)
+            state.watchGeneration {
+                HeadunitSurfaces.generation() != pinnedGeneration ||
+                    HeadunitSurfaces.isExternal(surface) != externalSurface
+            }
             state.start()
             state.setVideoSpec(spec)
             sessionState = state
@@ -1678,7 +1686,6 @@ class GearslipRunner(
         fun apply(bps: Int) = surfaceGuard.call("applyBitRate") { source.applyBitRate(bps) }
 
         val before = bitRate() ?: return
-        val full = fullBitRate() ?: return
         val target = videoFrameRate.toDouble()
         val behind = waitedMs > ADAPT_WINDOW_MS / 2 && fps < target * 0.8
         val easy = waitedMs < ADAPT_WINDOW_MS / 10
@@ -1701,7 +1708,7 @@ class GearslipRunner(
                     log.i("video: car falling behind - bitrate ${before / 1000} -> ${after / 1000} kbps")
                 }
             }
-            easy && before < full -> {
+            easy && before < (fullBitRate() ?: return) -> {
                 lastCut = null
                 if (++smoothWindows >= 2) {
                     smoothWindows = 0

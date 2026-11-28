@@ -19,20 +19,31 @@ object HeadunitSurfaces {
 
     @Volatile private var factory: ((Context) -> HeadunitSurface)? = null
     @Volatile private var installed: HeadunitSurface? = null
+    @Volatile private var external = false
 
     /** Monotonic identity of the current registration. */
     fun generation(): Long = generation.get()
 
     fun install(factory: ((Context) -> HeadunitSurface)?) {
         generation.incrementAndGet()
+        external = false
         installed = null
         this.factory = factory
     }
 
-    fun install(surface: HeadunitSurface?) {
+    fun install(surface: HeadunitSurface?, externallyProvided: Boolean = false) {
         generation.incrementAndGet()
+        external = externallyProvided
         factory = null
         installed = surface
+    }
+
+    /** True when [surface] is the currently installed external (untrusted) renderer. */
+    fun isExternal(surface: HeadunitSurface?): Boolean = external && surface != null && installed === surface
+
+    /** Selects the surface and the generation it was selected at, atomically. */
+    fun createWithGeneration(context: Context): Pair<HeadunitSurface?, Long> = synchronized(this) {
+        create(context) to generation()
     }
 
     /** The instance installed with [install], if any; factories are created per session. */
@@ -44,6 +55,7 @@ object HeadunitSurfaces {
 
     fun clear() {
         generation.incrementAndGet()
+        external = false
         factory = null
         installed = null
     }

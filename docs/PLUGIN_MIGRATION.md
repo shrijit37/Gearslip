@@ -18,7 +18,7 @@
 | App wiring | `GearslipActivity.kt:28,355,401` creates a surface from the registry but **never installs one** |
 | Hosted car apps | `host/CarAppConnection.kt` binds templated apps and lends surfaces through `attachSurface()` at `:507`; the method currently has no caller |
 | Session state | Process-wide `object`s: `SessionStatus`, `CarEnvironment`, `CarServices`, `CarKeys`, and internal `CarAlerts`/`CarToasts` flows |
-| Tests | 23 pure-JVM files; `surface/SurfacePluginTest.kt:16-120` has seven plug-in tests, including a focused natural-EOF teardown case, and `surface/ArchitectureTest.kt` guards the core boundary; no instrumentation tests exist |
+| Tests | 26 pure-JVM files; `surface/SurfacePluginTest.kt:16-120` has seven plug-in tests, including a focused natural-EOF teardown case, and `surface/ArchitectureTest.kt` guards the core boundary; no instrumentation tests exist |
 | Modules | One Gradle module (`:gearslip`); Compose and the car-app library are declared together. MapLibre and OkHttp were removed in Phase 0 |
 
 ## Findings
@@ -50,7 +50,7 @@
    reads and writes, `start` and `stop`; a failure is logged and dropped instead of reaching the
    `run()` catch-all. A reusable throwing-plug-in suite lives in
    `surface/SurfaceFailureIsolationTest.kt`. The remaining gap is `FrameOutput`: the only
-   implementation is the anonymous object at `:1209` (no test fake implements it), so a plug-in
+   implementation is the anonymous object at `:1242` (no test fake implements it), so a plug-in
    that writes bytes directly into the encoder still has no buffer between it and the transport.
    A plug-in must never be able to end a drive.
 
@@ -64,9 +64,9 @@
    That is acceptable for one headless session but blocks multiple plug-ins, parallel sessions and
    clean tests. State needs a session owner with a generation.
 
-6. **The registry has a generation but no swap routing.** `HeadunitSurfaces.generation()` now bumps
-   on every install/clear and a `SessionState` pins it at attach, stopping publication after a swap.
-   There is still no version negotiation and no multi-surface focus routing, so one surface owns the
+6. **The registry has a generation but no swap routing.** `HeadunitSurfaces.generation()` bumps on
+   every install/clear; a `SessionState` pins it at attach and stops publishing after a swap. There
+   is still no version negotiation or multi-surface routing: one surface owns the screen end to end.
 
 7. **Only encoded frames are accepted.** `FrameSource` requires the plug-in to produce H.264 and to
    understand bitrate limits and keyframe resync. A WebView or Compose renderer needs an easier mode
@@ -89,9 +89,9 @@
 
 10. **Test coverage has holes at exactly the migration seam.** `SurfacePluginTest` covers selection,
     basic routing, explicit detach and natural-EOF detach (`:85-90`), but not the factory install
-    path, `onFocus`, `requestSyncFrame`/`applyBitRate` forwarding, attach-under-stop, a throwing
-    plug-in, or a plug-in swapped mid-session. `UpdateCheckerTest` does not cover generation bumps
-    or queued installs.
+    path, `onFocus`, `requestSyncFrame`/`applyBitRate` forwarding or attach-under-stop. Throwing and
+    swapped plug-ins are now covered by `surface/SurfaceFailureIsolationTest.kt`.
+    `UpdateCheckerTest` does not cover generation bumps or queued installs.
 
 11. **Docs and comments were stale about rendering.** [BUILDING_APPS.md](BUILDING_APPS.md#drawing-a-map)
     described a virtual display and chrome overlays that no longer exist, said Gearslip renders

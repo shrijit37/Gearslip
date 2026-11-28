@@ -83,10 +83,7 @@ class SessionState(
                     spec?.frameRate ?: 30, effective.densityDpi, spec?.wireless ?: false,
                 )
             }.collect { value ->
-                if (publishable()) _snapshot.update { current ->
-                    val next = current.copy(frame = value)
-                    if (trusted) next else next.redacted()
-                }
+                publishIfAllowed { copy(frame = value) }
             }
         }
         mirror(sources.insets) { copy(insets = it) }
@@ -117,6 +114,19 @@ class SessionState(
         job.cancel()
     }
 
+    /** Serializes the liveness/generation check with the publish so a swap cannot slip between them. */
+    private val publishLock = Any()
+
+    private fun publishIfAllowed(updateWith: SurfaceSnapshot.() -> SurfaceSnapshot) {
+        synchronized(publishLock) {
+            if (!publishable()) return
+            _snapshot.update { current ->
+                val next = current.updateWith()
+                if (trusted) next else next.redacted()
+            }
+        }
+    }
+
     /** Re-checks liveness and the pinned generation before any state can be published. */
     private fun publishable(): Boolean {
         if (!job.isActive) return false
@@ -128,12 +138,7 @@ class SessionState(
     private fun <T> mirror(flow: StateFlow<T>, updateWith: SurfaceSnapshot.(T) -> SurfaceSnapshot) {
         scope.launch {
             flow.collect { value ->
-                if (publishable()) {
-                    _snapshot.update { current ->
-                        val next = current.updateWith(value)
-                        if (trusted) next else next.redacted()
-                    }
-                }
+                publishIfAllowed { updateWith(value) }
             }
         }
     }
