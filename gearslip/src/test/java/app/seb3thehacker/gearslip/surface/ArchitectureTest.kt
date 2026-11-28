@@ -12,9 +12,10 @@ import org.junit.Test
  * into a test. It runs on the JVM and reads the checked-in Kotlin sources, so it needs no Android
  * stubs and fails in CI the moment a view-layer import lands in a core package.
  *
- * `android.view.Surface` is explicitly allowed: the car-app host needs it for the surface lease
- * the target architecture keeps, and it is not a UI hierarchy type. Keycodes and bitmaps are out
- * of scope until Phase 1; banning them here would fail the existing tree.
+ * `android.view.Surface` is allowed only in `host/`, which needs it for the car-app surface lease;
+ * it stays forbidden in `surface/api` and every other guarded package so the pure API remains
+ * Android-free. Keycodes and bitmaps are out of scope until Phase 1; banning them here would fail
+ * the existing tree.
  */
 class ArchitectureTest {
 
@@ -31,7 +32,7 @@ class ArchitectureTest {
         val violations = coreFiles.flatMap { (file, relative) ->
             file.readLines().mapIndexed { index, line -> relative to (index + 1 to line) }
                 .mapNotNull { (path, numbered) ->
-                    forbiddenImport(numbered.second)?.let { "$path:${numbered.first} imports $it" }
+                    forbiddenImport(numbered.second, path)?.let { "$path:${numbered.first} imports $it" }
                 }
         }
         assertTrue("UI imports leaked into the core:\n${violations.joinToString("\n")}", violations.isEmpty())
@@ -41,7 +42,9 @@ class ArchitectureTest {
         assertTrue("surface/ must cover HeadunitSurface and SurfaceContext too", "surface/" in CORE_PREFIXES)
     }
 
-    @Test fun `the guard rejects view and renderer imports but allows Surface`() {
+    @Test fun `the guard rejects view imports everywhere but allows Surface in the host`() {
+        val hostPath = "host/CarAppConnection.kt"
+        val apiPath = "surface/api/SurfaceModels.kt"
         assertTrue(forbiddenImport("import androidx.compose.material3.Text") != null)
         assertTrue(forbiddenImport("import androidx.compose.runtime.Composable") != null)
         assertTrue(forbiddenImport("import android.view.View") != null)
@@ -54,13 +57,16 @@ class ArchitectureTest {
         assertTrue(forbiddenImport("import app.seb3thehacker.gearslip.ui.HomeScreen") != null)
         assertTrue(forbiddenImport("import app.seb3thehacker.gearslip.renderer.ComposeSurface") != null)
 
-        assertEquals(null, forbiddenImport("import android.view.Surface"))
-        assertEquals(null, forbiddenImport("import kotlinx.coroutines.flow.StateFlow"))
-        assertEquals(null, forbiddenImport("import app.seb3thehacker.gearslip.surface.api.SessionSnapshot"))
-        assertEquals(null, forbiddenImport("// import android.view.View in a comment"))
+        // The car-app host needs Surface for the lease; surface/api must stay Android-free.
+        assertEquals(null, forbiddenImport("import android.view.Surface", hostPath))
+        assertTrue(forbiddenImport("import android.view.Surface", apiPath) != null)
+        assertTrue(forbiddenImport("import android.view.Surface", "media/CarMedia.kt") != null)
+        assertEquals(null, forbiddenImport("import kotlinx.coroutines.flow.StateFlow", apiPath))
+        assertEquals(null, forbiddenImport("import app.seb3thehacker.gearslip.surface.api.SessionSnapshot", apiPath))
+        assertEquals(null, forbiddenImport("// import android.view.View in a comment", apiPath))
     }
 
-    private fun forbiddenImport(line: String): String? {
+    private fun forbiddenImport(line: String, path: String = ""): String? {
         val trimmed = line.trim()
         if (!trimmed.startsWith("import ")) return null
         val name = trimmed.removePrefix("import ").substringBefore(" as ").trim()
@@ -70,6 +76,8 @@ class ArchitectureTest {
                 name.startsWith("android.view.View.") || name.startsWith("android.view.ViewGroup.") ||
                 name == "android.view.*" || name == "android.*" -> name
             name.startsWith("android.widget.") -> name
+            // Explicitly allowed only in the host, which holds the car-app surface lease.
+            name == "android.view.Surface" && !path.startsWith("host/") -> name
             name.startsWith("app.seb3thehacker.gearslip.ui.") -> name
             name.startsWith("app.seb3thehacker.gearslip.renderer.") -> name
             else -> null
