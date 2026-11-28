@@ -54,15 +54,14 @@
    that writes bytes directly into the encoder still has no buffer between it and the transport.
    A plug-in must never be able to end a drive.
 
-5. **Session state is process-global, not session-scoped.** `object SessionStatus`,
-   `object CarEnvironment`, `object CarServices`, `object CarKeys`, `object CarData`,
-   `object CarFocus`, the alert/toast objects, `CarNotifications`, `PhoneNavigation`, `MusicPlayer`,
-   `LocationKeepAlive` and the wireless callback holders are shared across sessions. Nothing
-   enforces the "read-only" claim in `SurfaceContext.kt:12`: their mutators are public, and a plug-in
-   could call `CarFocus.exitToCar()` (`CarFocus.kt:21`, no current caller) or a `CarSettings` setter.
-   `CarSettings.setPipeAudio()` (`:494-505`) even reaches the audio transport from a settings toggle.
-   That is acceptable for one headless session but blocks multiple plug-ins, parallel sessions and
-   clean tests. State needs a session owner with a generation.
+5. **Most session state is still process-global, not session-scoped.** `SessionOwner` now owns
+   connection phase and focus for one session with a generation; `SessionStatus` and `CarFocus`
+   delegate to it and late writes are rejected. `CarEnvironment`, `CarServices`, `CarKeys`,
+   `CarData`, the alert/toast objects, `CarNotifications`, `PhoneNavigation`, `MusicPlayer`,
+   `LocationKeepAlive` and the wireless callback holders are still shared across sessions. Their
+   mutators remain public, and `CarSettings.setPipeAudio()` still reaches the audio transport.
+   Parallel sessions and clean tests remain blocked until those owners move behind a session
+   owner too.
 
 6. **The registry has a generation but no swap routing.** `HeadunitSurfaces.generation()` bumps on
    every install/clear; a `SessionState` pins it at attach and stops publishing after a swap. There
@@ -131,11 +130,11 @@ app. Only their callbacks and generation need tightening, not a session-scoped r
 
 | Current owner | State it holds | Destination |
 | --- | --- | --- |
-| `SessionStatus` | phase, headlines, stuck-on link | Immutable session snapshot; user-facing text belongs to the renderer |
+| `SessionStatus` | phase (owned by `SessionOwner`), headlines, stuck-on link | Immutable session snapshot; user-facing text belongs to the renderer |
 | `CarEnvironment` | frame, insets, night, vehicle | Snapshot; unread fields already pruned |
 | `CarData`, `CarSensors` | decoded vehicle readings | Snapshot |
 | `CarServices`, `CarAppConnection`, `CarModels` | nav/browse/media connections, templates, trip state, surface lease, icon bitmaps | Session-scoped host service; pure template models; rasterization in renderer |
-| `CarKeys`, `CarFocus` | key policy, screen keys, focus request | Command/intent layer; plain key codes instead of `KeyEvent` constants |
+| `CarKeys`, `CarFocus` | key policy, screen keys, focus request (focus owned by `SessionOwner`) | Command/intent layer; plain key codes instead of `KeyEvent` constants |
 | `CarAlerts`, `CarToasts`, `CarNotifications`, `PhoneNavigation`, `MusicPlayer` | queues and overlays waiting for a renderer | Snapshot state; keep timers in core |
 | `CarSettings`, `AppSettings`, `CustomCarApps` | persisted preferences, including audio transport toggles | Settings repository; transport-affecting changes go through commands |
 | `UpdateChecker`, `WirelessLink`, `PermissionActivity` | channels/generation, wireless callbacks, permission results | Stay in the app; add subscriber checks and mirror generation to renderer swaps |

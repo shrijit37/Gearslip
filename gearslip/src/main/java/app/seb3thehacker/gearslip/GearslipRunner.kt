@@ -39,6 +39,7 @@ import app.seb3thehacker.gearslip.surface.RedactedFlows
 import app.seb3thehacker.gearslip.surface.SurfaceCapability
 import app.seb3thehacker.gearslip.surface.SurfaceContext
 import app.seb3thehacker.gearslip.surface.SessionState
+import app.seb3thehacker.gearslip.surface.SessionOwner
 import app.seb3thehacker.gearslip.surface.SurfaceDecisions
 import app.seb3thehacker.gearslip.surface.SurfaceGuard
 import app.seb3thehacker.gearslip.surface.VideoSpec
@@ -155,6 +156,8 @@ class GearslipRunner(
     @Volatile private var pixelReleased = false
     /** Monotonic per-runner generation: the wall clock can repeat or move backwards. */
     private val sessionGeneration = AtomicLong(0)
+    /** The one owner of this session's mutable phase/focus state. */
+    @Volatile private var sessionOwner: SessionOwner? = null
     /** Pinned at construction so a swap during the handshake is detected too. */
     /** Generation captured atomically with the surface this runner was handed. */
     private val pinnedGeneration: Long =
@@ -321,8 +324,10 @@ class GearslipRunner(
         running = false
         cancelAutostart()
         writer.shutdownNow()
-        CarFocus.request = null
-        CarFocus.set(true)
+        sessionOwner?.let { owner ->
+            CarFocus.detach(owner)
+            SessionStatus.detach(owner)
+        }
         synchronized(ackLock) { ackLock.notifyAll() } // free an encoder waiting on an ack
         releaseSurface()
         CarAudio.openSink = null
@@ -1323,7 +1328,11 @@ class GearslipRunner(
             sessionState?.stop()
             // The only renderer installed today is the app's own placeholder; external
             // plug-ins (Phase 5) must be constructed with trusted = false.
-            val state = SessionState(sessionGeneration.incrementAndGet(), trusted = trustedSurface)
+            val owner = SessionOwner(sessionGeneration.incrementAndGet())
+            sessionOwner = owner
+            CarFocus.attach(owner)
+            SessionStatus.attach(owner)
+            val state = SessionState(owner.generation, trusted = trustedSurface)
             state.watchGeneration {
                 val stale = registrationStale()
                 // A swap must also stop the old frame source and detach the old renderer; freezing
@@ -1518,7 +1527,7 @@ class GearslipRunner(
             // The head unit repeats this while it waits for frames; only start once.
             if (!projected) return
             videoStarted = true
-            CarFocus.request = ::requestNativeFocus
+            CarFocus.setExitHandler(::requestNativeFocus)
             log.i("PHASE A COMPLETE - video focus granted; starting video source")
             startVideoSource()
             surface?.let { current -> surfaceGuard.call("onFocus") { current.onFocus(true) } }
