@@ -29,12 +29,12 @@
    needed before the old car UI can live in a plug-in.
 
 2. **Hosted navigation apps have nowhere to draw.** `CarAppConnection.attachSurface()` (`:507`) is
-   dead code; its comment still describes a `SurfaceView` in a `Presentation` that was deleted.
-   `surfaceEpoch` (`:537`) expects a "stage" that no longer exists. `detachSurface`,
+   dead code: no renderer requests a pixel-mode lease yet. Its comment and `surfaceEpoch` (`:540`)
+   now describe that future lease model rather than the deleted Presentation stage. `detachSurface`,
    `replaceDeadSurface`, `reportAreas` and the gesture methods at `:622-642` have no callers either.
    The host's `template` (`:87`), `trip` (`:689`), `panMode`/`atRoot` (`:462-473`) and `surfaceEpoch`
-   have no external reader: templates arrive and are dropped. [BUILDING_APPS.md](BUILDING_APPS.md#drawing-a-map)
-   promises a lent surface that nobody supplies.
+   have no external reader: templates arrive and are dropped, while
+   [BUILDING_APPS.md](BUILDING_APPS.md#drawing-a-map) promises a lent surface nobody supplies.
 
 3. **`SurfaceContext` is not a complete view model.** It exposes six flows, implemented inline in
    `GearslipRunner.kt:1241-1249`. Media playback (`media/CarMediaStatus.kt`), calls
@@ -81,12 +81,12 @@
 9. **Isolation is not build-enforced.** Everything is in one module;
    `gearslip/build.gradle.kts:239-244` declares Compose alongside protocol dependencies. Phase 0
    added `surface/ArchitectureTest.kt` to fail on View/Compose/renderer imports in core packages,
-   but the module split itself is still pending. The unused `maplibre` and `okhttp` dependencies and
-   their build-script comments were removed in Phase 0 (no `org.maplibre` or `okhttp3` imports ever
-   existed in `gearslip/src`). `androidTest` dependencies (`:252-255`) still have no source set; the
-   comment at `:252-253` is stale. Bitmap work also sits in core helpers —
-   `host/CarModels.kt:76` keeps a global `LruCache<String, Bitmap>` and `:85` returns a `Bitmap` — so
-   pure screen models need rasterization moved into the renderer.
+   but the module split itself is still pending. The unused `maplibre`/`okhttp` dependencies, their
+   comments, and the `androidTest` declarations (no source set existed) were removed in Phase 0 and
+   the Phase 4 residue cleanup (no `org.maplibre` or `okhttp3` imports ever existed in
+   `gearslip/src`). Bitmap work also sits in core helpers — `host/CarModels.kt:76` keeps a global
+   `LruCache<String, Bitmap>` and `:85` returns a `Bitmap` — so pure screen models need rasterization
+   moved into the renderer.
 
 10. **Test coverage has holes at exactly the migration seam.** `SurfacePluginTest` covers selection,
     basic routing and explicit/natural detach, and the new surface suites cover the factory path,
@@ -99,10 +99,10 @@
     third-party screens in Compose, and claimed Gearslip draws its own keyboard and media UI.
     [CONTRIBUTING.md](../CONTRIBUTING.md#pull-requests) now reflects that feature PRs land on
     `main`; it previously directed work to `experimental`. Those sections are corrected here.
-    Remaining drift: `host/CarAppConnection.kt` comments at `:499-502`, `:539-551`, `:589-591`,
-    `:622-626` and `:753-761`, and duplicate session text in `res/values/strings.xml`. The stale
-    build-script comments, empty car-UI headings, unused speech `<queries>` and the orphaned
-    log-share `FileProvider` were removed with the Phase 4 residue cleanup.
+    Remaining drift was: `host/CarAppConnection.kt` comments about a Presentation/VirtualDisplay
+    stage (corrected here), stale build-script comments, empty car-UI string headings, duplicate
+    session text, unused speech `<queries>` and the orphaned log-share `FileProvider` (all removed in
+    the earlier Phase 4 residue cleanup). No stale rendering claims remain in those comments.
 
 12. **Most of the phone UI still bypasses the command layer.** `AppCommands`/`SurfaceCommands` now
     route audio choice and renderer commands, but composables still call core globals directly:
@@ -117,9 +117,9 @@
     many unread (`scale`, `playerTitle`, `navBarMode`, `screensaver`, `whatsNew*`, …);
     `car/CarSensors.kt`, `notify/CarNotifications.kt`, `notify/PhoneNavigation.kt` and
     `GearslipLog.version/snapshot()` remain live but undrawn. `PermissionActivity.permissionResults`
-    (`:45-48`) has no subscriber. The log-share `FileProvider` survives in the manifest with no
-    screen that calls it. This is dead weight to prune or expose deliberately in Phase 1, not to
-    carry into a plug-in SDK.
+    (`:45-48`) has no subscriber. The log-share `FileProvider` and its unused helpers were removed
+    with the Phase 4 residue cleanup. This remaining dead weight belongs in a later prune, not in a
+    plug-in SDK.
 
 ## State boundary inventory
 

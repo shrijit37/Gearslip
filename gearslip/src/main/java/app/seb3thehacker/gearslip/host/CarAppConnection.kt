@@ -496,10 +496,10 @@ class CarAppConnection(private val context: Context, private val session: Sessio
      * Lends the app a Surface to draw into.
      *
      * Navigation apps render their own map rather than describing it as a template, so the host
-     * has to give them somewhere to draw. Gearslip's car UI already lives in a Presentation on a
-     * VirtualDisplay backed by the encoder, so the Surface handed over here belongs to a
-     * SurfaceView in that Presentation: the app draws straight into the car's picture and
-     * SurfaceFlinger composites it under our chrome, with no readback or GL on our side.
+     * has to give them somewhere to draw. In the target architecture the surface comes from the
+     * attached renderer's pixel-mode lease, which composites it into the encoded frame; the old
+     * Presentation/VirtualDisplay car UI no longer exists. No renderer requests a lease yet, so
+     * this method currently has no caller.
      *
      * Safe to call before the app has asked for a surface - whichever of the two arrives second
      * completes the handoff.
@@ -521,8 +521,8 @@ class CarAppConnection(private val context: Context, private val session: Sessio
     }
 
     /**
-     * Takes the Surface back, e.g. when the SurfaceView goes away. With [surface], only if that is
-     * still the one lent - a replaced view's teardown must not take back its successor's.
+     * Takes the Surface back, e.g. when a renderer's lease goes away. With [surface], only if
+     * that is still the one lent - a replaced lease's teardown must not take back its successor's.
      */
     fun detachSurface(surface: Surface? = null) {
         main.post {
@@ -536,7 +536,7 @@ class CarAppConnection(private val context: Context, private val session: Sessio
 
     private val _surfaceEpoch = MutableStateFlow(0)
 
-    /** Bumped to throw the lent surface away, so the stage builds a fresh one. */
+    /** Bumped when a dead lent surface is replaced, so a renderer can rebuild the lease. */
     val surfaceEpoch: StateFlow<Int> = _surfaceEpoch.asStateFlow()
 
     /**
@@ -545,10 +545,10 @@ class CarAppConnection(private val context: Context, private val session: Sessio
      * (MapQuest) rebuild theirs from a world view and fly back to the car's position.
      *
      * Always a new surface, never the dead one lent again: an app that draws through its own
-     * VirtualDisplay (Flitsmeister does) builds its new display on a re-lent surface before
-     * releasing the old, and the old one's disconnect then takes the shared BufferQueue's
-     * connection with it - the map freezes on its last frame for good. The stage's key on
-     * [surfaceEpoch] swaps in a new SurfaceView, which lends itself as it comes up.
+     * VirtualDisplay builds its new display on a re-lent surface before releasing the old one,
+     * whose disconnect would otherwise take the shared BufferQueue connection with it and freeze
+     * the map. A future renderer will key its lease on [surfaceEpoch] and lend the replacement as
+     * it comes up; no renderer does so today.
      */
     fun replaceDeadSurface() {
         main.post {
@@ -584,11 +584,11 @@ class CarAppConnection(private val context: Context, private val session: Sessio
             return
         }
 
-        // The app draws for the whole surface; the visible area is what isn't covered by host
-        // chrome, and the stable area is the part that never gets covered. Both depend on the
-        // template (see visibleAreaFor) and are reported by the UI via [reportAreas] once it
-        // has measured. A fresh surface the same size keeps the last ones, since the UI only
-        // reports again when they change; until then the whole surface is fair game.
+        // The app draws for the whole surface; the visible area is what the renderer leaves
+        // uncovered, and the stable area is the part that never gets covered. Both depend on the
+        // template (see visibleAreaFor) and are reported by the attached renderer via
+        // [reportAreas]. A fresh surface of the same size keeps the last values while they fit;
+        // with none, the whole surface is reported as both the visible and stable area.
         val whole = Rect(0, 0, surface.width, surface.height)
         val last = areas?.takeIf { (visible, stable) -> whole.contains(visible) && whole.contains(stable) }
         reportAreas(last?.first ?: whole, last?.second ?: whole)
