@@ -20,7 +20,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import java.io.IOException
@@ -32,6 +31,7 @@ import app.seb3thehacker.gearslip.surface.FrameSource
 import app.seb3thehacker.gearslip.surface.HeadunitSurface
 import app.seb3thehacker.gearslip.surface.HeadunitSurfaces
 import app.seb3thehacker.gearslip.surface.PlaceholderFrameSource
+import app.seb3thehacker.gearslip.surface.RedactedFlows
 import app.seb3thehacker.gearslip.surface.SurfaceCapability
 import app.seb3thehacker.gearslip.surface.SurfaceContext
 import app.seb3thehacker.gearslip.surface.SessionState
@@ -1041,8 +1041,8 @@ class GearslipRunner(
             val down = Wire.varint(fields, 2) == 1L
             val longPress = Wire.varint(fields, 4) == 1L
             log.i("<- key event: keycode=$keycode ${if (down) "down" else "up"}${if (longPress) " long" else ""}")
-            if (registrationStale()) continue
             surface?.let { current ->
+                if (registrationStale()) return@let
                 surfaceGuard.call("onKey") {
                     if (SurfaceCapability.KEYS in current.capabilities) {
                         current.onKey(keycode, down, longPress)
@@ -1064,8 +1064,8 @@ class GearslipRunner(
             // int32, so a turn the other way arrives as a 64-bit two's complement varint.
             val delta = Wire.varint(fields, 2)?.toInt() ?: continue
             log.i("<- relative event: keycode=$keycode delta=$delta")
-            if (registrationStale()) continue
             surface?.let { current ->
+                if (registrationStale()) return@let
                 surfaceGuard.call("onRotate") {
                     if (SurfaceCapability.KEYS in current.capabilities) current.onRotate(delta)
                 }
@@ -1309,22 +1309,12 @@ class GearslipRunner(
     private fun surfaceContext() = object : SurfaceContext {
         // An untrusted renderer must not read the raw flows either: the snapshot redaction
         // would be pointless if carData, session text or vehicle identity were still exposed.
-        override val session = if (trustedSurface) SessionStatus.state else MutableStateFlow(
-            SessionStatus.state.value.copy(headline = "", detail = ""),
-        )
-        override val frame = if (trustedSurface) CarEnvironment.frame else MutableStateFlow(
-            CarEnvironment.frame.value,
-        )
-        override val insets = if (trustedSurface) CarEnvironment.insets else MutableStateFlow(
-            CarEnvironment.insets.value,
-        )
-        override val night = if (trustedSurface) CarEnvironment.darkOutside else MutableStateFlow(
-            CarEnvironment.darkOutside.value,
-        )
-        override val carData = if (trustedSurface) CarData.state else MutableStateFlow(
-            CarData.state.value.copy(location = null),
-        )
-        override val vehicle = if (trustedSurface) CarEnvironment.vehicle else MutableStateFlow("")
+        override val session = if (trustedSurface) SessionStatus.state else RedactedFlows.session(SessionStatus.state)
+        override val frame = if (trustedSurface) CarEnvironment.frame else RedactedFlows.frame(CarEnvironment.frame)
+        override val insets = if (trustedSurface) CarEnvironment.insets else RedactedFlows.insets(CarEnvironment.insets)
+        override val night = if (trustedSurface) CarEnvironment.darkOutside else RedactedFlows.night(CarEnvironment.darkOutside)
+        override val carData = if (trustedSurface) CarData.state else RedactedFlows.carData(CarData.state)
+        override val vehicle = if (trustedSurface) CarEnvironment.vehicle else RedactedFlows.vehicle(CarEnvironment.vehicle)
         // Resolve on access: a re-attach must never leave a renderer holding a cancelled flow.
         override val snapshot get() = sessionState?.snapshot ?: super.snapshot
     }

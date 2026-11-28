@@ -13,9 +13,9 @@
 | Plug-in contract | `gearslip/src/main/java/app/seb3thehacker/gearslip/surface/HeadunitSurface.kt:28` — `id`, three capabilities, `attach/detach/onFocus/onTouch/onKey/onRotate` |
 | State exposed | `surface/SurfaceContext.kt:16-34` — six read-only flows: session, frame, insets, night, carData, vehicle |
 | Frame production | `surface/FrameSource.kt:25-37` (H.264 bytes into core-owned `FrameOutput`); one production implementation, `PlaceholderFrameSource.kt:19`, which feeds YUV straight into `MediaCodec`; tests add `FakeFrameSource` at `surface/Fixtures.kt:19` |
-| Registry | `surface/HeadunitSurfaces.kt:12-31` — one global slot, factory or instance, `install`/`installSurface`/`clear`; `select` captures surface, generation and trust |
+| Registry | `surface/HeadunitSurfaces.kt:28-83` — one global slot, factory or instance, `install`/`installSurface`/`clear`; `select` captures surface, generation and trust |
 | Runner wiring | `GearslipRunner.kt:1221-1242, 1325-1331` attaches/starts a source, routes input by capability, releases on stop and EOF |
-| App wiring | `GearslipActivity.kt:28,349,397` selects a surface from the registry but **never installs one** |
+| App wiring | `GearslipActivity.kt:28,350,401` selects a surface from the registry but **never installs one** |
 | Hosted car apps | `host/CarAppConnection.kt` binds templated apps and lends surfaces through `attachSurface()` at `:507`; the method currently has no caller |
 | Session state | Process-wide `object`s: `SessionStatus`, `CarEnvironment`, `CarServices`, `CarKeys`, and internal `CarAlerts`/`CarToasts` flows |
 | Tests | 26 pure-JVM files (verified with `find gearslip/src/test -name "*.kt"`); `surface/SurfacePluginTest.kt:16-120` has seven plug-in tests, including a focused natural-EOF teardown case, and `surface/ArchitectureTest.kt` guards the core boundary; no instrumentation tests exist |
@@ -24,7 +24,7 @@
 ## Findings
 
 1. **No renderer is installed.** `GearslipActivity` imports `HeadunitSurfaces` and calls `select()`
-   at lines 349 and 397, but never calls `install(...)`. Every real session runs the placeholder.
+   at lines 350 and 401, but never calls `install(...)`. Every real session runs the placeholder.
    [HEADUNIT_SURFACES.md](HEADUNIT_SURFACES.md#registering-a-surface) describes an install call that
    is not in the code.
 
