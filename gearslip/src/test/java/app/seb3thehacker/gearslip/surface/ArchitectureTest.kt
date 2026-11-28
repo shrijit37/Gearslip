@@ -77,7 +77,7 @@ class ArchitectureTest {
                 name.startsWith("android.view.View.") || name.startsWith("android.view.ViewGroup.") ||
                 name == "android.view.*" || name == "android.*" -> name
             name.startsWith("android.widget.") -> name
-            // Explicitly allowed only in the host, which holds the car-app surface lease.
+            // Allowed only for the two lease holders: the car-app host and the pixel API.
             name == "android.view.Surface" &&
                 !path.startsWith("host/") && !path.startsWith("surface/pixel/") -> name
             name.startsWith("app.seb3thehacker.gearslip.ui.") -> name

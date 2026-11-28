@@ -151,6 +151,8 @@ class GearslipRunner(
     /** Pixel-mode lease and its provider, released with the surface. */
     @Volatile private var pixelLease: PixelLease? = null
     @Volatile private var pixelProvider: PixelLeaseProvider? = null
+    @Volatile private var pixelDetached = false
+    @Volatile private var pixelReleased = false
     /** Monotonic per-runner generation: the wall clock can repeat or move backwards. */
     private val sessionGeneration = AtomicLong(0)
     /** Pinned at construction so a swap during the handshake is detected too. */
@@ -175,18 +177,24 @@ class GearslipRunner(
             val lease = pixelLease
             val provider = pixelProvider
             if (lease != null && provider != null) {
-                // Keep the references when either call fails so cleanup stays retryable.
-                val detached = surfaceGuard.callValue("detachSurface", false) {
-                    CarServices.nav.detachSurface(lease.surface)
-                    true
+                // Keep the references when a step fails so only that step is retried.
+                if (!pixelDetached) {
+                    pixelDetached = surfaceGuard.callValue("detachSurface", false) {
+                        CarServices.nav.detachSurface(lease.surface)
+                        true
+                    }
                 }
-                val released = surfaceGuard.callValue("releasePixelLease", false) {
-                    provider.release(lease)
-                    true
+                if (!pixelReleased) {
+                    pixelReleased = surfaceGuard.callValue("releasePixelLease", false) {
+                        provider.release(lease)
+                        true
+                    }
                 }
-                if (detached && released) {
+                if (pixelDetached && pixelReleased) {
                     pixelLease = null
                     pixelProvider = null
+                    pixelDetached = false
+                    pixelReleased = false
                 }
             }
             sessionState?.stop()
@@ -1343,8 +1351,11 @@ class GearslipRunner(
             // lend that same Surface to a templated navigation app; with no pixel surface
             // installed this block is inert and the placeholder stays the frame source.
             val current = surface
+            val capabilities = current?.let { c ->
+                surfaceGuard.callValue("capabilities", emptySet<SurfaceCapability>()) { c.capabilities }
+            }.orEmpty()
             if (current != null && SurfaceDecisions.mayLendPixels(
-                    trustedSurface, registrationStale(), current.capabilities,
+                    trustedSurface, registrationStale(), capabilities,
                 )
             ) {
                 val provider = surfaceGuard.callValue("pixelLeaseProvider", null) {
@@ -1354,6 +1365,15 @@ class GearslipRunner(
                     surfaceGuard.callValue("acquirePixelLease", null) { p.acquire(spec) }
                 }
                 if (lease != null) {
+                    // A re-acquire must not orphan the previous lease.
+                    pixelLease?.let { previous ->
+                        surfaceGuard.call("detachSurface") { CarServices.nav.detachSurface(previous.surface) }
+                        pixelProvider?.let { p ->
+                            surfaceGuard.call("releasePixelLease") { p.release(previous) }
+                        }
+                    }
+                    pixelDetached = false
+                    pixelReleased = false
                     pixelProvider = provider
                     pixelLease = lease
                     surfaceGuard.call("attachSurface") {
