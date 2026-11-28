@@ -89,7 +89,8 @@ object UpdateChecker {
 
     // Bumped whenever the channel or dev ref changes, so work started for the old target can't
     // finish later and install an APK the driver no longer asked for.
-    @Volatile private var generation = 0
+    /** Pure generation/queue state; all access goes through [UpdateDecision]'s synchronized API. */
+    private val decision = UpdateDecision()
 
     private fun prefs(context: Context) = context.applicationContext.getSharedPreferences(PREFS, 0)
 
@@ -123,16 +124,9 @@ object UpdateChecker {
     }
 
     private fun reset() {
-        synchronized(this) { generation++ }
-        installWhenAllowed = false
-        installWhenCarGone = false
+        decision.reset()
         flow.value = State.Idle
     }
-
-    /** Set when the driver had to allow installs from Gearslip before the download could be installed. */
-    @Volatile private var installWhenAllowed = false
-    /** Set when Install was tapped mid-drive, so [onCarDisconnected] can finish it. */
-    @Volatile private var installWhenCarGone = false
 
     /** Called from Settings. Ignores taps while a check or download is already running. */
     fun check(context: Context) {
@@ -142,13 +136,13 @@ object UpdateChecker {
         // Build.SUPPORTED_ABIS is an Android property, so read it here rather than in the pure
         // [newestFrom] helper the unit tests call directly.
         val abis = Build.SUPPORTED_ABIS.toList()
-        val checkGeneration = generation
+        val checkGeneration = decision.generation
         val target = channel(app)
         background("gearslip-update") {
             val result = runCatching {
                 if (target == CHANNEL_DEV) checkDev(app, abis) else checkStable(abis)
             }
-            if (checkGeneration != generation) return@background
+            if (!decision.isCurrent(checkGeneration)) return@background
             result.onFailure { GearslipLog.w("update: check failed: ${it.message}") }
             flow.value = result.getOrElse { State.Failed(it.message ?: "Couldn't reach the update feed.") }
         }
@@ -327,13 +321,13 @@ object UpdateChecker {
         val app = context.applicationContext
         // The ref can change between the UI reading the card and this tap.
         if (release.channel == CHANNEL_DEV && release.target != devRef(app)) return
-        val downloadGeneration = generation
+        val downloadGeneration = decision.generation
         flow.value = State.Downloading(release, 0f)
         background("gearslip-update") {
             val dir = updatesDir(app, release.channel).apply { deleteRecursively(); mkdirs() }
             val apk = File(dir, "Gearslip-${release.version}.apk")
             val result = runCatching { fetchApk(release, apk, downloadGeneration) }
-            if (downloadGeneration != generation) return@background
+            if (!decision.isCurrent(downloadGeneration)) return@background
             if (result.isSuccess) {
                 // Authoritative check: read the version code from the APK itself. This also covers
                 // releases that predate the published version-code marker.
@@ -348,7 +342,7 @@ object UpdateChecker {
                 }
                 // reset() may have run after the earlier generation check but before this point;
                 // never republish a Ready the driver no longer asked for.
-                if (downloadGeneration != generation) return@background
+                if (!decision.isCurrent(downloadGeneration)) return@background
                 GearslipLog.i("update: downloaded ${release.version}")
                 flow.value = State.Ready(release, apk)
                 install(app)
@@ -377,7 +371,7 @@ object UpdateChecker {
                 into.outputStream().use { output ->
                     val buffer = ByteArray(64 * 1024)
                     while (true) {
-                        if (downloadGeneration != generation) error("The update target changed.")
+                        if (!decision.isCurrent(downloadGeneration)) error("The update target changed.")
                         val n = input.read(buffer)
                         if (n < 0) break
                         output.write(buffer, 0, n)
@@ -423,21 +417,21 @@ object UpdateChecker {
         // Installing closes Gearslip, which would drop the car screen mid-drive. Queue it and
         // say so on the card rather than silently throwing the tap away.
         if (carConnected) {
-            installWhenCarGone = true
+            decision.queueWhenCarGone()
             flow.value = State.Ready(ready.release, ready.apk, context.getString(R.string.update_waiting_car))
             return
         }
-        installWhenCarGone = false
+        decision.clearCarGone()
         val app = context.applicationContext
         if (!app.packageManager.canRequestPackageInstalls()) {
-            installWhenAllowed = true
+            decision.queueWhenAllowed()
             runCatching {
                 context.startActivity(
                     Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:${app.packageName}"))
                         .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
                 )
             }.onFailure {
-                installWhenAllowed = false
+                decision.clearAllowed()
                 flow.value = State.Failed("Android couldn't open the install settings.", ready.release)
             }
             return
@@ -454,14 +448,14 @@ object UpdateChecker {
 
     /** Back from the unknown-sources page: start the install the driver just allowed. */
     fun onAppResumed(context: Context) {
-        if (!installWhenAllowed || !context.packageManager.canRequestPackageInstalls()) return
-        installWhenAllowed = false
+        if (!decision.hasAllowed() || !context.packageManager.canRequestPackageInstalls()) return
+        decision.consumeAllowed()
         install(context)
     }
 
     /** The car let go: finish an Install tap that had to wait until the drive ended. */
     fun onCarDisconnected(context: Context) {
-        if (!installWhenCarGone) return
+        if (!decision.hasCarGone()) return
         // Don't drop the flag first: if the state moved on while the car was connected (say the
         // driver checked for updates again), install() returns without starting and the tap must
         // stay queued. install() clears the flag itself once it actually proceeds.
@@ -524,8 +518,7 @@ object UpdateChecker {
 
     /** The new build is running: drop the downloaded files and the card that offered them. */
     fun onReplaced(context: Context) {
-        installWhenAllowed = false
-        installWhenCarGone = false
+        decision.clearAll()
         updatesDir(context, CHANNEL_STABLE).deleteRecursively()
         updatesDir(context, CHANNEL_DEV).deleteRecursively()
         flow.value = State.Idle
